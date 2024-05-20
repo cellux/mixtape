@@ -2,12 +2,58 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 )
 
+type App struct {
+	vm          *VM
+	mixFilePath string
+}
+
 func runGui(vm *VM, mixFilePath string) error {
+	app := &App{
+		vm:          vm,
+		mixFilePath: mixFilePath,
+	}
+	return WithGL(fmt.Sprintf("mixtape : %s", mixFilePath), app)
+}
+
+func (app *App) Init() error {
+	slog.Info("Init")
+	return nil
+}
+
+func (app *App) IsRunning() bool {
+	return false
+}
+
+func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
+	slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
+}
+
+func (app *App) OnChar(char rune) {
+	slog.Info("OnChar", "char", char)
+}
+
+func (app *App) OnFramebufferSize(width, height int) {
+	slog.Info("OnFramebufferSize", "width", width, "height", height)
+}
+
+func (app *App) Render() error {
+	return nil
+}
+
+func (app *App) Update() error {
+	return nil
+}
+
+func (app *App) Close() error {
+	slog.Info("Close")
 	return nil
 }
 
