@@ -13,27 +13,52 @@ import (
 type App struct {
 	vm          *VM
 	mixFilePath string
+	isRunning   bool
+	font        *Font
+	tm          *TileMap
 }
 
 func runGui(vm *VM, mixFilePath string) error {
 	app := &App{
 		vm:          vm,
 		mixFilePath: mixFilePath,
+		isRunning:   true,
 	}
 	return WithGL(fmt.Sprintf("mixtape : %s", mixFilePath), app)
 }
 
 func (app *App) Init() error {
 	slog.Info("Init")
+	font, err := LoadFontFromFile("/usr/share/fonts/droid/DroidSansMono.ttf")
+	if err != nil {
+		return err
+	}
+	app.font = font
+	face, err := font.GetFace(12)
+	if err != nil {
+		return err
+	}
+	faceImage, err := font.GetFaceImage(face, 16, 32)
+	if err != nil {
+		return err
+	}
+	tm, err := CreateTileMap(faceImage, 16, 32)
+	if err != nil {
+		return err
+	}
+	app.tm = tm
 	return nil
 }
 
 func (app *App) IsRunning() bool {
-	return false
+	return app.isRunning
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
 	slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
+	if action == glfw.Press && key == glfw.KeyEscape {
+		app.isRunning = false
+	}
 }
 
 func (app *App) OnChar(char rune) {
@@ -45,6 +70,12 @@ func (app *App) OnFramebufferSize(width, height int) {
 }
 
 func (app *App) Render() error {
+	tdl := app.tm.CreateDrawList()
+	tdl.DrawString(0, 0, "abcdefghijklmnopqrstuvwxyz")
+	err := tdl.Render(GetFramebufferSize())
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
