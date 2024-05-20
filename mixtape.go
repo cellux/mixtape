@@ -72,7 +72,7 @@ func (app *App) OnFramebufferSize(width, height int) {
 func (app *App) Render() error {
 	tdl := app.tm.CreateDrawList()
 	tdl.DrawString(0, 0, "abcdefghijklmnopqrstuvwxyz")
-	err := tdl.Render(framebufferSize)
+	err := tdl.Render(fbSize)
 	if err != nil {
 		return err
 	}

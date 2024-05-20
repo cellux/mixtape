@@ -9,7 +9,7 @@ import (
 
 const desiredFPS = 30
 
-var framebufferSize Size
+var fbSize Size
 
 func init() {
 	runtime.LockOSThread()
@@ -61,8 +61,8 @@ func WithGL(windowTitle string, app GlfwApp) error {
 	}
 	defer window.Destroy()
 	framebufferSizeCallback := func(w *glfw.Window, width, height int) {
-		framebufferSize.X = width
-		framebufferSize.Y = height
+		fbSize.X = width
+		fbSize.Y = height
 		gl.Viewport(0, 0, int32(width), int32(height))
 		app.OnFramebufferSize(width, height)
 	}
