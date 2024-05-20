@@ -87,13 +87,13 @@ func CreateTileMap(img image.Image, cols, rows int) (*TileMap, error) {
 	return tm, nil
 }
 
-func (tm *TileMap) GetMapSize() image.Point {
+func (tm *TileMap) GetMapSize() Size {
 	return tm.img.Bounds().Size()
 }
 
-func (tm *TileMap) GetTileSize() image.Point {
+func (tm *TileMap) GetTileSize() Size {
 	mapSize := tm.GetMapSize()
-	return image.Point{X: mapSize.X / tm.cols, Y: mapSize.Y / tm.rows}
+	return Size{X: mapSize.X / tm.cols, Y: mapSize.Y / tm.rows}
 }
 
 func (tm *TileMap) CreateDrawList() *TileDrawList {
@@ -154,7 +154,7 @@ func (tdl *TileDrawList) DrawString(x, y int, s string) {
 	}
 }
 
-func (tdl *TileDrawList) Render(fbSize image.Point) error {
+func (tdl *TileDrawList) Render(fbSize Size) error {
 	tm := tdl.tm
 	tm.program.Use()
 	tm.tex.Bind()
@@ -172,15 +172,15 @@ func (tdl *TileDrawList) Render(fbSize image.Point) error {
 		int32(unsafe.Sizeof(TileVertex{})),
 		gl.Ptr(&tdl.vertices[0].texcoord[0]))
 	tileSize := tm.GetTileSize()
-	borderSize := image.Point{
+	borderSize := Size{
 		X: (fbSize.X % tileSize.X) / 2,
 		Y: (fbSize.Y % tileSize.Y) / 2,
 	}
-	gridSizeInPixels := image.Point{
+	gridSizeInPixels := Size{
 		X: fbSize.X - borderSize.X*2,
 		Y: fbSize.Y - borderSize.Y*2,
 	}
-	gridSizeInTiles := image.Point{
+	gridSizeInTiles := Size{
 		X: gridSizeInPixels.X / tileSize.X,
 		Y: gridSizeInPixels.Y / tileSize.Y,
 	}

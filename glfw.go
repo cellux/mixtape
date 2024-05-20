@@ -4,13 +4,12 @@ import (
 	"fmt"
 	gl "github.com/go-gl/gl/v3.1/gles2"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	"image"
 	"runtime"
 )
 
 const desiredFPS = 30
 
-var framebufferSize image.Point
+var framebufferSize Size
 
 func init() {
 	runtime.LockOSThread()
