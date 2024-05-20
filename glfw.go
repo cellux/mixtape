@@ -10,13 +10,10 @@ import (
 
 const desiredFPS = 30
 
+var framebufferSize image.Point
+
 func init() {
 	runtime.LockOSThread()
-}
-
-func GetFramebufferSize() image.Point {
-	w, h := glfw.GetCurrentContext().GetFramebufferSize()
-	return image.Point{w, h}
 }
 
 func GetTime() float64 {
@@ -64,10 +61,13 @@ func WithGL(windowTitle string, app GlfwApp) error {
 		return err
 	}
 	defer window.Destroy()
-	window.SetFramebufferSizeCallback(func(w *glfw.Window, width, height int) {
+	framebufferSizeCallback := func(w *glfw.Window, width, height int) {
+		framebufferSize.X = width
+		framebufferSize.Y = height
 		gl.Viewport(0, 0, int32(width), int32(height))
 		app.OnFramebufferSize(width, height)
-	})
+	}
+	window.SetFramebufferSizeCallback(framebufferSizeCallback)
 	window.SetKeyCallback(func(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
 		app.OnKey(key, scancode, action, mods)
 	})
@@ -78,8 +78,8 @@ func WithGL(windowTitle string, app GlfwApp) error {
 	if err := gl.Init(); err != nil {
 		return err
 	}
-	fbSize := GetFramebufferSize()
-	gl.Viewport(0, 0, int32(fbSize.X), int32(fbSize.Y))
+	width, height := glfw.GetCurrentContext().GetFramebufferSize()
+	framebufferSizeCallback(nil, width, height)
 	if err := app.Init(); err != nil {
 		return err
 	}
