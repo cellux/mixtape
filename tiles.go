@@ -154,7 +154,7 @@ func (tdl *TileDrawList) DrawString(x, y int, s string) {
 	}
 }
 
-func (tdl *TileDrawList) Render(fbSize Size) error {
+func (tdl *TileDrawList) Render(rect Rect) error {
 	tm := tdl.tm
 	tm.program.Use()
 	tm.tex.Bind()
@@ -172,23 +172,19 @@ func (tdl *TileDrawList) Render(fbSize Size) error {
 		int32(unsafe.Sizeof(TileVertex{})),
 		gl.Ptr(&tdl.vertices[0].texcoord[0]))
 	tileSize := tm.GetTileSize()
-	borderSize := Size{
-		X: (fbSize.X % tileSize.X) / 2,
-		Y: (fbSize.Y % tileSize.Y) / 2,
+	rectSizeInTiles := Size{
+		X: rect.Size().X / tileSize.X,
+		Y: rect.Size().Y / tileSize.Y,
 	}
-	gridSizeInPixels := Size{
-		X: fbSize.X - borderSize.X*2,
-		Y: fbSize.Y - borderSize.Y*2,
-	}
-	gridSizeInTiles := Size{
-		X: gridSizeInPixels.X / tileSize.X,
-		Y: gridSizeInPixels.Y / tileSize.Y,
-	}
-	sx := 2.0 / float32(gridSizeInTiles.X)
-	sy := 2.0 / float32(gridSizeInTiles.Y)
+	ux := 2.0 / float32(fbSize.X)
+	uy := 2.0 / float32(fbSize.Y)
+	wx := ux * float32(rect.Size().X)
+	wy := uy * float32(rect.Size().Y)
+	sx := wx / float32(rectSizeInTiles.X)
+	sy := wy / float32(rectSizeInTiles.Y)
 	mScale := mgl.Scale3D(sx, sy, 1)
-	tx := -1.0 + float32(borderSize.X)*(2.0/float32(fbSize.X))
-	ty := 1.0 - float32(borderSize.Y)*(2.0/float32(fbSize.Y))
+	tx := -1.0 + ux*float32(rect.Min.X)
+	ty := 1.0 - uy*float32(rect.Min.Y)
 	mTranslate := mgl.Translate3D(tx, ty, 0)
 	mTransform := mTranslate.Mul4(mScale)
 	gl.UniformMatrix4fv(tm.u_transform, 1, false, &mTransform[0])

@@ -71,8 +71,20 @@ func (app *App) OnFramebufferSize(width, height int) {
 
 func (app *App) Render() error {
 	tdl := app.tm.CreateDrawList()
-	tdl.DrawString(0, 0, "abcdefghijklmnopqrstuvwxyz")
-	err := tdl.Render(fbSize)
+	for x := range 512 {
+		for y := range 512 {
+			tdl.DrawRune(x, y, rune(x))
+		}
+	}
+	tileSize := app.tm.GetTileSize()
+	borderSize := Size{
+		X: (fbSize.X % tileSize.X) / 2,
+		Y: (fbSize.Y % tileSize.Y) / 2,
+	}
+	err := tdl.Render(Rect{
+		Min: Point{X: borderSize.X, Y: borderSize.Y},
+		Max: Point{X: fbSize.X - borderSize.X, Y: fbSize.Y - borderSize.Y},
+	})
 	if err != nil {
 		return err
 	}
