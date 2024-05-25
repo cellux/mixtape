@@ -49,7 +49,7 @@ func WithGL(windowTitle string, app GlfwApp) error {
 	glfw.WindowHint(glfw.GreenBits, mode.GreenBits)
 	glfw.WindowHint(glfw.BlueBits, mode.BlueBits)
 	glfw.WindowHint(glfw.RefreshRate, mode.RefreshRate)
-	glfw.WindowHint(glfw.Resizable, glfw.False)
+	glfw.WindowHint(glfw.Resizable, glfw.True)
 	glfw.WindowHint(glfw.Focused, glfw.True)
 	glfw.WindowHint(glfw.AutoIconify, glfw.False)
 	glfw.WindowHint(glfw.DoubleBuffer, glfw.True)
