@@ -83,6 +83,12 @@ func (m Map) String() string {
 	return fmt.Sprintf("%v", map[Val]Val(m))
 }
 
+func (m Map) SetVal(k, v any) {
+	key := AsVal(k)
+	val := AsVal(v)
+	m[key] = val
+}
+
 type VM struct {
 	valStack      Vec   // values
 	envStack      []Map // environments
@@ -186,9 +192,7 @@ func AsVal(x any) Val {
 
 func (vm *VM) SetVal(k, v any) {
 	env := vm.TopEnv()
-	key := AsVal(k)
-	val := AsVal(v)
-	env[key] = val
+	env.SetVal(k, v)
 }
 
 func (vm *VM) GetVal(k any) Val {
@@ -296,30 +300,32 @@ func wordBeats(vm *VM) error {
 	return nil
 }
 
+var rootEnv = make(Map)
+
+func init() {
+	rootEnv.SetVal(":bpm", 120)
+	rootEnv.SetVal(":sr", 48000)
+	rootEnv.SetVal(":length", 48000)
+	rootEnv.SetVal(":freq", 440)
+	rootEnv.SetVal(":phase", 0)
+	rootEnv.SetVal("[", wordCompile)
+	rootEnv.SetVal("(", wordPushEnv)
+	rootEnv.SetVal(")", wordPopEnv)
+	rootEnv.SetVal(".", wordValuePopAndPrint)
+	rootEnv.SetVal("ps", wordStackPrint)
+	rootEnv.SetVal("get", wordGet)
+	rootEnv.SetVal("set", wordSet)
+	rootEnv.SetVal("execute", wordExecute)
+	rootEnv.SetVal("dispatch", wordDispatch)
+	rootEnv.SetVal("seconds", wordSeconds)
+	rootEnv.SetVal("beats", wordBeats)
+}
+
 func NewVM() *VM {
-	rootEnv := make(Map)
 	vm := &VM{
 		valStack: make(Vec, 0, 4096),
 		envStack: []Map{rootEnv},
 	}
-	vm.SetVal(":bpm", 120)
-	vm.SetVal(":sr", 48000)
-	vm.SetVal(":length", 48000)
-	vm.SetVal(":freq", 440)
-	vm.SetVal(":phase", 0)
-	vm.SetVal("[", wordCompile)
-	vm.SetVal("(", wordPushEnv)
-	vm.SetVal(")", wordPopEnv)
-	vm.SetVal(".", wordValuePopAndPrint)
-	vm.SetVal("ps", wordStackPrint)
-	vm.SetVal("get", wordGet)
-	vm.SetVal("set", wordSet)
-	vm.SetVal("execute", wordExecute)
-	vm.SetVal("dispatch", wordDispatch)
-	vm.SetVal("seconds", wordSeconds)
-	vm.SetVal("beats", wordBeats)
-	vm.SetVal("tape1", wordTape1)
-	vm.SetVal("tape2", wordTape2)
 	return vm
 }
 

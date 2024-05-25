@@ -101,3 +101,8 @@ func wordTape2(vm *VM) error {
 	pushTape(vm, 2, vm.GetInt(":length"))
 	return nil
 }
+
+func init() {
+	rootEnv.SetVal("tape1", wordTape1)
+	rootEnv.SetVal("tape2", wordTape2)
+}
