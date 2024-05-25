@@ -32,25 +32,25 @@ func (f *Font) GetFaceImage(face font.Face, cols, rows int) (image.Image, error)
 	metrics := face.Metrics()
 	descent := metrics.Descent.Ceil()
 	ascent := metrics.Ascent.Ceil()
-	height := descent + ascent
+	charHeight := descent + ascent
 	mAdvance, ok := face.GlyphAdvance('m')
 	if !ok {
 		return nil, fmt.Errorf("Font face does not provide a glyph for rune 'm'")
 	}
-	width := mAdvance.Ceil()
-	result := image.NewAlpha(image.Rect(0, 0, width*cols, height*rows))
+	charWidth := mAdvance.Ceil()
+	result := image.NewAlpha(image.Rect(0, 0, charWidth*cols, charHeight*rows))
 	d := font.Drawer{
 		Src:  image.Opaque,
 		Face: face,
 	}
-	cellRect := image.Rect(0, 0, width, height)
+	charRect := image.Rect(0, 0, charWidth, charHeight)
 	for y := 0; y < rows; y++ {
 		for x := 0; x < cols; x++ {
-			d.Dst = image.NewAlpha(cellRect)
-			d.Dot = fixed.P(0, height-descent)
+			d.Dst = image.NewAlpha(charRect)
+			d.Dot = fixed.P(0, charHeight-descent)
 			d.DrawString(string(rune(y*cols + x)))
-			dp := image.Pt(x*width, y*height)
-			draw.Copy(result, dp, d.Dst, cellRect, draw.Src, nil)
+			dp := image.Pt(x*charWidth, y*charHeight)
+			draw.Copy(result, dp, d.Dst, charRect, draw.Src, nil)
 		}
 	}
 	return result, nil

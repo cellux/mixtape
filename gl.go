@@ -24,6 +24,14 @@ func CreateTexture() (Texture, error) {
 	return Texture{tex}, nil
 }
 
+func (t Texture) Close() error {
+	if t.tex != 0 {
+		gl.DeleteTextures(1, &t.tex)
+		t.tex = 0
+	}
+	return nil
+}
+
 type Shader struct {
 	shader uint32
 }
@@ -35,14 +43,6 @@ func GetShaderInfoLog(shader uint32) string {
 	var logLen int32
 	gl.GetShaderInfoLog(shader, length, &logLen, &log[0])
 	return string(log[:logLen])
-}
-
-func (s Shader) Close() error {
-	if s.shader != 0 {
-		gl.DeleteShader(s.shader)
-		s.shader = 0
-	}
-	return nil
 }
 
 func CreateShader(shaderType uint32, source string) (Shader, error) {
@@ -57,6 +57,14 @@ func CreateShader(shaderType uint32, source string) (Shader, error) {
 		return Shader{}, fmt.Errorf("shader compilation failed: %s", GetShaderInfoLog(shader))
 	}
 	return Shader{shader}, nil
+}
+
+func (s Shader) Close() error {
+	if s.shader != 0 {
+		gl.DeleteShader(s.shader)
+		s.shader = 0
+	}
+	return nil
 }
 
 type Program struct {
@@ -95,16 +103,6 @@ func CreateProgram(vertexShader string, fragmentShader string) (Program, error) 
 	return Program{program, vs, fs}, nil
 }
 
-func (p Program) Close() error {
-	p.vertexShader.Close()
-	p.fragmentShader.Close()
-	if p.program != 0 {
-		gl.DeleteProgram(p.program)
-		p.program = 0
-	}
-	return nil
-}
-
 func (p Program) GetAttribLocation(name string) int32 {
 	return gl.GetAttribLocation(p.program, gl.Str(name))
 }
@@ -115,4 +113,18 @@ func (p Program) GetUniformLocation(name string) int32 {
 
 func (p Program) Use() {
 	gl.UseProgram(p.program)
+}
+
+func (p Program) Close() error {
+	if err := p.vertexShader.Close(); err != nil {
+		return err
+	}
+	if err := p.fragmentShader.Close(); err != nil {
+		return err
+	}
+	if p.program != 0 {
+		gl.DeleteProgram(p.program)
+		p.program = 0
+	}
+	return nil
 }

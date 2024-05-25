@@ -16,6 +16,7 @@ type App struct {
 	isRunning   bool
 	font        *Font
 	tm          *TileMap
+	ts          *TileScreen
 }
 
 func runGui(vm *VM, mixFilePath string) error {
@@ -47,6 +48,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tm = tm
+	ts, err := tm.CreateTileScreen()
+	if err != nil {
+		return err
+	}
+	app.ts = ts
 	return nil
 }
 
@@ -70,22 +76,14 @@ func (app *App) OnFramebufferSize(width, height int) {
 }
 
 func (app *App) Render() error {
-	tdl := app.tm.CreateDrawList()
+	ts := app.ts
+	ts.Clear()
 	for x := range 512 {
 		for y := range 512 {
-			tdl.DrawRune(x, y, rune(x))
+			ts.DrawRune(x, y, rune(x))
 		}
 	}
-	tileSize := app.tm.GetTileSize()
-	borderSize := Size{
-		X: (fbSize.X % tileSize.X) / 2,
-		Y: (fbSize.Y % tileSize.Y) / 2,
-	}
-	err := tdl.Render(Rect{
-		Min: Point{X: borderSize.X, Y: borderSize.Y},
-		Max: Point{X: fbSize.X - borderSize.X, Y: fbSize.Y - borderSize.Y},
-	})
-	if err != nil {
+	if err := ts.Render(); err != nil {
 		return err
 	}
 	return nil
