@@ -109,8 +109,12 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 			case glfw.KeyE:
 				app.editor.MoveToEOL()
 			case glfw.KeyK:
-				for !app.editor.AtEOL() {
+				if app.editor.AtEOL() {
 					app.editor.DeleteRune()
+				} else {
+					for !app.editor.AtEOL() {
+						app.editor.DeleteRune()
+					}
 				}
 			case glfw.KeyBackspace:
 				app.editor.SetMark()
@@ -125,6 +129,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.SetMark()
 			case glfw.KeyW:
 				app.editor.KillRegion()
+			case glfw.KeyG:
+				app.editor.Quit()
+			case glfw.KeyS:
+				os.WriteFile(app.mixFilePath, app.editor.GetBytes(), 0o644)
 			}
 		}
 	}

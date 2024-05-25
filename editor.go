@@ -246,10 +246,13 @@ func (e *Editor) DeleteRune() {
 	}
 	if e.column == e.CurrentLineLength() {
 		if e.line == len(e.lines)-1 {
-			return
+			if e.column == 0 {
+				e.lines = slices.Delete(e.lines, e.line, e.line+1)
+			}
+		} else {
+			e.lines[e.line] = slices.Insert(e.lines[e.line], e.column, e.lines[e.line+1]...)
+			e.lines = slices.Delete(e.lines, e.line+1, e.line+2)
 		}
-		e.lines[e.line] = slices.Insert(e.lines[e.line], e.column, e.lines[e.line+1]...)
-		e.lines = slices.Delete(e.lines, e.line+1, e.line+2)
 	} else {
 		e.lines[e.line] = slices.Delete(e.lines[e.line], e.column, e.column+1)
 	}
@@ -318,6 +321,15 @@ func (e *Editor) Render(tp TilePane) {
 			})
 		}
 	}
+}
+
+func (e *Editor) GetBytes() []byte {
+	bytes := make([]byte, 0, 65536)
+	for _, line := range e.lines {
+		bytes = append(bytes, []byte(string(line))...)
+		bytes = append(bytes, '\n')
+	}
+	return bytes
 }
 
 func (e *Editor) Close() error {
