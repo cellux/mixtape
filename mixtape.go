@@ -72,7 +72,7 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 		if modes == 0 {
 			switch key {
 			case glfw.KeyEscape:
-				app.isRunning = false
+				app.editor.Quit()
 			case glfw.KeyEnter:
 				app.editor.SplitLine()
 			case glfw.KeyLeft:
@@ -98,6 +98,8 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 		}
 		if modes&glfw.ModControl != 0 {
 			switch key {
+			case glfw.KeyQ:
+				app.isRunning = false
 			case glfw.KeyLeft:
 				app.editor.WordLeft()
 			case glfw.KeyRight:

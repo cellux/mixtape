@@ -62,12 +62,12 @@ const (
     precision highp float;
     attribute vec2 a_position;
     attribute vec2 a_texcoord;
-    attribute vec3 a_fgColor;
-    attribute vec3 a_bgColor;
+    attribute vec4 a_fgColor;
+    attribute vec4 a_bgColor;
     uniform mat4 u_transform;
     varying vec2 v_texcoord;
-    varying vec3 v_fgColor;
-    varying vec3 v_bgColor;
+    varying vec4 v_fgColor;
+    varying vec4 v_bgColor;
     void main(void) {
       gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
       v_texcoord = a_texcoord;
@@ -78,29 +78,29 @@ const (
     precision highp float;
     uniform sampler2D u_tex;
     varying vec2 v_texcoord;
-    varying vec3 v_fgColor;
-    varying vec3 v_bgColor;
+    varying vec4 v_fgColor;
+    varying vec4 v_bgColor;
     void main(void) {
       vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = vec4(v_bgColor, 1.0) + vec4(v_fgColor.rgb * t.a, t.a);
+      gl_FragColor = v_bgColor + v_fgColor * t.a;
     };` + "\x00"
 	tileFragmentShaderRGBA = `
     precision highp float;
     uniform sampler2D u_tex;
     varying vec2 v_texcoord;
+    varying vec4 v_fgColor;
+    varying vec4 v_bgColor;
     void main(void) {
       vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = vec4(v_bgColor, 1.0) + vec4(v_fgColor.rgb * t.a, t.a) + t;
+      gl_FragColor = v_bgColor + v_fgColor * t;
     };` + "\x00"
 )
-
-type Color [3]float32
 
 type TileVertex struct {
 	position [2]float32
 	texcoord [2]float32
-	fgColor  Color
-	bgColor  Color
+	fgColor  [4]float32
+	bgColor  [4]float32
 }
 
 type TileScreen struct {
@@ -116,11 +116,6 @@ type TileScreen struct {
 	fgColor     Color
 	bgColor     Color
 }
-
-var (
-	ColorWhite = Color{1, 1, 1}
-	ColorBlack = Color{0, 0, 0}
-)
 
 func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 	program, err := func() (Program, error) {
@@ -171,41 +166,43 @@ func (ts *TileScreen) DrawRune(x, y int, r rune) {
 	s1 := float32(s0 + tx)
 	t0 := float32(row) / float32(rows)
 	t1 := float32(t0 + ty)
+	fgColor := ColorTo4Float32(ts.fgColor)
+	bgColor := ColorTo4Float32(ts.bgColor)
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y0},
 		texcoord: [2]float32{s0, t0},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y1},
 		texcoord: [2]float32{s0, t1},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y1},
 		texcoord: [2]float32{s1, t1},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y1},
 		texcoord: [2]float32{s1, t1},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y0},
 		texcoord: [2]float32{s1, t0},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y0},
 		texcoord: [2]float32{s0, t0},
-		fgColor:  ts.fgColor,
-		bgColor:  ts.bgColor,
+		fgColor:  fgColor,
+		bgColor:  bgColor,
 	})
 }
 

@@ -1,0 +1,25 @@
+package main
+
+import (
+	"image/color"
+)
+
+var (
+	ColorWhite = color.RGBA{0xff, 0xff, 0xff, 0xff}
+	ColorBlack = color.RGBA{0x00, 0x00, 0x00, 0xff}
+
+	ColorHighlight = color.RGBA{0x00, 0x00, 0xff, 0xff}
+	ColorMark      = color.RGBA{0x00, 0x00, 0x80, 0xff}
+)
+
+type Color = color.Color
+
+func ColorTo4Float32(c Color) [4]float32 {
+	r, g, b, a := c.RGBA()
+	return [4]float32{
+		float32(r) / 0xffff,
+		float32(g) / 0xffff,
+		float32(b) / 0xffff,
+		float32(a) / 0xffff,
+	}
+}

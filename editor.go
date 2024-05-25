@@ -19,6 +19,7 @@ type Editor struct {
 		line   int
 		column int
 	}
+	markActive bool
 }
 
 // https://stackoverflow.com/a/61938973
@@ -171,6 +172,7 @@ func (e *Editor) WordRight() {
 func (e *Editor) SetMark() {
 	e.mark.line = e.line
 	e.mark.column = e.column
+	e.markActive = true
 }
 
 func (e *Editor) SwapPointAndMark() {
@@ -182,7 +184,34 @@ func (e *Editor) SwapPointAndMark() {
 	e.mark.column = tempColumn
 }
 
+func (e *Editor) ForgetMark() {
+	e.mark.line = 0
+	e.mark.column = 0
+	e.markActive = false
+}
+
+func (e *Editor) IsInsideRegion(line, column int) bool {
+	if e.line < e.mark.line || (e.line == e.mark.line && e.column < e.mark.column) {
+		if line > e.line || (line == e.line && column >= e.column) {
+			if line < e.mark.line || (line == e.mark.line && column < e.mark.column) {
+				return true
+			}
+		}
+	}
+	if e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
+		if line < e.line || (line == e.line && column < e.column) {
+			if line > e.mark.line || (line == e.mark.line && column >= e.mark.column) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e *Editor) KillRegion() {
+	if !e.markActive {
+		return
+	}
 	if e.line < e.mark.line || (e.line == e.mark.line && e.column < e.mark.column) {
 		e.SwapPointAndMark()
 	}
@@ -196,6 +225,10 @@ func (e *Editor) KillRegion() {
 			e.DeleteRune()
 		}
 	}
+}
+
+func (e *Editor) Quit() {
+	e.ForgetMark()
 }
 
 func (e *Editor) InsertRune(r rune) {
@@ -252,7 +285,6 @@ func (e *Editor) Render(tp TilePane) {
 	if e.left < 0 {
 		e.left = 0
 	}
-	hiliteColor := Color{0, 0, 1}
 	for y := 0; y < tp.Height(); y++ {
 		lineIndex := e.top + y
 		if lineIndex < len(e.lines) {
@@ -261,20 +293,26 @@ func (e *Editor) Render(tp TilePane) {
 				runeIndex := e.left + x
 				if runeIndex < len(line) {
 					if lineIndex == e.line && runeIndex == e.column {
-						tp.WithBg(hiliteColor, func() {
+						tp.WithBg(ColorHighlight, func() {
 							tp.DrawRune(x, y, line[runeIndex])
 						})
 					} else {
-						tp.DrawRune(x, y, line[runeIndex])
+						if e.markActive && e.IsInsideRegion(lineIndex, runeIndex) {
+							tp.WithBg(ColorMark, func() {
+								tp.DrawRune(x, y, line[runeIndex])
+							})
+						} else {
+							tp.DrawRune(x, y, line[runeIndex])
+						}
 					}
 				} else if lineIndex == e.line && runeIndex == e.column {
-					tp.WithBg(hiliteColor, func() {
+					tp.WithBg(ColorHighlight, func() {
 						tp.DrawRune(x, y, ' ')
 					})
 				}
 			}
 		} else if lineIndex == e.line {
-			tp.WithBg(hiliteColor, func() {
+			tp.WithBg(ColorHighlight, func() {
 				tp.DrawRune(0, y, ' ')
 			})
 		}
