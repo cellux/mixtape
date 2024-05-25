@@ -17,6 +17,7 @@ type App struct {
 	font        *Font
 	tm          *TileMap
 	ts          *TileScreen
+	editor      *Editor
 }
 
 func runGui(vm *VM, mixFilePath string) error {
@@ -53,6 +54,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.ts = ts
+	mixScript, err := os.ReadFile(app.mixFilePath)
+	if err != nil {
+		return err
+	}
+	app.editor = CreateEditor(string(mixScript))
 	return nil
 }
 
@@ -61,14 +67,66 @@ func (app *App) IsRunning() bool {
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
-	slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
-	if action == glfw.Press && key == glfw.KeyEscape {
-		app.isRunning = false
+	//slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
+	if action == glfw.Press || action == glfw.Repeat {
+		if modes == 0 {
+			switch key {
+			case glfw.KeyEscape:
+				app.isRunning = false
+			case glfw.KeyEnter:
+				app.editor.SplitLine()
+			case glfw.KeyLeft:
+				app.editor.AdvanceColumn(-1)
+			case glfw.KeyRight:
+				app.editor.AdvanceColumn(1)
+			case glfw.KeyUp:
+				app.editor.AdvanceLine(-1)
+			case glfw.KeyDown:
+				app.editor.AdvanceLine(1)
+			case glfw.KeyDelete:
+				app.editor.DeleteRune()
+			case glfw.KeyBackspace:
+				if !app.editor.AtBOF() {
+					app.editor.AdvanceColumn(-1)
+					app.editor.DeleteRune()
+				}
+			case glfw.KeyHome:
+				app.editor.MoveToBOL()
+			case glfw.KeyEnd:
+				app.editor.MoveToEOL()
+			}
+		}
+		if modes&glfw.ModControl != 0 {
+			switch key {
+			case glfw.KeyLeft:
+				app.editor.WordLeft()
+			case glfw.KeyRight:
+				app.editor.WordRight()
+			case glfw.KeyA:
+				app.editor.MoveToBOL()
+			case glfw.KeyE:
+				app.editor.MoveToEOL()
+			case glfw.KeyK:
+				for !app.editor.AtEOL() {
+					app.editor.DeleteRune()
+				}
+			case glfw.KeyU:
+				for !app.editor.AtBOL() {
+					app.editor.AdvanceColumn(-1)
+					app.editor.DeleteRune()
+				}
+			case glfw.KeySpace:
+				app.editor.SetMark()
+			case glfw.KeyW:
+				app.editor.KillRegion()
+			}
+		}
 	}
 }
 
 func (app *App) OnChar(char rune) {
-	slog.Info("OnChar", "char", char)
+	//slog.Info("OnChar", "char", char)
+	app.editor.InsertRune(char)
 }
 
 func (app *App) OnFramebufferSize(width, height int) {
@@ -81,14 +139,8 @@ func (app *App) Render() error {
 	tp := ts.GetPane()
 	top, bottom := tp.SplitY(5)
 	top.DrawString(0, 0, "Hello, world")
-	for x := range 512 {
-		for y := range 512 {
-			bottom.DrawRune(x, y, rune(x))
-		}
-	}
-	if err := ts.Render(); err != nil {
-		return err
-	}
+	app.editor.Render(bottom)
+	ts.Render()
 	return nil
 }
 
@@ -98,6 +150,9 @@ func (app *App) Update() error {
 
 func (app *App) Close() error {
 	slog.Info("Close")
+	app.ts.Close()
+	app.tm.Close()
+	app.editor.Close()
 	return nil
 }
 

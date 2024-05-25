@@ -62,31 +62,45 @@ const (
     precision highp float;
     attribute vec2 a_position;
     attribute vec2 a_texcoord;
+    attribute vec3 a_fgColor;
+    attribute vec3 a_bgColor;
     uniform mat4 u_transform;
     varying vec2 v_texcoord;
+    varying vec3 v_fgColor;
+    varying vec3 v_bgColor;
     void main(void) {
       gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
       v_texcoord = a_texcoord;
+      v_fgColor = a_fgColor;
+      v_bgColor = a_bgColor;
     };` + "\x00"
 	tileFragmentShaderA = `
     precision highp float;
     uniform sampler2D u_tex;
     varying vec2 v_texcoord;
+    varying vec3 v_fgColor;
+    varying vec3 v_bgColor;
     void main(void) {
-      gl_FragColor = vec4(texture2D(u_tex, v_texcoord).a);
+      vec4 t = texture2D(u_tex, v_texcoord);
+      gl_FragColor = vec4(v_bgColor, 1.0) + vec4(v_fgColor.rgb * t.a, t.a);
     };` + "\x00"
 	tileFragmentShaderRGBA = `
     precision highp float;
     uniform sampler2D u_tex;
     varying vec2 v_texcoord;
     void main(void) {
-      gl_FragColor = texture2D(u_tex, v_texcoord);
+      vec4 t = texture2D(u_tex, v_texcoord);
+      gl_FragColor = vec4(v_bgColor, 1.0) + vec4(v_fgColor.rgb * t.a, t.a) + t;
     };` + "\x00"
 )
+
+type Color [3]float32
 
 type TileVertex struct {
 	position [2]float32
 	texcoord [2]float32
+	fgColor  Color
+	bgColor  Color
 }
 
 type TileScreen struct {
@@ -95,9 +109,18 @@ type TileScreen struct {
 	program     Program
 	a_position  int32
 	a_texcoord  int32
+	a_fgColor   int32
+	a_bgColor   int32
 	u_transform int32
 	u_tex       int32
+	fgColor     Color
+	bgColor     Color
 }
+
+var (
+	ColorWhite = Color{1, 1, 1}
+	ColorBlack = Color{0, 0, 0}
+)
 
 func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 	program, err := func() (Program, error) {
@@ -119,8 +142,12 @@ func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 		program:     program,
 		a_position:  program.GetAttribLocation("a_position\x00"),
 		a_texcoord:  program.GetAttribLocation("a_texcoord\x00"),
+		a_fgColor:   program.GetAttribLocation("a_fgColor\x00"),
+		a_bgColor:   program.GetAttribLocation("a_bgColor\x00"),
 		u_transform: program.GetUniformLocation("u_transform\x00"),
 		u_tex:       program.GetUniformLocation("u_tex\x00"),
+		fgColor:     ColorWhite,
+		bgColor:     ColorBlack,
 	}
 	return ts, nil
 }
@@ -147,27 +174,47 @@ func (ts *TileScreen) DrawRune(x, y int, r rune) {
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y0},
 		texcoord: [2]float32{s0, t0},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y1},
 		texcoord: [2]float32{s0, t1},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y1},
 		texcoord: [2]float32{s1, t1},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y1},
 		texcoord: [2]float32{s1, t1},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x1, y0},
 		texcoord: [2]float32{s1, t0},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
 	ts.vertices = append(ts.vertices, TileVertex{
 		position: [2]float32{x0, y0},
 		texcoord: [2]float32{s0, t0},
+		fgColor:  ts.fgColor,
+		bgColor:  ts.bgColor,
 	})
+}
+
+func (ts *TileScreen) SetFg(c Color) {
+	ts.fgColor = c
+}
+
+func (ts *TileScreen) SetBg(c Color) {
+	ts.bgColor = c
 }
 
 func (ts *TileScreen) DrawString(x, y int, s string) {
@@ -176,7 +223,7 @@ func (ts *TileScreen) DrawString(x, y int, s string) {
 	}
 }
 
-func (ts *TileScreen) Render() error {
+func (ts *TileScreen) Render() {
 	tm := ts.tm
 	ts.program.Use()
 	tm.tex.Bind()
@@ -193,6 +240,16 @@ func (ts *TileScreen) Render() error {
 		uint32(ts.a_texcoord), 2, gl.FLOAT, false,
 		int32(unsafe.Sizeof(TileVertex{})),
 		gl.Ptr(&ts.vertices[0].texcoord[0]))
+	gl.EnableVertexAttribArray(uint32(ts.a_fgColor))
+	gl.VertexAttribPointer(
+		uint32(ts.a_fgColor), 3, gl.FLOAT, false,
+		int32(unsafe.Sizeof(TileVertex{})),
+		gl.Ptr(&ts.vertices[0].fgColor[0]))
+	gl.EnableVertexAttribArray(uint32(ts.a_bgColor))
+	gl.VertexAttribPointer(
+		uint32(ts.a_bgColor), 3, gl.FLOAT, false,
+		int32(unsafe.Sizeof(TileVertex{})),
+		gl.Ptr(&ts.vertices[0].bgColor[0]))
 	tileSize := tm.GetTileSize()
 	rectSizeInTiles := Size{
 		X: fbSize.X / tileSize.X,
@@ -219,14 +276,15 @@ func (ts *TileScreen) Render() error {
 	mTransform := mTranslate.Mul4(mScale)
 	gl.UniformMatrix4fv(ts.u_transform, 1, false, &mTransform[0])
 	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 	gl.BlendEquation(gl.FUNC_ADD)
-	gl.BlendFunc(gl.ONE, gl.ONE)
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(ts.vertices)))
 	gl.Disable(gl.BLEND)
 	gl.DisableVertexAttribArray(uint32(ts.a_position))
 	gl.DisableVertexAttribArray(uint32(ts.a_texcoord))
+	gl.DisableVertexAttribArray(uint32(ts.a_fgColor))
+	gl.DisableVertexAttribArray(uint32(ts.a_bgColor))
 	gl.BindTexture(gl.TEXTURE_2D, 0)
-	return nil
 }
 
 type TilePane struct {
@@ -234,8 +292,16 @@ type TilePane struct {
 	rect Rect
 }
 
+func (tp TilePane) Width() int {
+	return tp.rect.Dx()
+}
+
+func (tp TilePane) Height() int {
+	return tp.rect.Dy()
+}
+
 func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
-	width := float64(tp.rect.Dx())
+	width := float64(tp.Width())
 	if at < 1.0 {
 		at = math.Round(width * at)
 	}
@@ -260,7 +326,7 @@ func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
 }
 
 func (tp TilePane) SplitY(at float64) (TilePane, TilePane) {
-	height := float64(tp.rect.Dy())
+	height := float64(tp.Height())
 	if at < 1.0 {
 		at = math.Round(height * at)
 	}
@@ -282,6 +348,34 @@ func (tp TilePane) SplitY(at float64) (TilePane, TilePane) {
 		},
 	}
 	return top, bottom
+}
+
+func (tp TilePane) SetFg(c Color) {
+	tp.ts.SetFg(c)
+}
+
+func (tp TilePane) SetBg(c Color) {
+	tp.ts.SetBg(c)
+}
+
+func (tp TilePane) WithFg(fg Color, fn func()) {
+	defer tp.SetFg(tp.ts.fgColor)
+	tp.SetFg(fg)
+	fn()
+}
+
+func (tp TilePane) WithBg(bg Color, fn func()) {
+	defer tp.SetBg(tp.ts.bgColor)
+	tp.SetBg(bg)
+	fn()
+}
+
+func (tp TilePane) WithFgBg(fg, bg Color, fn func()) {
+	defer tp.SetFg(tp.ts.bgColor)
+	defer tp.SetBg(tp.ts.bgColor)
+	tp.SetFg(fg)
+	tp.SetBg(bg)
+	fn()
 }
 
 func (tp TilePane) DrawRune(x, y int, r rune) {
