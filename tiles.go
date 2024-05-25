@@ -5,6 +5,7 @@ import (
 	gl "github.com/go-gl/gl/v3.1/gles2"
 	mgl "github.com/go-gl/mathgl/mgl32"
 	"image"
+	"math"
 	"unsafe"
 )
 
@@ -98,7 +99,7 @@ type TileScreen struct {
 	u_tex       int32
 }
 
-func (tm *TileMap) CreateTileScreen() (*TileScreen, error) {
+func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 	program, err := func() (Program, error) {
 		switch img := tm.img.(type) {
 		case *image.Alpha:
@@ -226,6 +227,87 @@ func (ts *TileScreen) Render() error {
 	gl.DisableVertexAttribArray(uint32(ts.a_texcoord))
 	gl.BindTexture(gl.TEXTURE_2D, 0)
 	return nil
+}
+
+type TilePane struct {
+	ts   *TileScreen
+	rect Rect
+}
+
+func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
+	width := float64(tp.rect.Dx())
+	if at < 1.0 {
+		at = math.Round(width * at)
+	}
+	if at > width {
+		at = width
+	}
+	left := TilePane{
+		ts: tp.ts,
+		rect: Rect{
+			Min: tp.rect.Min,
+			Max: Point{X: tp.rect.Min.X + int(at), Y: tp.rect.Max.Y},
+		},
+	}
+	right := TilePane{
+		ts: tp.ts,
+		rect: Rect{
+			Min: Point{X: tp.rect.Min.X + int(at), Y: tp.rect.Min.Y},
+			Max: tp.rect.Max,
+		},
+	}
+	return left, right
+}
+
+func (tp TilePane) SplitY(at float64) (TilePane, TilePane) {
+	height := float64(tp.rect.Dy())
+	if at < 1.0 {
+		at = math.Round(height * at)
+	}
+	if at > height {
+		at = height
+	}
+	top := TilePane{
+		ts: tp.ts,
+		rect: Rect{
+			Min: tp.rect.Min,
+			Max: Point{X: tp.rect.Max.X, Y: tp.rect.Min.Y + int(at)},
+		},
+	}
+	bottom := TilePane{
+		ts: tp.ts,
+		rect: Rect{
+			Min: Point{X: tp.rect.Min.X, Y: tp.rect.Min.Y + int(at)},
+			Max: tp.rect.Max,
+		},
+	}
+	return top, bottom
+}
+
+func (tp TilePane) DrawRune(x, y int, r rune) {
+	rect := tp.rect
+	screenX := rect.Min.X + x
+	screenY := rect.Min.Y + y
+	if screenX < rect.Max.X && screenY < rect.Max.Y {
+		tp.ts.DrawRune(screenX, screenY, r)
+	}
+}
+
+func (tp TilePane) DrawString(x, y int, s string) {
+	for offset, r := range s {
+		tp.DrawRune(x+offset, y, r)
+	}
+}
+
+func (ts *TileScreen) GetPane() TilePane {
+	tileSize := ts.tm.GetTileSize()
+	return TilePane{
+		ts: ts,
+		rect: Rect{
+			Min: Point{X: 0, Y: 0},
+			Max: Point{X: fbSize.X / tileSize.X, Y: fbSize.Y / tileSize.Y},
+		},
+	}
 }
 
 func (ts *TileScreen) Close() error {

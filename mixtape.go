@@ -48,7 +48,7 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tm = tm
-	ts, err := tm.CreateTileScreen()
+	ts, err := tm.CreateScreen()
 	if err != nil {
 		return err
 	}
@@ -78,9 +78,12 @@ func (app *App) OnFramebufferSize(width, height int) {
 func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
+	tp := ts.GetPane()
+	top, bottom := tp.SplitY(5)
+	top.DrawString(0, 0, "Hello, world")
 	for x := range 512 {
 		for y := range 512 {
-			ts.DrawRune(x, y, rune(x))
+			bottom.DrawRune(x, y, rune(x))
 		}
 	}
 	if err := ts.Render(); err != nil {
