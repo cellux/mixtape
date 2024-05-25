@@ -217,7 +217,7 @@ func (e *Editor) KillRegion() {
 	}
 	if e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
 		count := 0
-		for e.line >= e.mark.line && e.column > e.mark.column {
+		for e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
 			e.AdvanceColumn(-1)
 			count++
 		}
@@ -225,6 +225,7 @@ func (e *Editor) KillRegion() {
 			e.DeleteRune()
 		}
 	}
+	e.ForgetMark()
 }
 
 func (e *Editor) Quit() {

@@ -112,6 +112,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				for !app.editor.AtEOL() {
 					app.editor.DeleteRune()
 				}
+			case glfw.KeyBackspace:
+				app.editor.SetMark()
+				app.editor.WordLeft()
+				app.editor.KillRegion()
 			case glfw.KeyU:
 				for !app.editor.AtBOL() {
 					app.editor.AdvanceColumn(-1)
