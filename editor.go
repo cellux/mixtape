@@ -7,19 +7,22 @@ import (
 	"unicode"
 )
 
-type Line = []rune
+type EditorLine = []rune
 
-type Editor struct {
-	lines  []Line
+type EditorPoint struct {
 	line   int
 	column int
-	top    int
-	left   int
-	mark   struct {
-		line   int
-		column int
-	}
-	markActive bool
+}
+
+type Editor struct {
+	lines       []EditorLine
+	point       EditorPoint
+	mark        EditorPoint
+	markActive  bool
+	yankedRunes []rune
+	top         int
+	left        int
+	height      int
 }
 
 // https://stackoverflow.com/a/61938973
@@ -33,20 +36,16 @@ func splitLines(s string) []string {
 }
 
 func CreateEditor(text string) *Editor {
-	var lines []Line
+	var lines []EditorLine
 	for _, line := range splitLines(text) {
-		lines = append(lines, Line(line))
+		lines = append(lines, EditorLine(line))
 	}
 	return &Editor{
-		lines:  lines,
-		line:   0,
-		column: 0,
-		top:    0,
-		left:   0,
+		lines: lines,
 	}
 }
 
-func (e *Editor) GetLine(index int) Line {
+func (e *Editor) GetLine(index int) EditorLine {
 	if index < len(e.lines) {
 		return e.lines[index]
 	} else {
@@ -67,73 +66,85 @@ func (e *Editor) CurrentRune() rune {
 	if currentLine == nil {
 		return 0x85 // NEL (NExtLine)
 	}
-	if e.column == len(currentLine) {
+	if e.point.column == len(currentLine) {
 		return 0x85 // NEL (NExtLine)
 	}
-	return currentLine[e.column]
+	return currentLine[e.point.column]
 }
 
-func (e *Editor) CurrentLine() Line {
-	return e.GetLine(e.line)
+func (e *Editor) CurrentLine() EditorLine {
+	return e.GetLine(e.point.line)
 }
 
 func (e *Editor) CurrentLineLength() int {
-	return e.GetLineLength(e.line)
+	return e.GetLineLength(e.point.line)
 }
 
 func (e *Editor) AtBOF() bool {
-	return e.line == 0 && e.column == 0
+	return e.point.line == 0 && e.point.column == 0
 }
 
 func (e *Editor) AtEOF() bool {
-	return e.line == len(e.lines)
+	return e.point.line == len(e.lines)
 }
 
 func (e *Editor) AtBOL() bool {
-	return e.column == 0
+	return e.point.column == 0
 }
 
 func (e *Editor) AtEOL() bool {
-	return e.column == e.CurrentLineLength()
+	return e.point.column == e.CurrentLineLength()
 }
 
 func (e *Editor) AdvanceLine(amount int) {
-	e.line += amount
-	if e.line < 0 {
-		e.line = 0
-	} else if e.line > len(e.lines) {
-		e.line = len(e.lines)
+	p := &e.point
+	p.line += amount
+	if p.line < 0 {
+		p.line = 0
+	} else if p.line > len(e.lines) {
+		p.line = len(e.lines)
 	}
-	if e.column > e.CurrentLineLength() {
-		e.column = e.CurrentLineLength()
+	if p.column > e.CurrentLineLength() {
+		p.column = e.CurrentLineLength()
 	}
 }
 
 func (e *Editor) AdvanceColumn(amount int) {
-	e.column += amount
-	if e.column < 0 {
-		if e.line > 0 {
+	p := &e.point
+	p.column += amount
+	if p.column < 0 {
+		if p.line > 0 {
 			e.AdvanceLine(-1)
-			e.column = e.CurrentLineLength()
+			p.column = e.CurrentLineLength()
 		} else {
-			e.column = 0
+			p.column = 0
 		}
-	} else if e.column > e.CurrentLineLength() {
-		if e.line < len(e.lines) {
+	} else if p.column > e.CurrentLineLength() {
+		if p.line < len(e.lines) {
 			e.AdvanceLine(1)
-			e.column = 0
+			p.column = 0
 		} else {
-			e.column = 0
+			p.column = 0
 		}
 	}
 }
 
+func (e *Editor) MoveToBOF() {
+	e.point.line = 0
+	e.point.column = 0
+}
+
 func (e *Editor) MoveToBOL() {
-	e.column = 0
+	e.point.column = 0
+}
+
+func (e *Editor) MoveToEOF() {
+	e.point.line = len(e.lines)
+	e.point.column = 0
 }
 
 func (e *Editor) MoveToEOL() {
-	e.column = e.CurrentLineLength()
+	e.point.column = e.CurrentLineLength()
 }
 
 func (e *Editor) WordLeft() {
@@ -170,18 +181,12 @@ func (e *Editor) WordRight() {
 }
 
 func (e *Editor) SetMark() {
-	e.mark.line = e.line
-	e.mark.column = e.column
+	e.mark = e.point
 	e.markActive = true
 }
 
 func (e *Editor) SwapPointAndMark() {
-	tempLine := e.line
-	e.line = e.mark.line
-	e.mark.line = tempLine
-	tempColumn := e.column
-	e.column = e.mark.column
-	e.mark.column = tempColumn
+	e.point, e.mark = e.mark, e.point
 }
 
 func (e *Editor) ForgetMark() {
@@ -190,19 +195,23 @@ func (e *Editor) ForgetMark() {
 	e.markActive = false
 }
 
-func (e *Editor) IsInsideRegion(line, column int) bool {
-	if e.line < e.mark.line || (e.line == e.mark.line && e.column < e.mark.column) {
-		if line > e.line || (line == e.line && column >= e.column) {
-			if line < e.mark.line || (line == e.mark.line && column < e.mark.column) {
-				return true
-			}
-		}
+func (e *Editor) PointAndMarkInOrder() (EditorPoint, EditorPoint) {
+	p := e.point
+	m := e.mark
+	if p.line > m.line {
+		p, m = m, p
 	}
-	if e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
-		if line < e.line || (line == e.line && column < e.column) {
-			if line > e.mark.line || (line == e.mark.line && column >= e.mark.column) {
-				return true
-			}
+	if p.line == m.line && p.column > m.column {
+		p, m = m, p
+	}
+	return p, m
+}
+
+func (e *Editor) InsideRegion(line, column int) bool {
+	p, m := e.PointAndMarkInOrder()
+	if line > p.line || (line == p.line && column >= p.column) {
+		if line < m.line || (line == m.line && column < m.column) {
+			return true
 		}
 	}
 	return false
@@ -212,20 +221,59 @@ func (e *Editor) KillRegion() {
 	if !e.markActive {
 		return
 	}
-	if e.line < e.mark.line || (e.line == e.mark.line && e.column < e.mark.column) {
-		e.SwapPointAndMark()
-	}
-	if e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
-		count := 0
-		for e.line > e.mark.line || (e.line == e.mark.line && e.column > e.mark.column) {
-			e.AdvanceColumn(-1)
-			count++
-		}
-		for range count {
-			e.DeleteRune()
-		}
+	p, m := e.PointAndMarkInOrder()
+	e.point = m
+	for e.point.line > p.line || e.point.column > p.column {
+		e.AdvanceColumn(-1)
+		e.DeleteRune()
 	}
 	e.ForgetMark()
+}
+
+func (e *Editor) YankRegion() {
+	if !e.markActive {
+		return
+	}
+	p, m := e.PointAndMarkInOrder()
+	var yankedRunes []rune
+	for line := p.line; line <= m.line; line++ {
+		if line == len(e.lines) {
+			break
+		} else if line == p.line && line == m.line {
+			for i := p.column; i < m.column; i++ {
+				yankedRunes = append(yankedRunes, e.lines[p.line][i])
+			}
+		} else if line == p.line {
+			for i := p.column; i < e.GetLineLength(p.line); i++ {
+				yankedRunes = append(yankedRunes, e.lines[p.line][i])
+			}
+			yankedRunes = append(yankedRunes, '\n')
+		} else if line == m.line {
+			for i := 0; i < m.column; i++ {
+				yankedRunes = append(yankedRunes, e.lines[m.line][i])
+			}
+		} else {
+			for i := 0; i < e.GetLineLength(line); i++ {
+				yankedRunes = append(yankedRunes, e.lines[line][i])
+			}
+			yankedRunes = append(yankedRunes, '\n')
+		}
+	}
+	e.yankedRunes = yankedRunes
+	e.ForgetMark()
+}
+
+func (e *Editor) Paste() {
+	if e.yankedRunes == nil {
+		return
+	}
+	for _, r := range e.yankedRunes {
+		if r == '\n' {
+			e.SplitLine()
+		} else {
+			e.InsertRune(r)
+		}
+	}
 }
 
 func (e *Editor) Quit() {
@@ -233,58 +281,63 @@ func (e *Editor) Quit() {
 }
 
 func (e *Editor) InsertRune(r rune) {
-	if e.line == len(e.lines) {
-		e.lines = append(e.lines, Line(""))
+	p := e.point
+	if p.line == len(e.lines) {
+		e.lines = append(e.lines, EditorLine(""))
 	}
-	e.lines[e.line] = slices.Insert(e.lines[e.line], e.column, r)
+	e.lines[p.line] = slices.Insert(e.lines[p.line], p.column, r)
 	e.AdvanceColumn(1)
 }
 
 func (e *Editor) DeleteRune() {
-	if e.line == len(e.lines) {
+	p := e.point
+	if p.line == len(e.lines) {
 		return
 	}
-	if e.column == e.CurrentLineLength() {
-		if e.line == len(e.lines)-1 {
-			if e.column == 0 {
-				e.lines = slices.Delete(e.lines, e.line, e.line+1)
+	if p.column == e.CurrentLineLength() {
+		if p.line == len(e.lines)-1 {
+			if p.column == 0 {
+				e.lines = slices.Delete(e.lines, p.line, p.line+1)
 			}
 		} else {
-			e.lines[e.line] = slices.Insert(e.lines[e.line], e.column, e.lines[e.line+1]...)
-			e.lines = slices.Delete(e.lines, e.line+1, e.line+2)
+			e.lines[p.line] = slices.Insert(e.lines[p.line], p.column, e.lines[p.line+1]...)
+			e.lines = slices.Delete(e.lines, p.line+1, p.line+2)
 		}
 	} else {
-		e.lines[e.line] = slices.Delete(e.lines[e.line], e.column, e.column+1)
+		e.lines[p.line] = slices.Delete(e.lines[p.line], p.column, p.column+1)
 	}
 }
 
 func (e *Editor) SplitLine() {
-	if e.line == len(e.lines) {
-		e.lines = append(e.lines, Line(""))
+	p := &e.point
+	if p.line == len(e.lines) {
+		e.lines = append(e.lines, EditorLine(""))
 	} else {
-		nextLine := slices.Clone(e.lines[e.line][e.column:])
-		e.lines = slices.Insert(e.lines, e.line+1, nextLine)
-		e.lines[e.line] = e.lines[e.line][:e.column]
+		nextLine := slices.Clone(e.lines[p.line][p.column:])
+		e.lines = slices.Insert(e.lines, p.line+1, nextLine)
+		e.lines[p.line] = e.lines[p.line][:p.column]
 	}
 	e.AdvanceLine(1)
-	e.column = 0
+	p.column = 0
 }
 
 func (e *Editor) Render(tp TilePane) {
-	if e.line < e.top {
-		e.top = e.line
+	p := e.point
+	e.height = tp.Height()
+	if p.line < e.top {
+		e.top = p.line
 	}
-	if e.line >= e.top+tp.Height() {
-		e.top = e.line - tp.Height() + 1
+	if p.line >= e.top+tp.Height() {
+		e.top = p.line - tp.Height() + 1
 	}
 	if e.top < 0 {
 		e.top = 0
 	}
-	if e.column < e.left {
-		e.left = e.column
+	if p.column < e.left {
+		e.left = p.column
 	}
-	if e.column >= e.left+tp.Width() {
-		e.left = e.column - tp.Width() + 1
+	if p.column >= e.left+tp.Width() {
+		e.left = p.column - tp.Width() + 1
 	}
 	if e.left < 0 {
 		e.left = 0
@@ -296,12 +349,12 @@ func (e *Editor) Render(tp TilePane) {
 			for x := 0; x < tp.Width(); x++ {
 				runeIndex := e.left + x
 				if runeIndex < len(line) {
-					if lineIndex == e.line && runeIndex == e.column {
+					if lineIndex == p.line && runeIndex == p.column {
 						tp.WithBg(ColorHighlight, func() {
 							tp.DrawRune(x, y, line[runeIndex])
 						})
 					} else {
-						if e.markActive && e.IsInsideRegion(lineIndex, runeIndex) {
+						if e.markActive && e.InsideRegion(lineIndex, runeIndex) {
 							tp.WithBg(ColorMark, func() {
 								tp.DrawRune(x, y, line[runeIndex])
 							})
@@ -309,13 +362,13 @@ func (e *Editor) Render(tp TilePane) {
 							tp.DrawRune(x, y, line[runeIndex])
 						}
 					}
-				} else if lineIndex == e.line && runeIndex == e.column {
+				} else if lineIndex == p.line && runeIndex == p.column {
 					tp.WithBg(ColorHighlight, func() {
 						tp.DrawRune(x, y, ' ')
 					})
 				}
 			}
-		} else if lineIndex == e.line {
+		} else if lineIndex == p.line {
 			tp.WithBg(ColorHighlight, func() {
 				tp.DrawRune(0, y, ' ')
 			})

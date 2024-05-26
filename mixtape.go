@@ -83,6 +83,14 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.AdvanceLine(-1)
 			case glfw.KeyDown:
 				app.editor.AdvanceLine(1)
+			case glfw.KeyPageUp:
+				for range app.editor.height {
+					app.editor.AdvanceLine(-1)
+				}
+			case glfw.KeyPageDown:
+				for range app.editor.height {
+					app.editor.AdvanceLine(1)
+				}
 			case glfw.KeyDelete:
 				app.editor.DeleteRune()
 			case glfw.KeyBackspace:
@@ -96,7 +104,7 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.MoveToEOL()
 			}
 		}
-		if modes&glfw.ModControl != 0 {
+		if modes&glfw.ModControl == glfw.ModControl {
 			switch key {
 			case glfw.KeyQ:
 				app.isRunning = false
@@ -108,6 +116,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.MoveToBOL()
 			case glfw.KeyE:
 				app.editor.MoveToEOL()
+			case glfw.KeyHome:
+				app.editor.MoveToBOF()
+			case glfw.KeyEnd:
+				app.editor.MoveToEOF()
 			case glfw.KeyK:
 				if app.editor.AtEOL() {
 					app.editor.DeleteRune()
@@ -129,10 +141,18 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.SetMark()
 			case glfw.KeyW:
 				app.editor.KillRegion()
+			case glfw.KeyY:
+				app.editor.Paste()
 			case glfw.KeyG:
 				app.editor.Quit()
 			case glfw.KeyS:
 				os.WriteFile(app.mixFilePath, app.editor.GetBytes(), 0o644)
+			}
+		}
+		if modes&glfw.ModAlt == glfw.ModAlt {
+			switch key {
+			case glfw.KeyW:
+				app.editor.YankRegion()
 			}
 		}
 	}
