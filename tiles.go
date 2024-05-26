@@ -256,19 +256,19 @@ func (ts *TileScreen) Render() {
 		X: (fbSize.X % tileSize.X) / 2,
 		Y: (fbSize.Y % tileSize.Y) / 2,
 	}
-	rect := Rect{
+	pixelRect := Rect{
 		Min: Point{borderSize.X, borderSize.Y},
 		Max: Point{fbSize.X - borderSize.X, fbSize.Y - borderSize.Y},
 	}
 	ux := 2.0 / float32(fbSize.X)
 	uy := 2.0 / float32(fbSize.Y)
-	wx := ux * float32(rect.Size().X)
-	wy := uy * float32(rect.Size().Y)
+	wx := ux * float32(pixelRect.Size().X)
+	wy := uy * float32(pixelRect.Size().Y)
 	sx := wx / float32(rectSizeInTiles.X)
 	sy := wy / float32(rectSizeInTiles.Y)
 	mScale := mgl.Scale3D(sx, sy, 1)
-	tx := -1.0 + ux*float32(rect.Min.X)
-	ty := 1.0 - uy*float32(rect.Min.Y)
+	tx := -1.0 + ux*float32(pixelRect.Min.X)
+	ty := 1.0 - uy*float32(pixelRect.Min.Y)
 	mTranslate := mgl.Translate3D(tx, ty, 0)
 	mTransform := mTranslate.Mul4(mScale)
 	gl.UniformMatrix4fv(ts.u_transform, 1, false, &mTransform[0])
@@ -295,6 +295,25 @@ func (tp TilePane) Width() int {
 
 func (tp TilePane) Height() int {
 	return tp.rect.Dy()
+}
+
+func (tp TilePane) GetPixelRect() Rect {
+	tileSize := tp.ts.tm.GetTileSize()
+	borderSize := Size{
+		X: (fbSize.X % tileSize.X) / 2,
+		Y: (fbSize.Y % tileSize.Y) / 2,
+	}
+	pixelRect := Rect{
+		Min: Point{
+			borderSize.X + tp.rect.Min.X*tileSize.X,
+			borderSize.Y + tp.rect.Min.Y*tileSize.Y,
+		},
+		Max: Point{
+			borderSize.X + tp.rect.Max.X*tileSize.X,
+			borderSize.Y + tp.rect.Max.Y*tileSize.Y,
+		},
+	}
+	return pixelRect
 }
 
 func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
