@@ -230,6 +230,16 @@ func (vm *VM) GetInt(k any) int {
 	return int(Get[Num](vm, k))
 }
 
+func wordDup(vm *VM) error {
+	stacksize := len(vm.valStack)
+	if stacksize == 0 {
+		log.Fatalf("value stack underflow")
+	}
+	topVal := vm.valStack[stacksize-1]
+	vm.PushVal(topVal)
+	return nil
+}
+
 func wordStackPrint(vm *VM) error {
 	fmt.Printf("%s\n", vm.valStack)
 	return nil
@@ -305,12 +315,13 @@ var rootEnv = make(Map)
 func init() {
 	rootEnv.SetVal(":bpm", 120)
 	rootEnv.SetVal(":sr", 48000)
-	rootEnv.SetVal(":length", 48000)
 	rootEnv.SetVal(":freq", 440)
 	rootEnv.SetVal(":phase", 0)
+	rootEnv.SetVal(":width", 0.5)
 	rootEnv.SetVal("[", wordCompile)
 	rootEnv.SetVal("(", wordPushEnv)
 	rootEnv.SetVal(")", wordPopEnv)
+	rootEnv.SetVal("dup", wordDup)
 	rootEnv.SetVal(".", wordValuePopAndPrint)
 	rootEnv.SetVal("ps", wordStackPrint)
 	rootEnv.SetVal("get", wordGet)
@@ -323,10 +334,17 @@ func init() {
 
 func NewVM() *VM {
 	vm := &VM{
-		valStack: make(Vec, 0, 4096),
-		envStack: []Map{rootEnv},
+		valStack:      make(Vec, 0, 4096),
+		envStack:      []Map{rootEnv},
+		compileBuffer: nil,
 	}
 	return vm
+}
+
+func (vm *VM) Reset() {
+	vm.valStack = vm.valStack[:0]
+	vm.envStack = vm.envStack[:1]
+	vm.compileBuffer = nil
 }
 
 func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
@@ -442,7 +460,7 @@ func (vm *VM) Execute(val Val) error {
 		if handler != nil {
 			return handler(vm)
 		}
-		return fmt.Errorf("undefined word: %s", name)
+		return fmt.Errorf("undeliverable message: %s", name)
 	case Vec:
 		for _, val := range value {
 			err := vm.Execute(val)

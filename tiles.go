@@ -318,6 +318,13 @@ func (tp TilePane) GetPixelRect() Rect {
 
 func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
 	width := float64(tp.Width())
+	if at < 0.0 {
+		if at >= -1.0 {
+			at = 1.0 + at
+		} else {
+			at = width + at
+		}
+	}
 	if at < 1.0 {
 		at = math.Round(width * at)
 	}
@@ -343,6 +350,13 @@ func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
 
 func (tp TilePane) SplitY(at float64) (TilePane, TilePane) {
 	height := float64(tp.Height())
+	if at < 0.0 {
+		if at >= -1.0 {
+			at = 1.0 + at
+		} else {
+			at = height + at
+		}
+	}
 	if at < 1.0 {
 		at = math.Round(height * at)
 	}

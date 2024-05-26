@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	gl "github.com/go-gl/gl/v3.1/gles2"
+	mgl "github.com/go-gl/mathgl/mgl32"
 	"math"
+	"unsafe"
 )
 
 type Tape struct {
@@ -42,6 +45,15 @@ func (t *Tape) GetSampleIterator() SampleIterator {
 			}
 		}
 	}
+}
+
+func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
+	frameIndexLo := math.Floor(frame)
+	sampleIndexLo := channel + int(frameIndexLo)*t.nchannels
+	smpLo := t.samples[sampleIndexLo]
+	smpHi := t.samples[sampleIndexLo+1]
+	frameIndexDelta := frame - frameIndexLo
+	return smpLo + (smpHi-smpLo)*frameIndexDelta
 }
 
 func clamp(value float64, lo float64, hi float64) float64 {
@@ -93,7 +105,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				width := clamp(vm.GetFloat(":width"), 0, 1)
 				incr := 1.0 / float64(t.nframes)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcPulse(phase, width)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -110,7 +122,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				width := clamp(vm.GetFloat(":width"), 0, 1)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcPulse(phase, width)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -126,7 +138,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				incr := 1.0 / float64(t.nframes)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcTriangle(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -142,7 +154,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				freq := GetSampleIterator(vm.GetVal(":freq"))
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcTriangle(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -158,7 +170,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				incr := 1.0 / float64(t.nframes)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcSaw(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -174,7 +186,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				freq := GetSampleIterator(vm.GetVal(":freq"))
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcSaw(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -190,7 +202,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				incr := 1.0 / float64(t.nframes)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcSin(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -206,7 +218,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 				freq := GetSampleIterator(vm.GetVal(":freq"))
 				phase := clamp(vm.GetFloat(":phase"), 0, 1)
 				writeIndex := 0
-				for i := 0; i < t.nframes; {
+				for i := 0; i < t.nframes; i++ {
 					smp := calcSin(phase)
 					for range t.nchannels {
 						t.samples[writeIndex] = smp
@@ -223,7 +235,7 @@ func (t *Tape) GetMessageHandler(msg string, nargs int) Fun {
 }
 
 func pushTape(vm *VM, nchannels, nframes int) {
-	samples := make([]Smp, nchannels*nframes)
+	samples := make([]Smp, nchannels*(nframes+1))
 	tape := &Tape{
 		nchannels: nchannels,
 		nframes:   nframes,
@@ -247,4 +259,91 @@ func wordTape2(vm *VM) error {
 func init() {
 	rootEnv.SetVal("tape1", wordTape1)
 	rootEnv.SetVal("tape2", wordTape2)
+}
+
+const (
+	pointVertexShader = `
+    precision highp float;
+    attribute vec2 a_position;
+    uniform mat4 u_transform;
+    void main(void) {
+      gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
+    };` + "\x00"
+	pointFragmentShader = `
+    precision highp float;
+    void main(void) {
+      gl_FragColor = vec4(1.0);
+    };` + "\x00"
+)
+
+type PointVertex struct {
+	position [2]float32
+}
+
+type TapeDisplay struct {
+	tape        *Tape
+	pixelRect   Rect
+	vertices    [][]PointVertex
+	program     Program
+	a_position  int32
+	u_transform int32
+}
+
+func CreateTapeDisplay() (*TapeDisplay, error) {
+	program, err := CreateProgram(pointVertexShader, pointFragmentShader)
+	if err != nil {
+		return nil, err
+	}
+	td := &TapeDisplay{
+		program:     program,
+		a_position:  program.GetAttribLocation("a_position\x00"),
+		u_transform: program.GetUniformLocation("u_transform\x00"),
+	}
+	return td, nil
+}
+
+func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, windowOffset int) {
+	pixelWidth, pixelHeight := pixelRect.Dx(), pixelRect.Dy()
+	if td.tape != tape || td.pixelRect != pixelRect {
+		td.tape = tape
+		td.pixelRect = pixelRect
+		td.vertices = make([][]PointVertex, tape.nchannels)
+		for ch := range tape.nchannels {
+			td.vertices[ch] = make([]PointVertex, pixelWidth)
+			for x := 0; x < pixelWidth; x++ {
+				td.vertices[ch][x].position[0] = float32(x) + 0.5
+			}
+		}
+	}
+	channelHeight := float32(pixelHeight) / float32(tape.nchannels)
+	channelHeightHalf := channelHeight / 2.0
+	incr := float64(windowSize) / float64(pixelWidth)
+	readIndex := float64(windowOffset)
+	for x := 0; x < pixelWidth; x++ {
+		channelTop := float32(0)
+		for ch := range tape.nchannels {
+			smp := tape.GetInterpolatedSampleAt(ch, readIndex)
+			td.vertices[ch][x].position[1] = channelTop + channelHeightHalf - float32(smp)*channelHeightHalf
+			channelTop += channelHeight
+		}
+		readIndex += incr
+	}
+	td.program.Use()
+	gl.EnableVertexAttribArray(uint32(td.a_position))
+	ux := 2.0 / float32(fbSize.X)
+	uy := 2.0 / float32(fbSize.Y)
+	mScale := mgl.Scale3D(ux, -uy, 1)
+	tx := -1.0 + ux*float32(pixelRect.Min.X)
+	ty := 1.0 - uy*float32(pixelRect.Min.Y)
+	mTranslate := mgl.Translate3D(tx, ty, 0)
+	mTransform := mTranslate.Mul4(mScale)
+	gl.UniformMatrix4fv(td.u_transform, 1, false, &mTransform[0])
+	for ch := range tape.nchannels {
+		gl.VertexAttribPointer(
+			uint32(td.a_position), 2, gl.FLOAT, false,
+			int32(unsafe.Sizeof(PointVertex{})),
+			gl.Ptr(&td.vertices[ch][0].position[0]))
+		gl.DrawArrays(gl.LINE_STRIP, 0, int32(len(td.vertices[ch])))
+	}
+	gl.DisableVertexAttribArray(uint32(td.a_position))
 }

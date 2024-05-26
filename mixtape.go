@@ -18,6 +18,8 @@ type App struct {
 	tm          *TileMap
 	ts          *TileScreen
 	editor      *Editor
+	tape        *Tape
+	tapeDisplay *TapeDisplay
 }
 
 func runGui(vm *VM, mixFilePath string) error {
@@ -59,6 +61,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.editor = CreateEditor(string(mixScript))
+	tapeDisplay, err := CreateTapeDisplay()
+	if err != nil {
+		return err
+	}
+	app.tapeDisplay = tapeDisplay
 	return nil
 }
 
@@ -106,6 +113,21 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 		}
 		if modes&glfw.ModControl == glfw.ModControl {
 			switch key {
+			case glfw.KeyEnter:
+				vm := app.vm
+				vm.Reset()
+				vm.PushEnv()
+				err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), app.mixFilePath)
+				if err != nil {
+					slog.Error("parse error", "error", err)
+				} else {
+					val := vm.PopVal()
+					if tape, ok := val.(*Tape); ok {
+						app.tape = tape
+					} else {
+						slog.Error(fmt.Sprintf("expected a Tape at top of stack, got %T", val))
+					}
+				}
 			case glfw.KeyQ:
 				app.isRunning = false
 			case glfw.KeyLeft:
@@ -153,6 +175,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 			switch key {
 			case glfw.KeyW:
 				app.editor.YankRegion()
+			case glfw.KeyBackspace:
+				app.editor.SetMark()
+				app.editor.WordLeft()
+				app.editor.KillRegion()
 			}
 		}
 	}
@@ -171,10 +197,14 @@ func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	tp := ts.GetPane()
-	top, bottom := tp.SplitY(5)
-	top.DrawString(0, 0, "Hello, world")
-	app.editor.Render(bottom)
+	topPane, bottomPane := tp.SplitY(5)
+	editorPane, tapeDisplayPane := bottomPane.SplitY(-8)
+	topPane.DrawString(0, 0, "Hello, world")
+	app.editor.Render(editorPane)
 	ts.Render()
+	if app.tape != nil {
+		app.tapeDisplay.Render(app.tape, tapeDisplayPane.GetPixelRect(), app.tape.nframes, 0)
+	}
 	return nil
 }
 
