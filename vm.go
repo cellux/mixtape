@@ -68,28 +68,18 @@ type Method struct {
 
 type MethodMap map[string][]Method
 
-var typeMethods = make(map[reflect.Type]MethodMap)
-
-func RegisterMethod[T any](name string, nargs int, fun Fun) {
-	t := reflect.TypeFor[T]()
-	if _, ok := typeMethods[t]; !ok {
-		typeMethods[t] = make(MethodMap)
+func (mm MethodMap) RegisterMethod(name string, nargs int, fun Fun) {
+	if _, ok := mm[name]; !ok {
+		mm[name] = make([]Method, 0, 8)
 	}
-	if _, ok := typeMethods[t][name]; !ok {
-		typeMethods[t][name] = make([]Method, 0, 8)
-	}
-	typeMethods[t][name] = append(typeMethods[t][name], Method{nargs, fun})
+	mm[name] = append(mm[name], Method{nargs, fun})
 }
 
-func FindMethod(val Val, name string, nargs int) Fun {
-	t := reflect.TypeOf(val)
-	if _, ok := typeMethods[t]; !ok {
+func (mm MethodMap) FindMethod(name string, nargs int) Fun {
+	if _, ok := mm[name]; !ok {
 		return nil
 	}
-	if _, ok := typeMethods[t][name]; !ok {
-		return nil
-	}
-	for _, method := range typeMethods[t][name] {
+	for _, method := range mm[name] {
 		if method.nargs == nargs {
 			return method.fun
 		}
@@ -97,22 +87,27 @@ func FindMethod(val Val, name string, nargs int) Fun {
 	return nil
 }
 
-// Num
+type TypeMethodMap map[reflect.Type]MethodMap
 
-func scanFloat(text string) (float64, error) {
-	var f float64
-	_, err := fmt.Sscanf(text, "%g", &f)
-	if err == nil {
-		var nominator, denominator int
-		_, err = fmt.Sscanf(text, "%d/%d", &nominator, &denominator)
-		if err == nil {
-			return float64(nominator) / float64(denominator), nil
-		} else {
-			return f, nil
-		}
+var typeMethods = make(TypeMethodMap)
+
+func RegisterMethod[T any](name string, nargs int, fun Fun) {
+	t := reflect.TypeFor[T]()
+	if _, ok := typeMethods[t]; !ok {
+		typeMethods[t] = make(MethodMap)
 	}
-	return 0, fmt.Errorf("cannot parse float: %s", text)
+	typeMethods[t].RegisterMethod(name, nargs, fun)
 }
+
+func FindMethod(val Val, name string, nargs int) Fun {
+	t := reflect.TypeOf(val)
+	if _, ok := typeMethods[t]; !ok {
+		return nil
+	}
+	return typeMethods[t].FindMethod(name, nargs)
+}
+
+// Num
 
 func init() {
 	RegisterMethod[Num]("=", 2, func(vm *VM) error {
@@ -121,17 +116,20 @@ func init() {
 		vm.PushVal(lhs == rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("!=", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs != rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("not", 1, func(vm *VM) error {
 		arg := Pop[Num](vm)
 		vm.PushVal(arg == 0)
 		return nil
 	})
+
 	RegisterMethod[Num]("assert", 1, func(vm *VM) error {
 		n := Pop[Num](vm)
 		if n == False {
@@ -139,54 +137,63 @@ func init() {
 		}
 		return nil
 	})
+
 	RegisterMethod[Num]("+", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs + rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("-", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs - rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("*", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs * rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("/", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs / rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("%", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(math.Mod(float64(lhs), float64(rhs)))
 		return nil
 	})
+
 	RegisterMethod[Num]("<", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs < rhs)
 		return nil
 	})
+
 	RegisterMethod[Num]("<=", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs <= rhs)
 		return nil
 	})
+
 	RegisterMethod[Num](">=", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
 		vm.PushVal(lhs >= rhs)
 		return nil
 	})
+
 	RegisterMethod[Num](">", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
@@ -207,6 +214,21 @@ func (n Num) GetSampleIterator() SampleIterator {
 
 // Str
 
+func scanFloat(text string) (float64, error) {
+	var f float64
+	_, err := fmt.Sscanf(text, "%g", &f)
+	if err == nil {
+		var nominator, denominator int
+		_, err = fmt.Sscanf(text, "%d/%d", &nominator, &denominator)
+		if err == nil {
+			return float64(nominator) / float64(denominator), nil
+		} else {
+			return f, nil
+		}
+	}
+	return 0, fmt.Errorf("cannot parse float: %s", text)
+}
+
 func init() {
 	RegisterMethod[Str]("num", 1, func(vm *VM) error {
 		arg := Pop[Str](vm)
@@ -217,6 +239,7 @@ func init() {
 		vm.PushVal(f)
 		return nil
 	})
+
 	RegisterMethod[Str]("=", 2, func(vm *VM) error {
 		rhs := Pop[Str](vm)
 		lhs := Pop[Str](vm)
