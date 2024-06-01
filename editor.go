@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"github.com/atotto/clipboard"
 	"slices"
 	"strings"
 	"unicode"
@@ -264,10 +265,16 @@ func (e *Editor) YankRegion() {
 }
 
 func (e *Editor) Paste() {
-	if e.yankedRunes == nil {
-		return
+	sourceRunes := e.yankedRunes
+	if sourceRunes == nil {
+		clipboardContents, err := clipboard.ReadAll()
+		if err == nil {
+			sourceRunes = []rune(clipboardContents)
+		} else {
+			return
+		}
 	}
-	for _, r := range e.yankedRunes {
+	for _, r := range sourceRunes {
 		if r == '\n' {
 			e.SplitLine()
 		} else {
