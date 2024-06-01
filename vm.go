@@ -425,7 +425,11 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				if len(text) > 1 {
 					switch text[0] {
 					case '>':
-						code = append(code, Str(text[1:]), Sym("set"))
+						if text == ">=" {
+							code = append(code, Sym(text))
+						} else {
+							code = append(code, Str(text[1:]), Sym("set"))
+						}
 					case '.':
 						code = append(code, Str(text[1:]), Sym("dispatch"))
 					default:
@@ -510,6 +514,11 @@ func init() {
 	RegisterNum(":freq", 440)
 	RegisterNum(":phase", 0)
 	RegisterNum(":width", 0.5)
+
+	RegisterWord("stack", func(vm *VM) error {
+		vm.PushVal(vm.valStack)
+		return nil
+	})
 
 	RegisterWord("str", func(vm *VM) error {
 		val := vm.PopVal()

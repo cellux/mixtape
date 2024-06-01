@@ -1,3 +1,6 @@
+# stack is empty at start
+stack len 0 = assert
+
 # numbers
 
 ## truth values
@@ -84,3 +87,6 @@
 # utilities
 
 5 dup * 25 = assert
+
+# stack is empty at end
+stack len 0 = assert
