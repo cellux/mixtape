@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"path/filepath"
 	"reflect"
 	"text/scanner"
 	"unicode"
@@ -244,6 +245,13 @@ func init() {
 		rhs := Pop[Str](vm)
 		lhs := Pop[Str](vm)
 		vm.PushVal(lhs == rhs)
+		return nil
+	})
+
+	RegisterMethod[Str]("path/join", 2, func(vm *VM) error {
+		rhs := Pop[Str](vm)
+		lhs := Pop[Str](vm)
+		vm.PushVal(filepath.Join(string(lhs), string(rhs)))
 		return nil
 	})
 }

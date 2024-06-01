@@ -2,13 +2,18 @@ package main
 
 import (
 	"fmt"
+	"github.com/go-audio/wav"
 	gl "github.com/go-gl/gl/v3.1/gles2"
 	mgl "github.com/go-gl/mathgl/mgl32"
+	"github.com/mitchellh/go-homedir"
 	"math"
+	"os"
+	"path/filepath"
 	"unsafe"
 )
 
 type Tape struct {
+	sr        float64
 	nchannels int
 	nframes   int
 	samples   []Smp
@@ -236,26 +241,79 @@ func init() {
 	})
 }
 
-func pushTape(vm *VM, nchannels, nframes int) {
+func expandPath(path string) (string, error) {
+	p, err := homedir.Expand(path)
+	if err != nil {
+		return "", err
+	}
+	return os.ExpandEnv(p), nil
+}
+
+func init() {
+	RegisterMethod[Str]("load", 1, func(vm *VM) error {
+		path := string(Pop[Str](vm))
+		path, err := expandPath(path)
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		switch filepath.Ext(path) {
+		case ".wav":
+			decoder := wav.NewDecoder(f)
+			if !decoder.IsValidFile() {
+				return fmt.Errorf("invalid WAV file: %s", path)
+			}
+			buf, err := decoder.FullPCMBuffer()
+			if err != nil {
+				return err
+			}
+			sr := float64(buf.Format.SampleRate)
+			nchannels := buf.Format.NumChannels
+			nframes := len(buf.Data) / nchannels
+			tape := pushTape(vm, sr, nchannels, nframes)
+			floatBuf := buf.AsFloatBuffer()
+			if buf.SourceBitDepth == 0 {
+				return fmt.Errorf("unknown bit depth for WAV file: %s", path)
+			}
+			factor := math.Pow(2, float64(buf.SourceBitDepth)-1)
+			for i := 0; i < len(buf.Data); i++ {
+				tape.samples[i] = floatBuf.Data[i] / factor
+			}
+		default:
+			return fmt.Errorf("cannot load file: %s", path)
+		}
+		return nil
+	})
+}
+
+func pushTape(vm *VM, sr float64, nchannels, nframes int) *Tape {
 	samples := make([]Smp, nchannels*(nframes+1))
 	tape := &Tape{
+		sr:        sr,
 		nchannels: nchannels,
 		nframes:   nframes,
 		samples:   samples,
 	}
 	vm.PushVal(tape)
+	return tape
 }
 
 func init() {
 	RegisterWord("tape1", func(vm *VM) error {
+		sr := vm.GetFloat(":sr")
 		nframes := int(Pop[Num](vm))
-		pushTape(vm, 1, nframes)
+		pushTape(vm, sr, 1, nframes)
 		return nil
 	})
 
 	RegisterWord("tape2", func(vm *VM) error {
+		sr := vm.GetFloat(":sr")
 		nframes := int(Pop[Num](vm))
-		pushTape(vm, 2, nframes)
+		pushTape(vm, sr, 2, nframes)
 		return nil
 	})
 }

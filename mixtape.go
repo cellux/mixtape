@@ -14,7 +14,7 @@ import (
 
 type App struct {
 	vm          *VM
-	mixFilePath string
+	tapePath    string
 	isRunning   bool
 	font        *Font
 	tm          *TileMap
@@ -24,13 +24,19 @@ type App struct {
 	tapeDisplay *TapeDisplay
 }
 
-func runGui(vm *VM, mixFilePath string) error {
+func runGui(vm *VM, tapePath string) error {
 	app := &App{
-		vm:          vm,
-		mixFilePath: mixFilePath,
-		isRunning:   true,
+		vm:        vm,
+		tapePath:  tapePath,
+		isRunning: true,
 	}
-	return WithGL(fmt.Sprintf("mixtape : %s", mixFilePath), app)
+	var windowTitle string
+	if tapePath != "" {
+		windowTitle = fmt.Sprintf("mixtape : %s", tapePath)
+	} else {
+		windowTitle = "mixtape"
+	}
+	return WithGL(windowTitle, app)
 }
 
 func (app *App) Init() error {
@@ -58,15 +64,20 @@ func (app *App) Init() error {
 		return err
 	}
 	app.ts = ts
-	mixScript, err := os.ReadFile(app.mixFilePath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			mixScript = []byte{}
-		} else {
-			return err
+	var tapeScript []byte
+	if app.tapePath != "" {
+		tapeScript, err = os.ReadFile(app.tapePath)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				tapeScript = []byte{}
+			} else {
+				return err
+			}
 		}
+	} else {
+		tapeScript = []byte{}
 	}
-	app.editor = CreateEditor(string(mixScript))
+	app.editor = CreateEditor(string(tapeScript))
 	tapeDisplay, err := CreateTapeDisplay()
 	if err != nil {
 		return err
@@ -123,7 +134,11 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				vm := app.vm
 				vm.Reset()
 				vm.PushEnv()
-				err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), app.mixFilePath)
+				tapePath := "<temp-tape>"
+				if app.tapePath != "" {
+					tapePath = app.tapePath
+				}
+				err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), tapePath)
 				if err != nil {
 					slog.Error("parse error", "error", err)
 				} else {
@@ -174,7 +189,9 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 			case glfw.KeyG:
 				app.editor.Quit()
 			case glfw.KeyS:
-				os.WriteFile(app.mixFilePath, app.editor.GetBytes(), 0o644)
+				if app.tapePath != "" {
+					os.WriteFile(app.tapePath, app.editor.GetBytes(), 0o644)
+				}
 			}
 		}
 		if modes&glfw.ModAlt == glfw.ModAlt {
@@ -270,7 +287,7 @@ func main() {
 	vm := NewVM()
 	var err error
 	if len(os.Args) == 1 {
-		err = vm.ParseAndExecute(os.Stdin, "<stdin>")
+		err = runGui(vm, "")
 	} else {
 		err = processArgs(vm, os.Args[1:])
 	}

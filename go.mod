@@ -9,4 +9,10 @@ require (
 	golang.org/x/image v0.16.0
 )
 
-require golang.org/x/text v0.15.0 // indirect
+require (
+	github.com/go-audio/audio v1.0.0 // indirect
+	github.com/go-audio/riff v1.0.0 // indirect
+	github.com/go-audio/wav v1.1.0 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
+)
