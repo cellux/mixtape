@@ -98,8 +98,8 @@ func calcSaw(phase float64) float64 {
 
 func init() {
 	RegisterMethod[*Tape]("pulse", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		t := Top[*Tape](vm)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		width := clamp(vm.GetFloat(":width"), 0, 1)
 		incr := 1.0 / float64(t.nframes)
 		writeIndex := 0
@@ -109,16 +109,16 @@ func init() {
 				t.samples[writeIndex] = smp
 				writeIndex++
 			}
-			phase += incr
+			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
 	})
 
 	RegisterMethod[*Tape]("lfo.pulse", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
+		t := Top[*Tape](vm)
 		sr := vm.GetFloat(":sr")
 		freq := GetSampleIterator(vm.GetVal(":freq"))
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		width := clamp(vm.GetFloat(":width"), 0, 1)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
@@ -134,8 +134,8 @@ func init() {
 	})
 
 	RegisterMethod[*Tape]("triangle", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		t := Top[*Tape](vm)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		incr := 1.0 / float64(t.nframes)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
@@ -144,16 +144,16 @@ func init() {
 				t.samples[writeIndex] = smp
 				writeIndex++
 			}
-			phase += incr
+			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
 	})
 
 	RegisterMethod[*Tape]("lfo.triangle", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
+		t := Top[*Tape](vm)
 		sr := vm.GetFloat(":sr")
 		freq := GetSampleIterator(vm.GetVal(":freq"))
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
 			smp := calcTriangle(phase)
@@ -168,8 +168,8 @@ func init() {
 	})
 
 	RegisterMethod[*Tape]("saw", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		t := Top[*Tape](vm)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		incr := 1.0 / float64(t.nframes)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
@@ -178,16 +178,16 @@ func init() {
 				t.samples[writeIndex] = smp
 				writeIndex++
 			}
-			phase += incr
+			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
 	})
 
 	RegisterMethod[*Tape]("lfo.saw", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
+		t := Top[*Tape](vm)
 		sr := vm.GetFloat(":sr")
 		freq := GetSampleIterator(vm.GetVal(":freq"))
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
 			smp := calcSaw(phase)
@@ -202,8 +202,8 @@ func init() {
 	})
 
 	RegisterMethod[*Tape]("sin", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		t := Top[*Tape](vm)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		incr := 1.0 / float64(t.nframes)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
@@ -212,16 +212,16 @@ func init() {
 				t.samples[writeIndex] = smp
 				writeIndex++
 			}
-			phase += incr
+			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
 	})
 
 	RegisterMethod[*Tape]("lfo.sin", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
+		t := Top[*Tape](vm)
 		sr := vm.GetFloat(":sr")
 		freq := GetSampleIterator(vm.GetVal(":freq"))
-		phase := clamp(vm.GetFloat(":phase"), 0, 1)
+		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
 		for i := 0; i < t.nframes; i++ {
 			smp := calcSin(phase)

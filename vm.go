@@ -334,6 +334,20 @@ func Pop[T Val](vm *VM) T {
 	}
 }
 
+func Top[T Val](vm *VM) T {
+	stacksize := len(vm.valStack)
+	if stacksize == 0 {
+		log.Fatalf("value stack underflow")
+	}
+	val := vm.valStack[stacksize-1]
+	if value, ok := val.(T); ok {
+		return value
+	} else {
+		log.Fatalf("top of value stack has type %T, expected %T", val, *new(T))
+		return *new(T)
+	}
+}
+
 func (vm *VM) TopEnv() Map {
 	return vm.envStack[len(vm.envStack)-1]
 }

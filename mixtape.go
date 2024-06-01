@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -58,7 +60,11 @@ func (app *App) Init() error {
 	app.ts = ts
 	mixScript, err := os.ReadFile(app.mixFilePath)
 	if err != nil {
-		return err
+		if errors.Is(err, fs.ErrNotExist) {
+			mixScript = []byte{}
+		} else {
+			return err
+		}
 	}
 	app.editor = CreateEditor(string(mixScript))
 	tapeDisplay, err := CreateTapeDisplay()
@@ -173,6 +179,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 		}
 		if modes&glfw.ModAlt == glfw.ModAlt {
 			switch key {
+			case glfw.KeyB:
+				app.editor.WordLeft()
+			case glfw.KeyF:
+				app.editor.WordRight()
 			case glfw.KeyW:
 				app.editor.YankRegion()
 			case glfw.KeyBackspace:
