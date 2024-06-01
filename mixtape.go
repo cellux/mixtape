@@ -90,15 +90,26 @@ func (app *App) IsRunning() bool {
 	return app.isRunning
 }
 
+func (app *App) Quit() {
+	app.isRunning = false
+}
+
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
 	//slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
 	if action == glfw.Press || action == glfw.Repeat {
 		if modes == 0 {
 			switch key {
 			case glfw.KeyEscape:
-				app.editor.Quit()
+				app.editor.ResetState()
 			case glfw.KeyEnter:
-				app.editor.SplitLine()
+				DispatchAction(
+					func() UndoFunc {
+						app.editor.SplitLine()
+						return func() {
+							app.editor.AdvanceColumn(-1)
+							app.editor.DeleteRune()
+						}
+					})
 			case glfw.KeyLeft:
 				app.editor.AdvanceColumn(-1)
 			case glfw.KeyRight:
@@ -116,11 +127,38 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 					app.editor.AdvanceLine(1)
 				}
 			case glfw.KeyDelete:
-				app.editor.DeleteRune()
+				DispatchAction(
+					func() UndoFunc {
+						deletedRune := app.editor.DeleteRune()
+						return func() {
+							if deletedRune == 0 {
+								return
+							}
+							if deletedRune == '\n' {
+								app.editor.SplitLine()
+							} else {
+								app.editor.InsertRune(deletedRune)
+							}
+							app.editor.AdvanceColumn(-1)
+						}
+					})
 			case glfw.KeyBackspace:
 				if !app.editor.AtBOF() {
-					app.editor.AdvanceColumn(-1)
-					app.editor.DeleteRune()
+					DispatchAction(
+						func() UndoFunc {
+							app.editor.AdvanceColumn(-1)
+							deletedRune := app.editor.DeleteRune()
+							return func() {
+								if deletedRune == 0 {
+									return
+								}
+								if deletedRune == '\n' {
+									app.editor.SplitLine()
+								} else {
+									app.editor.InsertRune(deletedRune)
+								}
+							}
+						})
 				}
 			case glfw.KeyHome:
 				app.editor.MoveToBOL()
@@ -149,8 +187,10 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 						slog.Error(fmt.Sprintf("expected a Tape at top of stack, got %T", val))
 					}
 				}
+			case glfw.KeyZ:
+				UndoLastAction()
 			case glfw.KeyQ:
-				app.isRunning = false
+				app.Quit()
 			case glfw.KeyLeft:
 				app.editor.WordLeft()
 			case glfw.KeyRight:
@@ -187,7 +227,7 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 			case glfw.KeyY:
 				app.editor.Paste()
 			case glfw.KeyG:
-				app.editor.Quit()
+				app.editor.ResetState()
 			case glfw.KeyS:
 				if app.tapePath != "" {
 					os.WriteFile(app.tapePath, app.editor.GetBytes(), 0o644)

@@ -283,7 +283,7 @@ func (e *Editor) Paste() {
 	}
 }
 
-func (e *Editor) Quit() {
+func (e *Editor) ResetState() {
 	e.ForgetMark()
 }
 
@@ -296,12 +296,14 @@ func (e *Editor) InsertRune(r rune) {
 	e.AdvanceColumn(1)
 }
 
-func (e *Editor) DeleteRune() {
+func (e *Editor) DeleteRune() (deletedRune rune) {
 	p := e.point
 	if p.line == len(e.lines) {
+		deletedRune = 0
 		return
 	}
 	if p.column == e.CurrentLineLength() {
+		deletedRune = '\n'
 		if p.line == len(e.lines)-1 {
 			if p.column == 0 {
 				e.lines = slices.Delete(e.lines, p.line, p.line+1)
@@ -311,8 +313,10 @@ func (e *Editor) DeleteRune() {
 			e.lines = slices.Delete(e.lines, p.line+1, p.line+2)
 		}
 	} else {
+		deletedRune = e.lines[p.line][p.column]
 		e.lines[p.line] = slices.Delete(e.lines[p.line], p.column, p.column+1)
 	}
+	return deletedRune
 }
 
 func (e *Editor) SplitLine() {
