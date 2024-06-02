@@ -102,14 +102,13 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 			case glfw.KeyEscape:
 				app.editor.ResetState()
 			case glfw.KeyEnter:
-				DispatchAction(
-					func() UndoFunc {
-						app.editor.SplitLine()
-						return func() {
-							app.editor.AdvanceColumn(-1)
-							app.editor.DeleteRune()
-						}
-					})
+				DispatchAction(func() UndoFunc {
+					app.editor.SplitLine()
+					return func() {
+						app.editor.AdvanceColumn(-1)
+						app.editor.DeleteRune()
+					}
+				})
 			case glfw.KeyLeft:
 				app.editor.AdvanceColumn(-1)
 			case glfw.KeyRight:
@@ -127,38 +126,26 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 					app.editor.AdvanceLine(1)
 				}
 			case glfw.KeyDelete:
-				DispatchAction(
-					func() UndoFunc {
-						deletedRune := app.editor.DeleteRune()
-						return func() {
-							if deletedRune == 0 {
-								return
-							}
-							if deletedRune == '\n' {
-								app.editor.SplitLine()
-							} else {
-								app.editor.InsertRune(deletedRune)
-							}
+				DispatchAction(func() UndoFunc {
+					deletedRune := app.editor.DeleteRune()
+					return func() {
+						if deletedRune != 0 {
+							app.editor.InsertRune(deletedRune)
 							app.editor.AdvanceColumn(-1)
 						}
-					})
+					}
+				})
 			case glfw.KeyBackspace:
 				if !app.editor.AtBOF() {
-					DispatchAction(
-						func() UndoFunc {
-							app.editor.AdvanceColumn(-1)
-							deletedRune := app.editor.DeleteRune()
-							return func() {
-								if deletedRune == 0 {
-									return
-								}
-								if deletedRune == '\n' {
-									app.editor.SplitLine()
-								} else {
-									app.editor.InsertRune(deletedRune)
-								}
+					DispatchAction(func() UndoFunc {
+						app.editor.AdvanceColumn(-1)
+						deletedRune := app.editor.DeleteRune()
+						return func() {
+							if deletedRune != 0 {
+								app.editor.InsertRune(deletedRune)
 							}
-						})
+						}
+					})
 				}
 			case glfw.KeyHome:
 				app.editor.MoveToBOL()
@@ -214,20 +201,43 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 					}
 				}
 			case glfw.KeyBackspace:
-				app.editor.SetMark()
-				app.editor.WordLeft()
-				app.editor.KillRegion()
+				DispatchAction(func() UndoFunc {
+					app.editor.SetMark()
+					app.editor.WordLeft()
+					deletedRunes := app.editor.KillRegion()
+					return func() {
+						app.editor.InsertRunes(deletedRunes)
+					}
+				})
 			case glfw.KeyU:
-				for !app.editor.AtBOL() {
-					app.editor.AdvanceColumn(-1)
-					app.editor.DeleteRune()
-				}
+				DispatchAction(func() UndoFunc {
+					app.editor.SetMark()
+					app.editor.MoveToBOL()
+					deletedRunes := app.editor.KillRegion()
+					return func() {
+						app.editor.InsertRunes(deletedRunes)
+					}
+				})
 			case glfw.KeySpace:
 				app.editor.SetMark()
 			case glfw.KeyW:
-				app.editor.KillRegion()
+				DispatchAction(func() UndoFunc {
+					p, _ := app.editor.PointAndMarkInOrder()
+					deletedRunes := app.editor.KillRegion()
+					return func() {
+						app.editor.SetPoint(p)
+						app.editor.InsertRunes(deletedRunes)
+					}
+				})
 			case glfw.KeyY:
-				app.editor.Paste()
+				DispatchAction(func() UndoFunc {
+					p0 := app.editor.GetPoint()
+					app.editor.Paste()
+					p1 := app.editor.GetPoint()
+					return func() {
+						app.editor.KillBetween(p0, p1)
+					}
+				})
 			case glfw.KeyG:
 				app.editor.ResetState()
 			case glfw.KeyS:

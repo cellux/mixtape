@@ -190,6 +190,18 @@ func (e *Editor) WordRight() {
 	}
 }
 
+func (e *Editor) GetPoint() EditorPoint {
+	return e.point
+}
+
+func (e *Editor) SetPoint(p EditorPoint) {
+	e.point = p
+}
+
+func (e *Editor) GetMark() EditorPoint {
+	return e.mark
+}
+
 func (e *Editor) SetMark() {
 	e.mark = e.point
 	e.markActive = true
@@ -227,17 +239,24 @@ func (e *Editor) InsideRegion(line, column int) bool {
 	return false
 }
 
-func (e *Editor) KillRegion() {
-	if !e.markActive {
-		return
-	}
-	p, m := e.PointAndMarkInOrder()
-	e.point = m
-	for e.point.line > p.line || e.point.column > p.column {
+func (e *Editor) KillBetween(start, end EditorPoint) []rune {
+	e.point = end
+	var result []rune
+	for e.point.line > start.line || e.point.column > start.column {
 		e.AdvanceColumn(-1)
-		e.DeleteRune()
+		result = append(result, e.DeleteRune())
 	}
 	e.ForgetMark()
+	slices.Reverse(result)
+	return result
+}
+
+func (e *Editor) KillRegion() []rune {
+	if !e.markActive {
+		return nil
+	}
+	p, m := e.PointAndMarkInOrder()
+	return e.KillBetween(p, m)
 }
 
 func (e *Editor) YankRegion() {
@@ -283,13 +302,7 @@ func (e *Editor) Paste() {
 			return
 		}
 	}
-	for _, r := range sourceRunes {
-		if r == '\n' {
-			e.SplitLine()
-		} else {
-			e.InsertRune(r)
-		}
-	}
+	e.InsertRunes(sourceRunes)
 }
 
 func (e *Editor) ResetState() {
@@ -297,12 +310,22 @@ func (e *Editor) ResetState() {
 }
 
 func (e *Editor) InsertRune(r rune) {
-	p := e.point
-	if p.line == len(e.lines) {
-		e.lines = append(e.lines, EditorLine(""))
+	if r == '\n' {
+		e.SplitLine()
+	} else {
+		p := e.point
+		if p.line == len(e.lines) {
+			e.lines = append(e.lines, EditorLine(""))
+		}
+		e.lines[p.line] = slices.Insert(e.lines[p.line], p.column, r)
+		e.AdvanceColumn(1)
 	}
-	e.lines[p.line] = slices.Insert(e.lines[p.line], p.column, r)
-	e.AdvanceColumn(1)
+}
+
+func (e *Editor) InsertRunes(rs []rune) {
+	for _, r := range rs {
+		e.InsertRune(r)
+	}
 }
 
 func (e *Editor) InsertSpacesUntilNextTabStop() {
