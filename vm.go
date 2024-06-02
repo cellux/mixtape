@@ -341,6 +341,15 @@ func (vm *VM) PushVal(v any) {
 	vm.valStack = append(vm.valStack, AsVal(v))
 }
 
+func (vm *VM) TopVal() Val {
+	stacksize := len(vm.valStack)
+	if stacksize == 0 {
+		log.Fatalf("value stack underflow")
+	}
+	result := vm.valStack[stacksize-1]
+	return result
+}
+
 func (vm *VM) PopVal() Val {
 	stacksize := len(vm.valStack)
 	if stacksize == 0 {
