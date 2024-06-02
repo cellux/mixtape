@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ebitengine/oto/v3"
 	"io"
 	"log"
 	"math"
@@ -298,14 +299,28 @@ type VM struct {
 	valStack      Vec   // values
 	envStack      []Map // environments
 	compileBuffer Vec   // compiled code
+	otoContext    *oto.Context
 }
 
-func NewVM() *VM {
-	return &VM{
+func NewVM() (*VM, error) {
+	otoContextOptions := &oto.NewContextOptions{
+		SampleRate:   DefaultSampleRate,
+		ChannelCount: AudioChannelCount,
+		Format:       oto.FormatFloat32LE,
+		BufferSize:   0,
+	}
+	otoContext, readyChan, err := oto.NewContext(otoContextOptions)
+	if err != nil {
+		return nil, err
+	}
+	<-readyChan
+	vm := &VM{
 		valStack:      make(Vec, 0, 4096),
 		envStack:      []Map{rootEnv},
 		compileBuffer: nil,
+		otoContext:    otoContext,
 	}
+	return vm, nil
 }
 
 func (vm *VM) Reset() {
@@ -316,6 +331,10 @@ func (vm *VM) Reset() {
 
 func (vm *VM) IsCompiling() bool {
 	return vm.compileBuffer != nil
+}
+
+func (vm *VM) StackSize() int {
+	return len(vm.valStack)
 }
 
 func (vm *VM) PushVal(v any) {
@@ -554,11 +573,11 @@ func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
 }
 
 func init() {
-	RegisterNum(":bpm", 120)
-	RegisterNum(":sr", 48000)
-	RegisterNum(":freq", 440)
-	RegisterNum(":phase", 0)
-	RegisterNum(":width", 0.5)
+	RegisterNum(":bpm", DefaultBPM)
+	RegisterNum(":sr", DefaultSampleRate)
+	RegisterNum(":freq", DefaultFreq)
+	RegisterNum(":phase", DefaultPhase)
+	RegisterNum(":width", DefaultWidth)
 
 	RegisterWord("stack", func(vm *VM) error {
 		vm.PushVal(vm.valStack)

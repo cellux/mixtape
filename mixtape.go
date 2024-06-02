@@ -169,11 +169,15 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				if err != nil {
 					slog.Error("parse error", "error", err)
 				} else {
-					val := vm.PopVal()
-					if tape, ok := val.(*Tape); ok {
-						app.tape = tape
+					if vm.StackSize() > 0 {
+						val := vm.PopVal()
+						if tape, ok := val.(*Tape); ok {
+							app.tape = tape
+						} else {
+							slog.Error(fmt.Sprintf("expected a Tape at top of stack, got %T", val))
+						}
 					} else {
-						slog.Error(fmt.Sprintf("expected a Tape at top of stack, got %T", val))
+						slog.Error("expected a Tape at top of stack but stack is empty")
 					}
 				}
 			case glfw.KeyZ:
@@ -334,8 +338,12 @@ func processArgs(vm *VM, args []string) error {
 }
 
 func main() {
-	vm := NewVM()
+	var vm *VM
 	var err error
+	vm, err = NewVM()
+	if err != nil {
+		log.Fatalf("%v\n", err)
+	}
 	if len(os.Args) == 1 {
 		err = runGui(vm, "")
 	} else {

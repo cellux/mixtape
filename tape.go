@@ -385,6 +385,128 @@ func init() {
 	})
 }
 
+type TapeReader struct {
+	tape      *Tape
+	nchannels int
+	offset    int
+}
+
+func writeSampleAsFloat32bits(buf []byte, index int, smp Smp) {
+	u32smp := math.Float32bits(float32(smp))
+	buf[index] = byte(u32smp)
+	buf[index+1] = byte(u32smp >> 8)
+	buf[index+2] = byte(u32smp >> 16)
+	buf[index+3] = byte(u32smp >> 24)
+}
+
+func (tr *TapeReader) Read(buf []byte) (int, error) {
+	samples := tr.tape.samples
+	offset := tr.offset
+	samplesLeft := len(samples) - offset
+	if samplesLeft == 0 {
+		slog.Info("playing finished")
+		return 0, io.EOF
+	}
+	bufLengthInSamples := len(buf) / 4
+	writeIndex := 0
+	srcChannels := tr.tape.nchannels
+	dstChannels := tr.nchannels
+	switch srcChannels {
+	case 1:
+		switch dstChannels {
+		case 1:
+			framesToWrite := bufLengthInSamples
+			if framesToWrite > samplesLeft {
+				framesToWrite = samplesLeft
+			}
+			bytesToWrite := framesToWrite * 4
+			for writeIndex < bytesToWrite {
+				smp := samples[offset]
+				offset++
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+			}
+		case 2:
+			framesToWrite := bufLengthInSamples / 2
+			if framesToWrite > samplesLeft {
+				framesToWrite = samplesLeft
+			}
+			bytesToWrite := framesToWrite * 8
+			for writeIndex < bytesToWrite {
+				smp := samples[offset]
+				offset++
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+			}
+		}
+	case 2:
+		switch dstChannels {
+		case 1:
+			framesToWrite := bufLengthInSamples
+			if framesToWrite > samplesLeft/2 {
+				framesToWrite = samplesLeft / 2
+			}
+			bytesToWrite := framesToWrite * 4
+			for writeIndex < bytesToWrite {
+				smp := (samples[offset] + samples[offset+1]) / 2.0
+				offset += 2
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+			}
+		case 2:
+			framesToWrite := bufLengthInSamples / 2
+			if framesToWrite > samplesLeft/2 {
+				framesToWrite = samplesLeft / 2
+			}
+			bytesToWrite := framesToWrite * 8
+			for writeIndex < bytesToWrite {
+				smp := samples[offset]
+				offset++
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+				smp = samples[offset]
+				offset++
+				writeSampleAsFloat32bits(buf, writeIndex, smp)
+				writeIndex += 4
+			}
+		}
+	}
+	tr.offset = offset
+	return writeIndex, nil
+}
+
+func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
+	return &TapeReader{
+		tape:      tape,
+		nchannels: nchannels,
+		offset:    0,
+	}
+}
+
+func init() {
+	RegisterMethod[*Tape]("slice", 3, func(vm *VM) error {
+		end := int(Pop[Num](vm))
+		start := int(Pop[Num](vm))
+		t := Top[*Tape](vm)
+		nframes := end - start
+		slicedTape := &Tape{
+			nchannels: t.nchannels,
+			nframes:   nframes,
+			samples:   t.samples[start*t.nchannels : end*t.nchannels],
+		}
+		vm.PushVal(slicedTape)
+		return nil
+	})
+	RegisterMethod[*Tape]("play", 1, func(vm *VM) error {
+		t := Pop[*Tape](vm)
+		player := vm.otoContext.NewPlayer(MakeTapeReader(t, AudioChannelCount))
+		player.Play()
+		return nil
+	})
+}
+
 func makeTape(nchannels, nframes int) *Tape {
 	samples := make([]Smp, nchannels*(nframes+1))
 	return &Tape{
