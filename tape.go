@@ -1,11 +1,16 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"github.com/dh1tw/gosamplerate"
 	"github.com/go-audio/wav"
 	gl "github.com/go-gl/gl/v3.1/gles2"
 	mgl "github.com/go-gl/mathgl/mgl32"
+	"github.com/hajimehoshi/go-mp3"
 	"github.com/mitchellh/go-homedir"
+	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -13,7 +18,6 @@ import (
 )
 
 type Tape struct {
-	sr        float64
 	nchannels int
 	nframes   int
 	samples   []Smp
@@ -44,7 +48,7 @@ func (t *Tape) GetSampleIterator() SampleIterator {
 					nextSample += t.samples[sampleIndex]
 					sampleIndex++
 				}
-				return nextSample / float64(t.nchannels)
+				return nextSample / Smp(t.nchannels)
 			} else {
 				return 0
 			}
@@ -249,71 +253,163 @@ func expandPath(path string) (string, error) {
 	return os.ExpandEnv(p), nil
 }
 
-func init() {
-	RegisterMethod[Str]("load", 1, func(vm *VM) error {
-		path := string(Pop[Str](vm))
-		path, err := expandPath(path)
+func loadAndPushTape(vm *VM, path string) error {
+	path, err := expandPath(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	sr := vm.GetFloat(":sr")
+	switch filepath.Ext(path) {
+	case ".wav":
+		decoder := wav.NewDecoder(f)
+		if !decoder.IsValidFile() {
+			return fmt.Errorf("invalid WAV file: %s", path)
+		}
+		slog.Info("decoding wav file", "path", path)
+		var startTime float64
+		startTime = GetTime()
+		buf, err := decoder.FullPCMBuffer()
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
+		slog.Info("decoded wav file", "path", path, "seconds", GetTime()-startTime)
+		nchannels := buf.Format.NumChannels
+		nsamples := len(buf.Data)
+		nframes := nsamples / nchannels
+		floatBuf := buf.AsFloatBuffer()
+		if buf.SourceBitDepth == 0 {
+			return fmt.Errorf("unknown bit depth for WAV file: %s", path)
 		}
-		defer f.Close()
-		switch filepath.Ext(path) {
-		case ".wav":
-			decoder := wav.NewDecoder(f)
-			if !decoder.IsValidFile() {
-				return fmt.Errorf("invalid WAV file: %s", path)
+		factor := math.Pow(2, float64(buf.SourceBitDepth-1))
+		wavSR := float64(buf.Format.SampleRate)
+		if wavSR != sr {
+			float32Buf := make([]float32, nchannels*nframes)
+			for i := 0; i < len(floatBuf.Data); i++ {
+				float32Buf[i] = float32(floatBuf.Data[i] / factor)
 			}
-			buf, err := decoder.FullPCMBuffer()
+			slog.Info("resampling wav data", "path", path)
+			startTime = GetTime()
+			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/wavSR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 			if err != nil {
 				return err
 			}
-			sr := float64(buf.Format.SampleRate)
-			nchannels := buf.Format.NumChannels
-			nframes := len(buf.Data) / nchannels
-			tape := pushTape(vm, sr, nchannels, nframes)
-			floatBuf := buf.AsFloatBuffer()
-			if buf.SourceBitDepth == 0 {
-				return fmt.Errorf("unknown bit depth for WAV file: %s", path)
+			slog.Info("resampled wav data", "path", path, "seconds", GetTime()-startTime)
+			nsamples := len(resampledBuf)
+			nframes := nsamples / nchannels
+			tape := pushTape(vm, nchannels, nframes)
+			for i := 0; i < nsamples; i++ {
+				tape.samples[i] = float64(resampledBuf[i])
 			}
-			factor := math.Pow(2, float64(buf.SourceBitDepth)-1)
-			for i := 0; i < len(buf.Data); i++ {
+		} else {
+			tape := pushTape(vm, nchannels, nframes)
+			for i := 0; i < len(floatBuf.Data); i++ {
 				tape.samples[i] = floatBuf.Data[i] / factor
 			}
-		default:
-			return fmt.Errorf("cannot load file: %s", path)
 		}
-		return nil
+	case ".mp3":
+		decoder, err := mp3.NewDecoder(f)
+		if err != nil {
+			return err
+		}
+		nbytes := decoder.Length()
+		if nbytes <= 0 {
+			return fmt.Errorf("cannot determine length of MP3 file: %s", path)
+		}
+		nchannels := 2
+		nsamples := int(nbytes / 2) // FormatSignedInt16LE
+		nframes := nsamples / nchannels
+		mp3SR := float64(decoder.SampleRate())
+		if mp3SR != sr {
+			var startTime float64
+			slog.Info("decoding mp3 file", "path", path)
+			startTime = GetTime()
+			float32Buf := make([]float32, nsamples)
+			var sample int16
+			for i := 0; i < nsamples; i++ {
+				err := binary.Read(decoder, binary.LittleEndian, &sample)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return err
+				}
+				float32Buf[i] = float32(sample) / 32768
+			}
+			slog.Info("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
+			startTime = GetTime()
+			slog.Info("resampling mp3 data", "path", path)
+			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/mp3SR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
+			if err != nil {
+				return err
+			}
+			slog.Info("resampled mp3 data", "path", path, "seconds", GetTime()-startTime)
+			nsamples := len(resampledBuf)
+			nframes := nsamples / nchannels
+			tape := pushTape(vm, nchannels, nframes)
+			for i := 0; i < nsamples; i++ {
+				tape.samples[i] = float64(resampledBuf[i])
+			}
+		} else {
+			var startTime float64
+			slog.Info("decoding mp3 file", "path", path)
+			startTime = GetTime()
+			var sample int16
+			tape := pushTape(vm, nchannels, nframes)
+			for i := 0; i < nsamples; i++ {
+				err := binary.Read(decoder, binary.LittleEndian, &sample)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return err
+				}
+				tape.samples[i] = float64(sample) / 32768
+			}
+			slog.Info("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
+		}
+	default:
+		return fmt.Errorf("cannot load file: %s", path)
+	}
+	return nil
+}
+
+func init() {
+	RegisterMethod[Str]("load", 1, func(vm *VM) error {
+		path := string(Pop[Str](vm))
+		return loadAndPushTape(vm, path)
 	})
 }
 
-func pushTape(vm *VM, sr float64, nchannels, nframes int) *Tape {
+func makeTape(nchannels, nframes int) *Tape {
 	samples := make([]Smp, nchannels*(nframes+1))
-	tape := &Tape{
-		sr:        sr,
+	return &Tape{
 		nchannels: nchannels,
 		nframes:   nframes,
 		samples:   samples,
 	}
+}
+
+func pushTape(vm *VM, nchannels, nframes int) *Tape {
+	tape := makeTape(nchannels, nframes)
 	vm.PushVal(tape)
 	return tape
 }
 
 func init() {
 	RegisterWord("tape1", func(vm *VM) error {
-		sr := vm.GetFloat(":sr")
 		nframes := int(Pop[Num](vm))
-		pushTape(vm, sr, 1, nframes)
+		pushTape(vm, 1, nframes)
 		return nil
 	})
 
 	RegisterWord("tape2", func(vm *VM) error {
-		sr := vm.GetFloat(":sr")
 		nframes := int(Pop[Num](vm))
-		pushTape(vm, sr, 2, nframes)
+		pushTape(vm, 2, nframes)
 		return nil
 	})
 }

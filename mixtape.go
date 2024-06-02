@@ -275,10 +275,8 @@ func (app *App) OnFramebufferSize(width, height int) {
 func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
-	tp := ts.GetPane()
-	topPane, bottomPane := tp.SplitY(5)
-	editorPane, tapeDisplayPane := bottomPane.SplitY(-8)
-	topPane.DrawString(0, 0, "Hello, world")
+	screenPane := ts.GetPane()
+	editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 	app.editor.Render(editorPane)
 	ts.Render()
 	if app.tape != nil {
