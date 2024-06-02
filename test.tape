@@ -36,7 +36,7 @@ stack len 0 = assert
 
 [1 2 3] len 3 = assert
 
-5 [ 2 + 3 * ] execute 21 = assert
+5 [ 2 + 3 * ] do 21 = assert
 
 [ 2 + 3 * ] >test-op
 5 test-op 21 = assert

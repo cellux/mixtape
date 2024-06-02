@@ -643,7 +643,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("execute", func(vm *VM) error {
+	RegisterWord("do", func(vm *VM) error {
 		word := vm.PopVal()
 		return vm.Execute(word)
 	})
