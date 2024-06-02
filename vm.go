@@ -501,7 +501,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 						if text == ">=" {
 							code = append(code, Sym(text))
 						} else {
-							code = append(code, Str(text[1:]), Sym("set"))
+							code = append(code, Str(text[1:]), Sym("env/set"))
 						}
 					case '.':
 						code = append(code, Str(text[1:]), Sym("dispatch"))
@@ -629,14 +629,14 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("set", func(vm *VM) error {
+	RegisterWord("env/set", func(vm *VM) error {
 		k := vm.PopVal()
 		v := vm.PopVal()
 		vm.SetVal(k, v)
 		return nil
 	})
 
-	RegisterWord("get", func(vm *VM) error {
+	RegisterWord("env/get", func(vm *VM) error {
 		k := vm.PopVal()
 		v := vm.GetVal(k)
 		vm.PushVal(v)

@@ -57,10 +57,10 @@ stack len 0 = assert
 )
 :bpm 120 = assert
 
-# set / get
-( 100 "foo" set "foo" get 100 = assert )
-( 100 "foo" set foo 100 = assert )
-( 100 >foo "foo" get 100 = assert )
+# env/set env/get
+( 100 "foo" env/set "foo" env/get 100 = assert )
+( 100 "foo" env/set foo 100 = assert )
+( 100 >foo "foo" env/get 100 = assert )
 
 # conversions
 
