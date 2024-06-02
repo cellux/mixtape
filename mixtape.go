@@ -164,6 +164,8 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 				app.editor.MoveToBOL()
 			case glfw.KeyEnd:
 				app.editor.MoveToEOL()
+			case glfw.KeyTab:
+				app.editor.InsertSpacesUntilNextTabStop()
 			}
 		}
 		if modes&glfw.ModControl == glfw.ModControl {

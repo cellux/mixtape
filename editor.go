@@ -8,6 +8,10 @@ import (
 	"unicode"
 )
 
+const (
+	TabWidth = 2
+)
+
 type EditorLine = []rune
 
 type EditorPoint struct {
@@ -148,23 +152,28 @@ func (e *Editor) MoveToEOL() {
 	e.point.column = e.CurrentLineLength()
 }
 
+func isWordConstituent(r rune) bool {
+	if unicode.IsLetter(r) {
+		return true
+	}
+	if unicode.IsNumber(r) {
+		return true
+	}
+	return false
+}
+
 func (e *Editor) WordLeft() {
-	if !unicode.IsSpace(e.CurrentRune()) {
-		e.AdvanceColumn(-1)
-		if !unicode.IsSpace(e.CurrentRune()) {
-			for !e.AtBOF() && !unicode.IsSpace(e.CurrentRune()) {
-				e.AdvanceColumn(-1)
-			}
-			return
-		}
-	}
-	for !e.AtBOF() && unicode.IsSpace(e.CurrentRune()) {
+	if !e.AtBOF() {
 		e.AdvanceColumn(-1)
 	}
-	for !e.AtBOF() && !unicode.IsSpace(e.CurrentRune()) {
+	for !e.AtBOF() && !isWordConstituent(e.CurrentRune()) {
 		e.AdvanceColumn(-1)
 	}
-	if unicode.IsSpace(e.CurrentRune()) {
+	m := e.point
+	for !e.AtBOF() && isWordConstituent(e.CurrentRune()) {
+		e.AdvanceColumn(-1)
+	}
+	if e.point != m && !isWordConstituent(e.CurrentRune()) {
 		e.AdvanceColumn(1)
 	}
 }
@@ -173,10 +182,10 @@ func (e *Editor) WordRight() {
 	for !e.AtEOF() && unicode.IsSpace(e.CurrentRune()) {
 		e.AdvanceColumn(1)
 	}
-	for !e.AtEOF() && !unicode.IsSpace(e.CurrentRune()) {
+	for !e.AtEOF() && !isWordConstituent(e.CurrentRune()) {
 		e.AdvanceColumn(1)
 	}
-	for !e.AtEOF() && unicode.IsSpace(e.CurrentRune()) {
+	for !e.AtEOF() && isWordConstituent(e.CurrentRune()) {
 		e.AdvanceColumn(1)
 	}
 }
@@ -296,6 +305,13 @@ func (e *Editor) InsertRune(r rune) {
 	e.AdvanceColumn(1)
 }
 
+func (e *Editor) InsertSpacesUntilNextTabStop() {
+	e.InsertRune(' ')
+	for (e.point.column % TabWidth) != 0 {
+		e.InsertRune(' ')
+	}
+}
+
 func (e *Editor) DeleteRune() (deletedRune rune) {
 	p := e.point
 	if p.line == len(e.lines) {
@@ -360,18 +376,17 @@ func (e *Editor) Render(tp TilePane) {
 			for x := 0; x < tp.Width(); x++ {
 				runeIndex := e.left + x
 				if runeIndex < len(line) {
+					r := line[runeIndex]
 					if lineIndex == p.line && runeIndex == p.column {
 						tp.WithBg(ColorHighlight, func() {
-							tp.DrawRune(x, y, line[runeIndex])
+							tp.DrawRune(x, y, r)
+						})
+					} else if e.markActive && e.InsideRegion(lineIndex, runeIndex) {
+						tp.WithBg(ColorMark, func() {
+							tp.DrawRune(x, y, r)
 						})
 					} else {
-						if e.markActive && e.InsideRegion(lineIndex, runeIndex) {
-							tp.WithBg(ColorMark, func() {
-								tp.DrawRune(x, y, line[runeIndex])
-							})
-						} else {
-							tp.DrawRune(x, y, line[runeIndex])
-						}
+						tp.DrawRune(x, y, r)
 					}
 				} else if lineIndex == p.line && runeIndex == p.column {
 					tp.WithBg(ColorHighlight, func() {
