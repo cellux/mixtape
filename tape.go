@@ -342,22 +342,44 @@ func loadAndPushTape(vm *VM, path string) error {
 		if !decoder.IsValidFile() {
 			return fmt.Errorf("invalid WAV file: %s", path)
 		}
-		slog.Info("decoding wav file", "path", path)
-		var startTime float64
-		startTime = GetTime()
-		buf, err := decoder.FullPCMBuffer()
+		err := decoder.FwdToPCM()
 		if err != nil {
 			return err
 		}
-		slog.Info("decoded wav file", "path", path, "seconds", GetTime()-startTime)
-		nchannels := buf.Format.NumChannels
-		nsamples := len(buf.Data)
-		nframes := nsamples / nchannels
-		floatBuf := buf.AsFloatBuffer()
-		if buf.SourceBitDepth == 0 {
+		format := decoder.Format()
+		bitDepth := int(decoder.SampleBitDepth())
+		if bitDepth == 0 {
 			return fmt.Errorf("unknown bit depth for WAV file: %s", path)
 		}
-		factor := math.Pow(2, float64(buf.SourceBitDepth-1))
+		bytesPerSample := (bitDepth-1)/8 + 1
+		nbytes := int(decoder.PCMLen())
+		nsamples := nbytes / bytesPerSample
+		nchannels := format.NumChannels
+		nframes := nsamples / nchannels
+		slog.Info("decoding wav file",
+			"path", path,
+			"sampleRate", format.SampleRate,
+			"nchannels", format.NumChannels,
+			"bitDepth", bitDepth,
+			"bytesPerSample", bytesPerSample,
+			"nbytes", nbytes,
+			"nsamples", nsamples,
+			"nframes", nframes,
+		)
+		var startTime float64
+		startTime = GetTime()
+		buf := &audio.IntBuffer{
+			Format:         format,
+			Data:           make([]int, nsamples),
+			SourceBitDepth: 16,
+		}
+		bytesDecoded, err := decoder.PCMBuffer(buf)
+		if err != nil {
+			return err
+		}
+		slog.Info("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
+		floatBuf := buf.AsFloatBuffer()
+		factor := math.Pow(2, float64(bitDepth-1))
 		wavSR := float64(buf.Format.SampleRate)
 		if wavSR != sr {
 			float32Buf := make([]float32, nchannels*nframes)
