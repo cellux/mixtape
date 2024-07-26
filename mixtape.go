@@ -314,7 +314,6 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 	if modes&glfw.ModControl != 0 {
 		keyName = "C-" + keyName
 	}
-	slog.Info("OnKey", "keyName", keyName)
 	if app.globalKeyMap != nil && app.globalKeyMap.HandleKey(keyName) {
 		return
 	}
