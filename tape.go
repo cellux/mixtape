@@ -598,7 +598,7 @@ func init() {
 	})
 	RegisterMethod[*Tape]("play", 1, func(vm *VM) error {
 		t := Pop[*Tape](vm)
-		player := vm.otoContext.NewPlayer(MakeTapeReader(t, AudioChannelCount))
+		player := otoContext.NewPlayer(MakeTapeReader(t, AudioChannelCount))
 		player.Play()
 		return nil
 	})

@@ -28,6 +28,10 @@ type App struct {
 
 func (app *App) Init() error {
 	slog.Info("Init")
+	err := InitOtoContext()
+	if err != nil {
+		return err
+	}
 	font, err := LoadFontFromFile("/usr/share/fonts/droid/DroidSansMono.ttf")
 	if err != nil {
 		return err

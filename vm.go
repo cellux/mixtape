@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/ebitengine/oto/v3"
 	"io"
 	"log"
 	"math"
@@ -299,26 +298,13 @@ type VM struct {
 	valStack      Vec   // values
 	envStack      []Map // environments
 	compileBuffer Vec   // compiled code
-	otoContext    *oto.Context
 }
 
 func CreateVM() (*VM, error) {
-	otoContextOptions := &oto.NewContextOptions{
-		SampleRate:   DefaultSampleRate,
-		ChannelCount: AudioChannelCount,
-		Format:       oto.FormatFloat32LE,
-		BufferSize:   0,
-	}
-	otoContext, readyChan, err := oto.NewContext(otoContextOptions)
-	if err != nil {
-		return nil, err
-	}
-	<-readyChan
 	vm := &VM{
 		valStack:      make(Vec, 0, 4096),
 		envStack:      []Map{rootEnv},
 		compileBuffer: nil,
-		otoContext:    otoContext,
 	}
 	return vm, nil
 }
