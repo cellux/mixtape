@@ -37,6 +37,9 @@ func splitLines(s string) []string {
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
 	}
+	if len(s) > 0 && s[len(s)-1] == '\n' {
+		lines = append(lines, "")
+	}
 	return lines
 }
 
