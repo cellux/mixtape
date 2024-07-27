@@ -302,7 +302,7 @@ type VM struct {
 	otoContext    *oto.Context
 }
 
-func NewVM() (*VM, error) {
+func CreateVM() (*VM, error) {
 	otoContextOptions := &oto.NewContextOptions{
 		SampleRate:   DefaultSampleRate,
 		ChannelCount: AudioChannelCount,

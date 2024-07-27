@@ -410,7 +410,7 @@ func runWithArgs(vm *VM, args []string) error {
 func main() {
 	var vm *VM
 	var err error
-	vm, err = NewVM()
+	vm, err = CreateVM()
 	if err != nil {
 		slog.Error("vm initialization error", "error", err)
 		os.Exit(1)
