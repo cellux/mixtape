@@ -21,6 +21,7 @@ type App struct {
 	editor        *Editor
 	tape          *Tape
 	tapeDisplay   *TapeDisplay
+	tapeOverview  *TapeDisplay
 	globalKeyMap  *KeyMap
 	editorKeyMap  *KeyMap
 	currentKeyMap *KeyMap
@@ -75,6 +76,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
+	tapeOverview, err := CreateTapeDisplay()
+	if err != nil {
+		return err
+	}
+	app.tapeOverview = tapeOverview
 	editorKeyMap := CreateKeyMap()
 	editorKeyMap.Bind("Escape", CreateKeyHandler(app.editor.ResetState))
 	editorKeyMap.Bind("C-g", CreateKeyHandler(app.editor.ResetState))
@@ -343,7 +349,9 @@ func (app *App) Render() error {
 	app.editor.Render(editorPane)
 	ts.Render()
 	if app.tape != nil {
+		tapeDisplayPane, tapeOverviewPane := tapeDisplayPane.SplitY(-2)
 		app.tapeDisplay.Render(app.tape, tapeDisplayPane.GetPixelRect(), app.tape.nframes, 0)
+		app.tapeOverview.Render(app.tape, tapeOverviewPane.GetPixelRect(), app.tape.nframes, 0)
 	}
 	return nil
 }
