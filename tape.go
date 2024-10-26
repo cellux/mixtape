@@ -26,7 +26,7 @@ type Tape struct {
 }
 
 func (t *Tape) String() string {
-	return fmt.Sprintf("Tape(sr=%d nchannels=%d nframes=%d)", t.sr, t.nchannels, t.nframes)
+	return fmt.Sprintf("Tape(sr=%g nchannels=%d nframes=%d)", t.sr, t.nchannels, t.nframes)
 }
 
 func (t *Tape) GetSampleIterator() SampleIterator {
