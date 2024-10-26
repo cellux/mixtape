@@ -32,7 +32,7 @@ func AsVal(x any) Val {
 	case int:
 		return Num(float64(v))
 	case float64:
-		return Num(float64(v))
+		return Num(v)
 	case string:
 		return Str(v)
 	case bool:
@@ -487,7 +487,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 						if text == ">=" {
 							code = append(code, Sym(text))
 						} else {
-							code = append(code, Str(text[1:]), Sym("env/set"))
+							code = append(code, Str(text[1:]), Sym("set"))
 						}
 					case '.':
 						code = append(code, Str(text[1:]), Sym("dispatch"))
@@ -615,14 +615,14 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("env/set", func(vm *VM) error {
+	RegisterWord("set", func(vm *VM) error {
 		k := vm.PopVal()
 		v := vm.PopVal()
 		vm.SetVal(k, v)
 		return nil
 	})
 
-	RegisterWord("env/get", func(vm *VM) error {
+	RegisterWord("get", func(vm *VM) error {
 		k := vm.PopVal()
 		v := vm.GetVal(k)
 		vm.PushVal(v)
