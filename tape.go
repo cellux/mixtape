@@ -584,16 +584,6 @@ func init() {
 		vm.PushVal(slicedTape)
 		return nil
 	})
-	RegisterMethod[*Tape]("play", 1, func(vm *VM) error {
-		t := Top[*Tape](vm)
-		player := otoContext.NewPlayer(MakeTapeReader(t, 2))
-		player.Play()
-		return nil
-	})
-	RegisterMethod[*Tape]("show", 1, func(vm *VM) error {
-		// TODO
-		return nil
-	})
 }
 
 func makeTape(sr float64, nchannels, nframes int) *Tape {

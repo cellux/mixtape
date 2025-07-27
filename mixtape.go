@@ -27,6 +27,7 @@ type App struct {
 	tape          *Tape
 	tapeDisplay   *TapeDisplay
 	tapeOverview  *TapeDisplay
+	tapePlayer    *OtoPlayer
 	globalKeyMap  *KeyMap
 	editorKeyMap  *KeyMap
 	currentKeyMap *KeyMap
@@ -77,6 +78,19 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeOverview = tapeOverview
+	globalKeyMap := CreateKeyMap()
+	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
+		if app.tape == nil {
+			return
+		}
+		if app.tapePlayer != nil {
+			app.tapePlayer.Close()
+		}
+		player := otoContext.NewPlayer(MakeTapeReader(app.tape, 2))
+		player.Play()
+		app.tapePlayer = player
+	}))
+	app.globalKeyMap = &globalKeyMap
 	editorKeyMap := CreateKeyMap()
 	editorKeyMap.Bind("Escape", CreateKeyHandler(app.editor.ResetState))
 	editorKeyMap.Bind("C-g", CreateKeyHandler(app.editor.ResetState))

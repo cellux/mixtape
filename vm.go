@@ -90,16 +90,15 @@ func (vm *VM) PushVal(v any) {
 func (vm *VM) TopVal() Val {
 	stacksize := len(vm.valStack)
 	if stacksize == 0 {
-		log.Fatalf("value stack underflow")
+		return nil
 	}
-	result := vm.valStack[stacksize-1]
-	return result
+	return vm.valStack[stacksize-1]
 }
 
 func (vm *VM) PopVal() Val {
 	stacksize := len(vm.valStack)
 	if stacksize == 0 {
-		log.Fatalf("value stack underflow")
+		return nil
 	}
 	result := vm.valStack[stacksize-1]
 	vm.valStack = vm.valStack[:stacksize-1]
@@ -136,8 +135,8 @@ func (vm *VM) PushEnv() {
 
 func (vm *VM) PopEnv() {
 	stacksize := len(vm.envStack)
-	if stacksize == 0 {
-		log.Fatalf("env stack underflow")
+	if stacksize == 1 {
+		log.Fatalf("attempt to pop root env")
 	}
 	vm.envStack = vm.envStack[:stacksize-1]
 }

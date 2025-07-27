@@ -6,6 +6,8 @@ import (
 
 var otoContext *oto.Context
 
+type OtoPlayer = oto.Player
+
 func InitOtoContext(sampleRate int) error {
 	otoContextOptions := &oto.NewContextOptions{
 		SampleRate:   sampleRate,
