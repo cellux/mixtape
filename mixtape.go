@@ -24,7 +24,7 @@ type App struct {
 	tm            *TileMap
 	ts            *TileScreen
 	editor        *Editor
-	tape          *Tape
+	result        Val
 	tapeDisplay   *TapeDisplay
 	tapeOverview  *TapeDisplay
 	tapePlayer    *OtoPlayer
@@ -34,7 +34,7 @@ type App struct {
 }
 
 func (app *App) Init() error {
-	slog.Info("Init")
+	slog.Debug("Init")
 	err := InitOtoContext(flags.SampleRate)
 	if err != nil {
 		return err
@@ -80,15 +80,14 @@ func (app *App) Init() error {
 	app.tapeOverview = tapeOverview
 	globalKeyMap := CreateKeyMap()
 	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
-		if app.tape == nil {
-			return
+		if tape, ok := app.result.(*Tape); ok {
+			if app.tapePlayer != nil {
+				app.tapePlayer.Close()
+			}
+			player := otoContext.NewPlayer(MakeTapeReader(tape, 2))
+			player.Play()
+			app.tapePlayer = player
 		}
-		if app.tapePlayer != nil {
-			app.tapePlayer.Close()
-		}
-		player := otoContext.NewPlayer(MakeTapeReader(app.tape, 2))
-		player.Play()
-		app.tapePlayer = player
 	}))
 	app.globalKeyMap = &globalKeyMap
 	editorKeyMap := CreateKeyMap()
@@ -163,19 +162,9 @@ func (app *App) Init() error {
 		}
 		err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), tapePath)
 		if err != nil {
-			slog.Error("parse error", "error", err)
-		} else {
-			if vm.StackSize() > 0 {
-				val := vm.PopVal()
-				if tape, ok := val.(*Tape); ok {
-					app.tape = tape
-				} else {
-					slog.Error(fmt.Sprintf("expected Tape at top of stack, got %T", val))
-				}
-			} else {
-				slog.Error("expected Tape at top of stack but stack is empty")
-			}
+			slog.Error("parse error", "err", err)
 		}
+		app.result = vm.PopVal()
 	}))
 	editorKeyMap.Bind("C-z", CreateKeyHandler(UndoLastAction))
 	editorKeyMap.Bind("C-q", CreateKeyHandler(app.Quit))
@@ -262,7 +251,7 @@ func (app *App) Quit() {
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
-	//slog.Info("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
+	//slog.Debug("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
 	if action != glfw.Press && action != glfw.Repeat {
 		return
 	}
@@ -343,26 +332,33 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 }
 
 func (app *App) OnChar(char rune) {
-	//slog.Info("OnChar", "char", char)
+	//slog.Debug("OnChar", "char", char)
 	app.editor.InsertRune(char)
 }
 
 func (app *App) OnFramebufferSize(width, height int) {
-	slog.Info("OnFramebufferSize", "width", width, "height", height)
+	slog.Debug("OnFramebufferSize", "width", width, "height", height)
 }
 
 func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	screenPane := ts.GetPane()
-	editorPane, tapeDisplayPane := screenPane.SplitY(-8)
-	app.editor.Render(editorPane)
-	ts.Render()
-	if app.tape != nil {
+	switch result := app.result.(type) {
+	case Str:
+		editorPane, statusPane := screenPane.SplitY(-1)
+		app.editor.Render(editorPane)
+		statusPane.DrawString(0, 0, string(result))
+	case *Tape:
+		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
+		app.editor.Render(editorPane)
 		tapeDisplayPane, tapeOverviewPane := tapeDisplayPane.SplitY(-2)
-		app.tapeDisplay.Render(app.tape, tapeDisplayPane.GetPixelRect(), app.tape.nframes, 0)
-		app.tapeOverview.Render(app.tape, tapeOverviewPane.GetPixelRect(), app.tape.nframes, 0)
+		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0)
+		app.tapeOverview.Render(result, tapeOverviewPane.GetPixelRect(), result.nframes, 0)
+	default:
+		app.editor.Render(screenPane)
 	}
+	ts.Render()
 	return nil
 }
 
@@ -371,7 +367,7 @@ func (app *App) Update() error {
 }
 
 func (app *App) Close() error {
-	slog.Info("Close")
+	slog.Debug("Close")
 	app.ts.Close()
 	app.tm.Close()
 	app.editor.Close()
@@ -393,7 +389,7 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 	return WithGL(windowTitle, app)
 }
 
-func setupDefaults(vm *VM) {
+func setDefaults(vm *VM) {
 	flags.SampleRate = 48000
 	vm.SetVal(":sr", flags.SampleRate)
 	flags.BPM = 120
@@ -477,12 +473,12 @@ func main() {
 	var err error
 	vm, err = CreateVM()
 	if err != nil {
-		slog.Error("vm initialization error", "error", err)
+		slog.Error("vm initialization error", "err", err)
 		os.Exit(1)
 	}
-	setupDefaults(vm)
+	setDefaults(vm)
 	err = runWithArgs(vm, os.Args[1:])
 	if err != nil {
-		slog.Error("vm error", "error", err)
+		slog.Error("vm error", "err", err)
 	}
 }

@@ -221,6 +221,9 @@ func (ts *TileScreen) DrawString(x, y int, s string) {
 }
 
 func (ts *TileScreen) Render() {
+	if len(ts.vertices) == 0 {
+		return
+	}
 	tm := ts.tm
 	ts.program.Use()
 	tm.tex.Bind()
@@ -319,7 +322,7 @@ func (tp TilePane) GetPixelRect() Rect {
 func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
 	width := float64(tp.Width())
 	if at < 0.0 {
-		if at >= -1.0 {
+		if at > -1.0 {
 			at = 1.0 + at
 		} else {
 			at = width + at
@@ -351,7 +354,7 @@ func (tp TilePane) SplitX(at float64) (TilePane, TilePane) {
 func (tp TilePane) SplitY(at float64) (TilePane, TilePane) {
 	height := float64(tp.Height())
 	if at < 0.0 {
-		if at >= -1.0 {
+		if at > -1.0 {
 			at = 1.0 + at
 		} else {
 			at = height + at

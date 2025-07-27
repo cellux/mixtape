@@ -356,7 +356,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		nsamples := nbytes / bytesPerSample
 		nchannels := format.NumChannels
 		nframes := nsamples / nchannels
-		slog.Info("decoding wav file",
+		slog.Debug("decoding wav file",
 			"path", path,
 			"sampleRate", format.SampleRate,
 			"nchannels", format.NumChannels,
@@ -377,7 +377,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		if err != nil {
 			return err
 		}
-		slog.Info("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
+		slog.Debug("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
 		floatBuf := buf.AsFloatBuffer()
 		factor := math.Pow(2, float64(bitDepth-1))
 		wavSR := float64(buf.Format.SampleRate)
@@ -386,13 +386,13 @@ func loadAndPushTape(vm *VM, path string) error {
 			for i := 0; i < len(floatBuf.Data); i++ {
 				float32Buf[i] = float32(floatBuf.Data[i] / factor)
 			}
-			slog.Info("resampling wav data", "path", path)
+			slog.Debug("resampling wav data", "path", path)
 			startTime = GetTime()
 			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/wavSR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 			if err != nil {
 				return err
 			}
-			slog.Info("resampled wav data", "path", path, "seconds", GetTime()-startTime)
+			slog.Debug("resampled wav data", "path", path, "seconds", GetTime()-startTime)
 			nsamples := len(resampledBuf)
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, sr, nchannels, nframes)
@@ -420,7 +420,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		mp3SR := float64(decoder.SampleRate())
 		if mp3SR != sr {
 			var startTime float64
-			slog.Info("decoding mp3 file", "path", path)
+			slog.Debug("decoding mp3 file", "path", path)
 			startTime = GetTime()
 			float32Buf := make([]float32, nsamples)
 			var sample int16
@@ -434,14 +434,14 @@ func loadAndPushTape(vm *VM, path string) error {
 				}
 				float32Buf[i] = float32(sample) / 32768
 			}
-			slog.Info("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
+			slog.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 			startTime = GetTime()
-			slog.Info("resampling mp3 data", "path", path)
+			slog.Debug("resampling mp3 data", "path", path)
 			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/mp3SR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 			if err != nil {
 				return err
 			}
-			slog.Info("resampled mp3 data", "path", path, "seconds", GetTime()-startTime)
+			slog.Debug("resampled mp3 data", "path", path, "seconds", GetTime()-startTime)
 			nsamples := len(resampledBuf)
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, sr, nchannels, nframes)
@@ -450,7 +450,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			}
 		} else {
 			var startTime float64
-			slog.Info("decoding mp3 file", "path", path)
+			slog.Debug("decoding mp3 file", "path", path)
 			startTime = GetTime()
 			var sample int16
 			tape := pushTape(vm, sr, nchannels, nframes)
@@ -464,7 +464,7 @@ func loadAndPushTape(vm *VM, path string) error {
 				}
 				tape.samples[i] = float64(sample) / 32768
 			}
-			slog.Info("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
+			slog.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 		}
 	default:
 		return fmt.Errorf("cannot load file: %s", path)
@@ -501,7 +501,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 	offset := tr.offset
 	samplesLeft := len(samples) - offset
 	if samplesLeft == 0 {
-		slog.Info("playing finished")
+		slog.Debug("playing finished")
 		return 0, io.EOF
 	}
 	bufLengthInSamples := len(buf) / 4
