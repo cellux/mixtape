@@ -44,8 +44,8 @@ func (f *Font) GetFaceImage(face font.Face, cols, rows int) (image.Image, error)
 		Face: face,
 	}
 	charRect := image.Rect(0, 0, charWidth, charHeight)
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
+	for y := range rows {
+		for x := range cols {
 			d.Dst = image.NewAlpha(charRect)
 			d.Dot = fixed.P(0, charHeight-descent)
 			d.DrawString(string(rune(y*cols + x)))

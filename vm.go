@@ -4,21 +4,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
-	"path/filepath"
-	"reflect"
 	"text/scanner"
 	"unicode"
 )
 
-type Val interface{}
-
-type Num float64
-type Str string
-type Sym string
-type Fun func(vm *VM) error
-type Vec []Val
-type Map map[Val]Val
+type Val = any
 
 const (
 	True  = Num(-1)
@@ -60,236 +50,6 @@ func RegisterNum(name string, num Num) {
 
 func RegisterWord(name string, fun Fun) {
 	rootEnv.SetVal(name, fun)
-}
-
-type Method struct {
-	nargs int
-	fun   Fun
-}
-
-type MethodMap map[string][]Method
-
-func (mm MethodMap) RegisterMethod(name string, nargs int, fun Fun) {
-	if _, ok := mm[name]; !ok {
-		mm[name] = make([]Method, 0, 8)
-	}
-	mm[name] = append(mm[name], Method{nargs, fun})
-}
-
-func (mm MethodMap) FindMethod(name string, nargs int) Fun {
-	if _, ok := mm[name]; !ok {
-		return nil
-	}
-	for _, method := range mm[name] {
-		if method.nargs == nargs {
-			return method.fun
-		}
-	}
-	return nil
-}
-
-type TypeMethodMap map[reflect.Type]MethodMap
-
-var typeMethods = make(TypeMethodMap)
-
-func RegisterMethod[T any](name string, nargs int, fun Fun) {
-	t := reflect.TypeFor[T]()
-	if _, ok := typeMethods[t]; !ok {
-		typeMethods[t] = make(MethodMap)
-	}
-	typeMethods[t].RegisterMethod(name, nargs, fun)
-}
-
-func FindMethod(val Val, name string, nargs int) Fun {
-	t := reflect.TypeOf(val)
-	if _, ok := typeMethods[t]; !ok {
-		return nil
-	}
-	return typeMethods[t].FindMethod(name, nargs)
-}
-
-// Num
-
-func init() {
-	RegisterMethod[Num]("=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs == rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("!=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs != rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("not", 1, func(vm *VM) error {
-		arg := Pop[Num](vm)
-		vm.PushVal(arg == 0)
-		return nil
-	})
-
-	RegisterMethod[Num]("assert", 1, func(vm *VM) error {
-		n := Pop[Num](vm)
-		if n == False {
-			return fmt.Errorf("assertion failed")
-		}
-		return nil
-	})
-
-	RegisterMethod[Num]("+", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs + rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("-", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs - rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("*", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs * rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("/", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs / rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("%", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(math.Mod(float64(lhs), float64(rhs)))
-		return nil
-	})
-
-	RegisterMethod[Num]("<", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs < rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("<=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs <= rhs)
-		return nil
-	})
-
-	RegisterMethod[Num](">=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs >= rhs)
-		return nil
-	})
-
-	RegisterMethod[Num](">", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs > rhs)
-		return nil
-	})
-}
-
-func (n Num) String() string {
-	return fmt.Sprintf("%g", n)
-}
-
-func (n Num) GetSampleIterator() SampleIterator {
-	return func() Smp {
-		return Smp(n)
-	}
-}
-
-// Str
-
-func scanFloat(text string) (float64, error) {
-	var f float64
-	_, err := fmt.Sscanf(text, "%g", &f)
-	if err == nil {
-		var nominator, denominator int
-		_, err = fmt.Sscanf(text, "%d/%d", &nominator, &denominator)
-		if err == nil {
-			return float64(nominator) / float64(denominator), nil
-		} else {
-			return f, nil
-		}
-	}
-	return 0, fmt.Errorf("cannot parse float: %s", text)
-}
-
-func init() {
-	RegisterMethod[Str]("num", 1, func(vm *VM) error {
-		arg := Pop[Str](vm)
-		f, err := scanFloat(string(arg))
-		if err != nil {
-			return err
-		}
-		vm.PushVal(f)
-		return nil
-	})
-
-	RegisterMethod[Str]("=", 2, func(vm *VM) error {
-		rhs := Pop[Str](vm)
-		lhs := Pop[Str](vm)
-		vm.PushVal(lhs == rhs)
-		return nil
-	})
-
-	RegisterMethod[Str]("path/join", 2, func(vm *VM) error {
-		rhs := Pop[Str](vm)
-		lhs := Pop[Str](vm)
-		vm.PushVal(filepath.Join(string(lhs), string(rhs)))
-		return nil
-	})
-}
-
-func (s Str) String() string {
-	return string(s)
-}
-
-// Sym
-
-func (s Sym) String() string {
-	return string(s)
-}
-
-// Vec
-
-func (v Vec) String() string {
-	return fmt.Sprintf("%v", []Val(v))
-}
-
-func init() {
-	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
-		arg := Pop[Vec](vm)
-		vm.PushVal(len(arg))
-		return nil
-	})
-}
-
-// Map
-
-func (m Map) String() string {
-	return fmt.Sprintf("%v", map[Val]Val(m))
-}
-
-func (m Map) SetVal(k, v any) {
-	key := AsVal(k)
-	val := AsVal(v)
-	m[key] = val
 }
 
 // VM
@@ -357,15 +117,11 @@ func Pop[T Val](vm *VM) T {
 }
 
 func Top[T Val](vm *VM) T {
-	stacksize := len(vm.valStack)
-	if stacksize == 0 {
-		log.Fatalf("value stack underflow")
-	}
-	val := vm.valStack[stacksize-1]
-	if value, ok := val.(T); ok {
+	top := vm.TopVal()
+	if value, ok := top.(T); ok {
 		return value
 	} else {
-		log.Fatalf("top of value stack has type %T, expected %T", val, *new(T))
+		log.Fatalf("top of value stack has type %T, expected %T", top, *new(T))
 		return *new(T)
 	}
 }
@@ -381,7 +137,7 @@ func (vm *VM) PushEnv() {
 func (vm *VM) PopEnv() {
 	stacksize := len(vm.envStack)
 	if stacksize == 0 {
-		panic("env stack underflow")
+		log.Fatalf("env stack underflow")
 	}
 	vm.envStack = vm.envStack[:stacksize-1]
 }
@@ -392,11 +148,10 @@ func (vm *VM) SetVal(k, v any) {
 }
 
 func (vm *VM) GetVal(k any) Val {
-	key := AsVal(k)
 	index := len(vm.envStack) - 1
 	for index >= 0 {
 		env := vm.envStack[index]
-		if val, ok := env[key]; ok {
+		if val := env.GetVal(k); val != nil {
 			return val
 		}
 		index--
@@ -568,30 +323,18 @@ func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
 }
 
 func init() {
-	RegisterNum(":bpm", DefaultBPM)
-	RegisterNum(":sr", DefaultSampleRate)
-	RegisterNum(":freq", DefaultFreq)
-	RegisterNum(":phase", DefaultPhase)
-	RegisterNum(":width", DefaultWidth)
-
 	RegisterWord("stack", func(vm *VM) error {
 		vm.PushVal(vm.valStack)
 		return nil
 	})
 
 	RegisterWord("str", func(vm *VM) error {
-		val := vm.PopVal()
-		vm.PushVal(fmt.Sprintf("%s", val))
+		vm.PushVal(fmt.Sprintf("%s", vm.PopVal()))
 		return nil
 	})
 
 	RegisterWord("dup", func(vm *VM) error {
-		stacksize := len(vm.valStack)
-		if stacksize == 0 {
-			log.Fatalf("value stack underflow")
-		}
-		topVal := vm.valStack[stacksize-1]
-		vm.PushVal(topVal)
+		vm.PushVal(vm.TopVal())
 		return nil
 	})
 

@@ -257,8 +257,8 @@ func (ts *TileScreen) Render() {
 		Y: (fbSize.Y % tileSize.Y) / 2,
 	}
 	pixelRect := Rect{
-		Min: Point{borderSize.X, borderSize.Y},
-		Max: Point{fbSize.X - borderSize.X, fbSize.Y - borderSize.Y},
+		Min: Point{X: borderSize.X, Y: borderSize.Y},
+		Max: Point{X: fbSize.X - borderSize.X, Y: fbSize.Y - borderSize.Y},
 	}
 	ux := 2.0 / float32(fbSize.X)
 	uy := 2.0 / float32(fbSize.Y)
@@ -305,12 +305,12 @@ func (tp TilePane) GetPixelRect() Rect {
 	}
 	pixelRect := Rect{
 		Min: Point{
-			borderSize.X + tp.rect.Min.X*tileSize.X,
-			borderSize.Y + tp.rect.Min.Y*tileSize.Y,
+			X: borderSize.X + tp.rect.Min.X*tileSize.X,
+			Y: borderSize.Y + tp.rect.Min.Y*tileSize.Y,
 		},
 		Max: Point{
-			borderSize.X + tp.rect.Max.X*tileSize.X,
-			borderSize.Y + tp.rect.Max.Y*tileSize.Y,
+			X: borderSize.X + tp.rect.Max.X*tileSize.X,
+			Y: borderSize.Y + tp.rect.Max.Y*tileSize.Y,
 		},
 	}
 	return pixelRect

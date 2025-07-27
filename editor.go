@@ -72,6 +72,14 @@ func (e *Editor) GetLineLength(index int) int {
 	}
 }
 
+func (e *Editor) CurrentLine() EditorLine {
+	return e.GetLine(e.point.line)
+}
+
+func (e *Editor) CurrentLineLength() int {
+	return e.GetLineLength(e.point.line)
+}
+
 func (e *Editor) CurrentRune() rune {
 	currentLine := e.CurrentLine()
 	if currentLine == nil {
@@ -81,14 +89,6 @@ func (e *Editor) CurrentRune() rune {
 		return 0x85 // NEL (NExtLine)
 	}
 	return currentLine[e.point.column]
-}
-
-func (e *Editor) CurrentLine() EditorLine {
-	return e.GetLine(e.point.line)
-}
-
-func (e *Editor) CurrentLineLength() int {
-	return e.GetLineLength(e.point.line)
 }
 
 func (e *Editor) AtFirstLine() bool {
@@ -124,8 +124,8 @@ func (e *Editor) AdvanceLine(amount int) {
 	if p.line < 0 {
 		p.line = 0
 	}
-	if p.column > e.CurrentLineLength() {
-		p.column = e.CurrentLineLength()
+	if length := e.CurrentLineLength(); p.column > length {
+		p.column = length
 	}
 }
 

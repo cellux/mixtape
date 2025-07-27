@@ -2,18 +2,23 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	"io/fs"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 )
 
+var flags struct {
+	SampleRate int
+	BPM        float64
+}
+
 type App struct {
 	vm            *VM
-	tapePath      string
+	openFiles     map[string]string
+	currentFile   string
 	shouldExit    bool
 	font          *Font
 	tm            *TileMap
@@ -29,7 +34,7 @@ type App struct {
 
 func (app *App) Init() error {
 	slog.Info("Init")
-	err := InitOtoContext()
+	err := InitOtoContext(flags.SampleRate)
 	if err != nil {
 		return err
 	}
@@ -42,7 +47,7 @@ func (app *App) Init() error {
 	if err != nil {
 		return err
 	}
-	tileMapSize := Size{16, 32}
+	tileMapSize := Size{X: 16, Y: 32}
 	faceImage, err := font.GetFaceImage(face, tileMapSize.X, tileMapSize.Y)
 	if err != nil {
 		return err
@@ -57,20 +62,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.ts = ts
-	var tapeScript []byte
-	if app.tapePath != "" {
-		tapeScript, err = os.ReadFile(app.tapePath)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				tapeScript = []byte{}
-			} else {
-				return err
-			}
-		}
-	} else {
-		tapeScript = []byte{}
+	tapeScript := ""
+	if app.currentFile != "" {
+		tapeScript = app.openFiles[app.currentFile]
 	}
-	app.editor = CreateEditor(string(tapeScript))
+	app.editor = CreateEditor(tapeScript)
 	tapeDisplay, err := CreateTapeDisplay()
 	if err != nil {
 		return err
@@ -148,8 +144,8 @@ func (app *App) Init() error {
 		vm.Reset()
 		vm.PushEnv()
 		tapePath := "<temp-tape>"
-		if app.tapePath != "" {
-			tapePath = app.tapePath
+		if app.currentFile != "" {
+			tapePath = app.currentFile
 		}
 		err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), tapePath)
 		if err != nil {
@@ -160,10 +156,10 @@ func (app *App) Init() error {
 				if tape, ok := val.(*Tape); ok {
 					app.tape = tape
 				} else {
-					slog.Error(fmt.Sprintf("expected a Tape at top of stack, got %T", val))
+					slog.Error(fmt.Sprintf("expected Tape at top of stack, got %T", val))
 				}
 			} else {
-				slog.Error("expected a Tape at top of stack but stack is empty")
+				slog.Error("expected Tape at top of stack but stack is empty")
 			}
 		}
 	}))
@@ -226,8 +222,8 @@ func (app *App) Init() error {
 		})
 	}))
 	editorKeyMap.Bind("C-s", CreateKeyHandler(func() {
-		if app.tapePath != "" {
-			os.WriteFile(app.tapePath, app.editor.GetBytes(), 0o644)
+		if app.currentFile != "" {
+			os.WriteFile(app.currentFile, app.editor.GetBytes(), 0o644)
 		}
 	}))
 	editorKeyMap.Bind("M-b", CreateKeyHandler(app.editor.WordLeft))
@@ -368,24 +364,38 @@ func (app *App) Close() error {
 	return nil
 }
 
-func runGui(vm *VM, tapePath string) error {
+func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 	app := &App{
-		vm:       vm,
-		tapePath: tapePath,
+		vm:          vm,
+		openFiles:   openFiles,
+		currentFile: currentFile,
 	}
 	var windowTitle string
-	if tapePath != "" {
-		windowTitle = fmt.Sprintf("mixtape : %s", tapePath)
+	if currentFile != "" {
+		windowTitle = fmt.Sprintf("mixtape : %s", currentFile)
 	} else {
 		windowTitle = "mixtape"
 	}
 	return WithGL(windowTitle, app)
 }
 
+func setupDefaults(vm *VM) {
+	flags.SampleRate = 48000
+	vm.SetVal(":sr", flags.SampleRate)
+	flags.BPM = 120
+	vm.SetVal(":bpm", flags.BPM)
+	vm.SetVal(":freq", 440)
+	vm.SetVal(":phase", 0)
+	vm.SetVal(":width", 0.5)
+}
+
 func runWithArgs(vm *VM, args []string) error {
 	evalScript := false
 	evalFile := false
-	tapePath := ""
+	setSampleRate := false
+	setBPM := false
+	openFiles := make(map[string]string)
+	currentFile := ""
 	for _, arg := range args {
 		if evalScript {
 			err := vm.ParseAndExecute(strings.NewReader(arg), "<script>")
@@ -407,16 +417,45 @@ func runWithArgs(vm *VM, args []string) error {
 			evalFile = false
 			continue
 		}
+		if setSampleRate {
+			value, err := strconv.Atoi(arg)
+			if err != nil {
+				return err
+			}
+			flags.SampleRate = value
+			vm.SetVal(":sr", flags.SampleRate)
+			setSampleRate = false
+			continue
+		}
+		if setBPM {
+			value, err := strconv.ParseFloat(arg, 64)
+			if err != nil {
+				return err
+			}
+			flags.BPM = value
+			vm.SetVal(":bpm", flags.BPM)
+			setBPM = false
+			continue
+		}
 		switch arg {
 		case "-e":
 			evalScript = true
 		case "-f":
 			evalFile = true
+		case "-bpm":
+			setBPM = true
+		case "-sr":
+			setSampleRate = true
 		default:
-			tapePath = arg
+			data, err := os.ReadFile(arg)
+			if err != nil {
+				return err
+			}
+			openFiles[arg] = string(data)
+			currentFile = arg
 		}
 	}
-	return runGui(vm, tapePath)
+	return runGui(vm, openFiles, currentFile)
 }
 
 func main() {
@@ -427,6 +466,7 @@ func main() {
 		slog.Error("vm initialization error", "error", err)
 		os.Exit(1)
 	}
+	setupDefaults(vm)
 	err = runWithArgs(vm, os.Args[1:])
 	if err != nil {
 		slog.Error("vm error", "error", err)

@@ -6,10 +6,10 @@ import (
 
 var otoContext *oto.Context
 
-func InitOtoContext() error {
+func InitOtoContext(sampleRate int) error {
 	otoContextOptions := &oto.NewContextOptions{
-		SampleRate:   DefaultSampleRate,
-		ChannelCount: AudioChannelCount,
+		SampleRate:   sampleRate,
+		ChannelCount: 2,
 		Format:       oto.FormatFloat32LE,
 		BufferSize:   0,
 	}

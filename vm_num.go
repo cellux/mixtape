@@ -1,0 +1,111 @@
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+type Num float64
+
+func init() {
+	RegisterMethod[Num]("=", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs == rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("!=", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs != rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("not", 1, func(vm *VM) error {
+		arg := Pop[Num](vm)
+		vm.PushVal(arg == 0)
+		return nil
+	})
+
+	RegisterMethod[Num]("assert", 1, func(vm *VM) error {
+		n := Pop[Num](vm)
+		if n == False {
+			return fmt.Errorf("assertion failed")
+		}
+		return nil
+	})
+
+	RegisterMethod[Num]("+", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs + rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("-", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs - rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("*", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs * rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("/", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs / rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("%", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(math.Mod(float64(lhs), float64(rhs)))
+		return nil
+	})
+
+	RegisterMethod[Num]("<", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs < rhs)
+		return nil
+	})
+
+	RegisterMethod[Num]("<=", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs <= rhs)
+		return nil
+	})
+
+	RegisterMethod[Num](">=", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs >= rhs)
+		return nil
+	})
+
+	RegisterMethod[Num](">", 2, func(vm *VM) error {
+		rhs := Pop[Num](vm)
+		lhs := Pop[Num](vm)
+		vm.PushVal(lhs > rhs)
+		return nil
+	})
+}
+
+func (n Num) String() string {
+	return fmt.Sprintf("%g", n)
+}
+
+func (n Num) GetSampleIterator() SampleIterator {
+	return func() Smp {
+		return Smp(n)
+	}
+}

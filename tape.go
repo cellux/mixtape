@@ -84,7 +84,7 @@ func (t *Tape) WriteToWav(path string) error {
 		Data:           make([]int, nsamples),
 		SourceBitDepth: 16,
 	}
-	for i := 0; i < nsamples; i++ {
+	for i := range nsamples {
 		intBuf.Data[i] = int(t.samples[i] * 32767)
 	}
 	err = enc.Write(intBuf)
@@ -396,7 +396,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			nsamples := len(resampledBuf)
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, sr, nchannels, nframes)
-			for i := 0; i < nsamples; i++ {
+			for i := range nsamples {
 				tape.samples[i] = float64(resampledBuf[i])
 			}
 		} else {
@@ -424,7 +424,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			startTime = GetTime()
 			float32Buf := make([]float32, nsamples)
 			var sample int16
-			for i := 0; i < nsamples; i++ {
+			for i := range nsamples {
 				err := binary.Read(decoder, binary.LittleEndian, &sample)
 				if err == io.EOF {
 					break
@@ -445,7 +445,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			nsamples := len(resampledBuf)
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, sr, nchannels, nframes)
-			for i := 0; i < nsamples; i++ {
+			for i := range nsamples {
 				tape.samples[i] = float64(resampledBuf[i])
 			}
 		} else {
@@ -454,7 +454,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			startTime = GetTime()
 			var sample int16
 			tape := pushTape(vm, sr, nchannels, nframes)
-			for i := 0; i < nsamples; i++ {
+			for i := range nsamples {
 				err := binary.Read(decoder, binary.LittleEndian, &sample)
 				if err == io.EOF {
 					break
@@ -512,10 +512,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 	case 1:
 		switch dstChannels {
 		case 1:
-			framesToWrite := bufLengthInSamples
-			if framesToWrite > samplesLeft {
-				framesToWrite = samplesLeft
-			}
+			framesToWrite := min(bufLengthInSamples, samplesLeft)
 			bytesToWrite := framesToWrite * 4
 			for writeIndex < bytesToWrite {
 				smp := samples[offset]
@@ -524,10 +521,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 				writeIndex += 4
 			}
 		case 2:
-			framesToWrite := bufLengthInSamples / 2
-			if framesToWrite > samplesLeft {
-				framesToWrite = samplesLeft
-			}
+			framesToWrite := min(bufLengthInSamples/2, samplesLeft)
 			bytesToWrite := framesToWrite * 8
 			for writeIndex < bytesToWrite {
 				smp := samples[offset]
@@ -541,10 +535,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 	case 2:
 		switch dstChannels {
 		case 1:
-			framesToWrite := bufLengthInSamples
-			if framesToWrite > samplesLeft/2 {
-				framesToWrite = samplesLeft / 2
-			}
+			framesToWrite := min(bufLengthInSamples, samplesLeft/2)
 			bytesToWrite := framesToWrite * 4
 			for writeIndex < bytesToWrite {
 				smp := (samples[offset] + samples[offset+1]) / 2.0
@@ -553,10 +544,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 				writeIndex += 4
 			}
 		case 2:
-			framesToWrite := bufLengthInSamples / 2
-			if framesToWrite > samplesLeft/2 {
-				framesToWrite = samplesLeft / 2
-			}
+			framesToWrite := min(bufLengthInSamples/2, samplesLeft/2)
 			bytesToWrite := framesToWrite * 8
 			for writeIndex < bytesToWrite {
 				smp := samples[offset]
@@ -597,8 +585,8 @@ func init() {
 		return nil
 	})
 	RegisterMethod[*Tape]("play", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		player := otoContext.NewPlayer(MakeTapeReader(t, AudioChannelCount))
+		t := Top[*Tape](vm)
+		player := otoContext.NewPlayer(MakeTapeReader(t, 2))
 		player.Play()
 		return nil
 	})
@@ -689,7 +677,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		td.vertices = make([][]PointVertex, tape.nchannels)
 		for ch := range tape.nchannels {
 			td.vertices[ch] = make([]PointVertex, pixelWidth)
-			for x := 0; x < pixelWidth; x++ {
+			for x := range pixelWidth {
 				td.vertices[ch][x].position[0] = float32(x) + 0.5
 			}
 		}
@@ -698,7 +686,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	channelHeightHalf := channelHeight / 2.0
 	incr := float64(windowSize) / float64(pixelWidth)
 	readIndex := float64(windowOffset)
-	for x := 0; x < pixelWidth; x++ {
+	for x := range pixelWidth {
 		channelTop := float32(0)
 		for ch := range tape.nchannels {
 			smp := tape.GetInterpolatedSampleAt(ch, readIndex)
