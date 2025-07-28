@@ -404,20 +404,14 @@ func runWithArgs(vm *VM, args []string) error {
 	openFiles := make(map[string]string)
 	currentFile := ""
 	if flags.EvalScript != "" {
-		err := vm.ParseAndExecute(strings.NewReader(flags.EvalScript), "<script>")
-		if err != nil {
-			return err
-		}
+		return vm.ParseAndExecute(strings.NewReader(flags.EvalScript), "<script>")
 	}
 	if flags.EvalFile != "" {
 		data, err := os.ReadFile(flags.EvalFile)
 		if err != nil {
 			return err
 		}
-		err = vm.ParseAndExecute(bytes.NewReader(data), flags.EvalFile)
-		if err != nil {
-			return err
-		}
+		return vm.ParseAndExecute(bytes.NewReader(data), flags.EvalFile)
 	}
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
@@ -426,9 +420,6 @@ func runWithArgs(vm *VM, args []string) error {
 		}
 		openFiles[arg] = string(data)
 		currentFile = arg
-	}
-	if len(openFiles) == 0 {
-		return nil
 	}
 	return runGui(vm, openFiles, currentFile)
 }
