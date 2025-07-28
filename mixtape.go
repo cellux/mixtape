@@ -2,17 +2,19 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 )
 
 var flags struct {
 	SampleRate int
 	BPM        float64
+	EvalFile   string
+	EvalScript string
 }
 
 type App struct {
@@ -382,9 +384,7 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 }
 
 func setDefaults(vm *VM) {
-	flags.SampleRate = 48000
 	vm.SetVal(":sr", flags.SampleRate)
-	flags.BPM = 120
 	vm.SetVal(":bpm", flags.BPM)
 	vm.SetVal(":freq", 440)
 	vm.SetVal(":phase", 0)
@@ -392,70 +392,34 @@ func setDefaults(vm *VM) {
 }
 
 func runWithArgs(vm *VM, args []string) error {
-	evalScript := false
-	evalFile := false
-	setSampleRate := false
-	setBPM := false
 	openFiles := make(map[string]string)
 	currentFile := ""
+	if flags.EvalScript != "" {
+		err := vm.ParseAndExecute(strings.NewReader(flags.EvalScript), "<script>")
+		if err != nil {
+			return err
+		}
+	}
+	if flags.EvalFile != "" {
+		data, err := os.ReadFile(flags.EvalFile)
+		if err != nil {
+			return err
+		}
+		err = vm.ParseAndExecute(bytes.NewReader(data), flags.EvalFile)
+		if err != nil {
+			return err
+		}
+	}
 	for _, arg := range args {
-		if evalScript {
-			err := vm.ParseAndExecute(strings.NewReader(arg), "<script>")
-			if err != nil {
-				return err
-			}
-			evalScript = false
-			continue
+		data, err := os.ReadFile(arg)
+		if err != nil {
+			return err
 		}
-		if evalFile {
-			data, err := os.ReadFile(arg)
-			if err != nil {
-				return err
-			}
-			err = vm.ParseAndExecute(bytes.NewReader(data), arg)
-			if err != nil {
-				return err
-			}
-			evalFile = false
-			continue
-		}
-		if setSampleRate {
-			value, err := strconv.Atoi(arg)
-			if err != nil {
-				return err
-			}
-			flags.SampleRate = value
-			vm.SetVal(":sr", flags.SampleRate)
-			setSampleRate = false
-			continue
-		}
-		if setBPM {
-			value, err := strconv.ParseFloat(arg, 64)
-			if err != nil {
-				return err
-			}
-			flags.BPM = value
-			vm.SetVal(":bpm", flags.BPM)
-			setBPM = false
-			continue
-		}
-		switch arg {
-		case "-e":
-			evalScript = true
-		case "-f":
-			evalFile = true
-		case "-bpm":
-			setBPM = true
-		case "-sr":
-			setSampleRate = true
-		default:
-			data, err := os.ReadFile(arg)
-			if err != nil {
-				return err
-			}
-			openFiles[arg] = string(data)
-			currentFile = arg
-		}
+		openFiles[arg] = string(data)
+		currentFile = arg
+	}
+	if len(openFiles) == 0 {
+		return nil
 	}
 	return runGui(vm, openFiles, currentFile)
 }
@@ -463,13 +427,18 @@ func runWithArgs(vm *VM, args []string) error {
 func main() {
 	var vm *VM
 	var err error
+	flag.IntVar(&flags.SampleRate, "sr", 48000, "Sample rate")
+	flag.Float64Var(&flags.BPM, "bpm", 120, "Beats per minute")
+	flag.StringVar(&flags.EvalFile, "f", "", "File to evaluate")
+	flag.StringVar(&flags.EvalScript, "e", "", "Script to evaluate")
+	flag.Parse()
 	vm, err = CreateVM()
 	if err != nil {
 		slog.Error("vm initialization error", "err", err)
 		os.Exit(1)
 	}
 	setDefaults(vm)
-	err = runWithArgs(vm, os.Args[1:])
+	err = runWithArgs(vm, flag.Args())
 	if err != nil {
 		slog.Error("vm error", "err", err)
 	}
