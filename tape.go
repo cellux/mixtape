@@ -25,6 +25,17 @@ type Tape struct {
 	samples   []Smp
 }
 
+type FrameReader interface {
+	ReadFrame() []Smp
+}
+
+type FrameSource interface {
+	NChannels() int
+	GetFrameReader() FrameReader
+}
+
+type SmpBinOp = func(x, y Smp) Smp
+
 func (t *Tape) String() string {
 	return fmt.Sprintf("Tape(sr=%d nchannels=%d nframes=%d)", t.sr, t.nchannels, t.nframes)
 }
@@ -68,6 +79,75 @@ func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
 	smpHi := t.samples[sampleIndexLo+1]
 	frameIndexDelta := frame - frameIndexLo
 	return smpLo + (smpHi-smpLo)*frameIndexDelta
+}
+
+func (t *Tape) NChannels() int {
+	return t.nchannels
+}
+
+type TapeFrameReader struct {
+	tape  *Tape
+	index int
+}
+
+func (t *Tape) GetFrameReader() FrameReader {
+	return &TapeFrameReader{
+		tape:  t,
+		index: 0,
+	}
+}
+
+func (tfr *TapeFrameReader) ReadFrame() []Smp {
+	t := tfr.tape
+	ret := t.samples[tfr.index : tfr.index+t.nchannels]
+	tfr.index += t.nchannels
+	if tfr.index == t.nframes*t.nchannels {
+		tfr.index = 0
+	}
+	return ret
+}
+
+func (t *Tape) Combine(source FrameSource, op SmpBinOp) {
+	reader := source.GetFrameReader()
+	switch t.nchannels {
+	case 1:
+		switch source.NChannels() {
+		case 1:
+			for i := range t.nframes {
+				frame := reader.ReadFrame()
+				smp := frame[0]
+				t.samples[i] = op(t.samples[i], smp)
+			}
+		case 2:
+			for i := range t.nframes {
+				frame := reader.ReadFrame()
+				smp := (frame[0] + frame[1]) / 2.0
+				t.samples[i] = op(t.samples[i], smp)
+			}
+		}
+	case 2:
+		switch source.NChannels() {
+		case 1:
+			writeIndex := 0
+			for range t.nframes {
+				frame := reader.ReadFrame()
+				smp := frame[0]
+				t.samples[writeIndex] = op(t.samples[writeIndex], smp)
+				writeIndex++
+				t.samples[writeIndex] = op(t.samples[writeIndex], smp)
+				writeIndex++
+			}
+		case 2:
+			writeIndex := 0
+			for range t.nframes {
+				frame := reader.ReadFrame()
+				t.samples[writeIndex] = op(t.samples[writeIndex], frame[0])
+				writeIndex++
+				t.samples[writeIndex] = op(t.samples[writeIndex], frame[1])
+				writeIndex++
+			}
+		}
+	}
 }
 
 func (t *Tape) WriteToWav(path string) error {
@@ -137,6 +217,16 @@ func calcSaw(phase float64) float64 {
 	}
 }
 
+func applyBinOpToTapeAndSource(vm *VM, op SmpBinOp) error {
+	rhs, ok := vm.PopVal().(FrameSource)
+	if !ok {
+		return fmt.Errorf("object of type %T does not implement FrameSource", rhs)
+	}
+	lhs := Top[*Tape](vm)
+	lhs.Combine(rhs, op)
+	return nil
+}
+
 func init() {
 	RegisterWord("line", func(vm *VM) error {
 		end := Smp(Pop[Num](vm))
@@ -172,66 +262,19 @@ func init() {
 	})
 
 	RegisterMethod[*Tape]("+", 2, func(vm *VM) error {
-		rhs := vm.PopVal()
-		lhs := Top[*Tape](vm)
-		switch v := rhs.(type) {
-		case Num:
-			offset := Smp(v)
-			for i, smp := range lhs.samples {
-				lhs.samples[i] = smp + offset
-			}
-		default:
-			return fmt.Errorf("Tape: + not supported for rhs of type %T", rhs)
-		}
-		return nil
+		return applyBinOpToTapeAndSource(vm, func(x, y Smp) Smp { return x + y })
 	})
 
 	RegisterMethod[*Tape]("-", 2, func(vm *VM) error {
-		rhs := vm.PopVal()
-		lhs := Top[*Tape](vm)
-		switch v := rhs.(type) {
-		case Num:
-			offset := Smp(v)
-			for i, smp := range lhs.samples {
-				lhs.samples[i] = smp - offset
-			}
-		default:
-			return fmt.Errorf("Tape: - not supported for rhs of type %T", rhs)
-		}
-		return nil
+		return applyBinOpToTapeAndSource(vm, func(x, y Smp) Smp { return x - y })
 	})
 
 	RegisterMethod[*Tape]("*", 2, func(vm *VM) error {
-		rhs := vm.PopVal()
-		lhs := Top[*Tape](vm)
-		switch v := rhs.(type) {
-		case Num:
-			multiplier := Smp(v)
-			for i, smp := range lhs.samples {
-				lhs.samples[i] = smp * multiplier
-			}
-		default:
-			return fmt.Errorf("Tape: * not supported for rhs of type %T", rhs)
-		}
-		return nil
+		return applyBinOpToTapeAndSource(vm, func(x, y Smp) Smp { return x * y })
 	})
 
 	RegisterMethod[*Tape]("/", 2, func(vm *VM) error {
-		rhs := vm.PopVal()
-		lhs := Top[*Tape](vm)
-		switch v := rhs.(type) {
-		case Num:
-			divisor := Smp(v)
-			if divisor == 0 {
-				return fmt.Errorf("Tape: attempt to divide by zero")
-			}
-			for i, smp := range lhs.samples {
-				lhs.samples[i] = smp / divisor
-			}
-		default:
-			return fmt.Errorf("Tape: / not supported for rhs of type %T", rhs)
-		}
-		return nil
+		return applyBinOpToTapeAndSource(vm, func(x, y Smp) Smp { return x / y })
 	})
 
 	RegisterMethod[*Tape]("join", 2, func(vm *VM) error {

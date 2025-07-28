@@ -109,3 +109,21 @@ func (n Num) GetSampleIterator() SampleIterator {
 		return Smp(n)
 	}
 }
+
+func (n Num) NChannels() int {
+	return 1
+}
+
+type NumFrameReader struct {
+	s []Smp
+}
+
+func (n Num) GetFrameReader() FrameReader {
+	s := make([]Smp, 1)
+	s[0] = Smp(n)
+	return NumFrameReader{s}
+}
+
+func (reader NumFrameReader) ReadFrame() []Smp {
+	return reader.s
+}
