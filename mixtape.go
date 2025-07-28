@@ -26,7 +26,6 @@ type App struct {
 	editor        *Editor
 	result        Val
 	tapeDisplay   *TapeDisplay
-	tapeOverview  *TapeDisplay
 	tapePlayer    *OtoPlayer
 	globalKeyMap  *KeyMap
 	editorKeyMap  *KeyMap
@@ -73,11 +72,6 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
-	tapeOverview, err := CreateTapeDisplay()
-	if err != nil {
-		return err
-	}
-	app.tapeOverview = tapeOverview
 	globalKeyMap := CreateKeyMap()
 	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
 		if tape, ok := app.result.(*Tape); ok {
@@ -352,9 +346,7 @@ func (app *App) Render() error {
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)
-		tapeDisplayPane, tapeOverviewPane := tapeDisplayPane.SplitY(-2)
 		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0)
-		app.tapeOverview.Render(result, tapeOverviewPane.GetPixelRect(), result.nframes, 0)
 	default:
 		app.editor.Render(screenPane)
 	}
