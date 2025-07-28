@@ -19,14 +19,14 @@ import (
 )
 
 type Tape struct {
-	sr        float64
+	sr        int
 	nchannels int
 	nframes   int
 	samples   []Smp
 }
 
 func (t *Tape) String() string {
-	return fmt.Sprintf("Tape(sr=%g nchannels=%d nframes=%d)", t.sr, t.nchannels, t.nframes)
+	return fmt.Sprintf("Tape(sr=%d nchannels=%d nframes=%d)", t.sr, t.nchannels, t.nframes)
 }
 
 func (t *Tape) GetSampleIterator() SampleIterator {
@@ -73,13 +73,13 @@ func (t *Tape) WriteToWav(path string) error {
 		return err
 	}
 	defer f.Close()
-	enc := wav.NewEncoder(f, int(t.sr), 16, t.nchannels, 1)
+	enc := wav.NewEncoder(f, t.sr, 16, t.nchannels, 1)
 	defer enc.Close()
 	nsamples := t.nframes * t.nchannels
 	intBuf := &audio.IntBuffer{
 		Format: &audio.Format{
 			NumChannels: t.nchannels,
-			SampleRate:  int(t.sr),
+			SampleRate:  t.sr,
 		},
 		Data:           make([]int, nsamples),
 		SourceBitDepth: 16,
@@ -154,7 +154,7 @@ func init() {
 
 	RegisterMethod[*Tape]("lfo.pulse", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
-		sr := t.sr
+		sr := float64(t.sr)
 		freq := GetSampleIterator(vm.GetVal(":freq"))
 		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		width := clamp(vm.GetFloat(":width"), 0, 1)
@@ -189,7 +189,7 @@ func init() {
 
 	RegisterMethod[*Tape]("lfo.triangle", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
-		sr := t.sr
+		sr := float64(t.sr)
 		freq := GetSampleIterator(vm.GetVal(":freq"))
 		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
@@ -223,7 +223,7 @@ func init() {
 
 	RegisterMethod[*Tape]("lfo.saw", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
-		sr := t.sr
+		sr := float64(t.sr)
 		freq := GetSampleIterator(vm.GetVal(":freq"))
 		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
@@ -257,7 +257,7 @@ func init() {
 
 	RegisterMethod[*Tape]("lfo.sin", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
-		sr := t.sr
+		sr := float64(t.sr)
 		freq := GetSampleIterator(vm.GetVal(":freq"))
 		phase := math.Mod(vm.GetFloat(":phase"), 1)
 		writeIndex := 0
@@ -310,7 +310,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		return err
 	}
 	defer f.Close()
-	sr := vm.GetFloat(":sr")
+	sr := vm.GetInt(":sr")
 	switch filepath.Ext(path) {
 	case ".tape":
 		tapeInfo, err := os.Stat(path)
@@ -380,7 +380,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		slog.Debug("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
 		floatBuf := buf.AsFloatBuffer()
 		factor := math.Pow(2, float64(bitDepth-1))
-		wavSR := float64(buf.Format.SampleRate)
+		wavSR := buf.Format.SampleRate
 		if wavSR != sr {
 			float32Buf := make([]float32, nchannels*nframes)
 			for i := 0; i < len(floatBuf.Data); i++ {
@@ -388,7 +388,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			}
 			slog.Debug("resampling wav data", "path", path)
 			startTime = GetTime()
-			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/wavSR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
+			resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(wavSR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 			if err != nil {
 				return err
 			}
@@ -417,7 +417,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		nchannels := 2
 		nsamples := int(nbytes / 2) // FormatSignedInt16LE
 		nframes := nsamples / nchannels
-		mp3SR := float64(decoder.SampleRate())
+		mp3SR := decoder.SampleRate()
 		if mp3SR != sr {
 			var startTime float64
 			slog.Debug("decoding mp3 file", "path", path)
@@ -437,7 +437,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			slog.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 			startTime = GetTime()
 			slog.Debug("resampling mp3 data", "path", path)
-			resampledBuf, err := gosamplerate.Simple(float32Buf, sr/mp3SR, nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
+			resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(mp3SR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 			if err != nil {
 				return err
 			}
@@ -577,6 +577,7 @@ func init() {
 		t := Top[*Tape](vm)
 		nframes := end - start
 		slicedTape := &Tape{
+			sr:        t.sr,
 			nchannels: t.nchannels,
 			nframes:   nframes,
 			samples:   t.samples[start*t.nchannels : end*t.nchannels],
@@ -586,7 +587,7 @@ func init() {
 	})
 }
 
-func makeTape(sr float64, nchannels, nframes int) *Tape {
+func makeTape(sr, nchannels, nframes int) *Tape {
 	samples := make([]Smp, nchannels*(nframes+1))
 	return &Tape{
 		sr:        sr,
@@ -596,7 +597,7 @@ func makeTape(sr float64, nchannels, nframes int) *Tape {
 	}
 }
 
-func pushTape(vm *VM, sr float64, nchannels, nframes int) *Tape {
+func pushTape(vm *VM, sr, nchannels, nframes int) *Tape {
 	tape := makeTape(sr, nchannels, nframes)
 	vm.PushVal(tape)
 	return tape
@@ -604,14 +605,14 @@ func pushTape(vm *VM, sr float64, nchannels, nframes int) *Tape {
 
 func init() {
 	RegisterWord("tape1", func(vm *VM) error {
-		sr := vm.GetFloat(":sr")
+		sr := vm.GetInt(":sr")
 		nframes := int(Pop[Num](vm))
 		pushTape(vm, sr, 1, nframes)
 		return nil
 	})
 
 	RegisterWord("tape2", func(vm *VM) error {
-		sr := vm.GetFloat(":sr")
+		sr := vm.GetInt(":sr")
 		nframes := int(Pop[Num](vm))
 		pushTape(vm, sr, 2, nframes)
 		return nil
