@@ -62,6 +62,9 @@ func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
 	frameIndexLo := math.Floor(frame)
 	sampleIndexLo := channel + int(frameIndexLo)*t.nchannels
 	smpLo := t.samples[sampleIndexLo]
+	if int(frameIndexLo) == t.nframes-1 {
+		return smpLo
+	}
 	smpHi := t.samples[sampleIndexLo+1]
 	frameIndexDelta := frame - frameIndexLo
 	return smpLo + (smpHi-smpLo)*frameIndexDelta
@@ -135,18 +138,166 @@ func calcSaw(phase float64) float64 {
 }
 
 func init() {
-	RegisterMethod[*Tape]("pulse", 1, func(vm *VM) error {
-		t := Top[*Tape](vm)
-		phase := math.Mod(vm.GetFloat(":phase"), 1)
-		width := clamp(vm.GetFloat(":width"), 0, 1)
-		incr := 1.0 / float64(t.nframes)
-		writeIndex := 0
-		for i := 0; i < t.nframes; i++ {
-			smp := calcPulse(phase, width)
-			for range t.nchannels {
-				t.samples[writeIndex] = smp
-				writeIndex++
+	RegisterWord("line", func(vm *VM) error {
+		end := Smp(Pop[Num](vm))
+		start := Smp(Pop[Num](vm))
+		sr := vm.GetInt(":sr")
+		nf := vm.GetInt(":nf")
+		t := pushTape(vm, sr, 1, nf)
+		incr := Smp(end-start) / Smp(nf)
+		smp := start
+		for i := range nf {
+			t.samples[i] = smp
+			smp += incr
+		}
+		return nil
+	})
+
+	RegisterMethod[*Tape]("sr", 1, func(vm *VM) error {
+		t := Pop[*Tape](vm)
+		vm.PushVal(t.sr)
+		return nil
+	})
+
+	RegisterMethod[*Tape]("nchannels", 1, func(vm *VM) error {
+		t := Pop[*Tape](vm)
+		vm.PushVal(t.nchannels)
+		return nil
+	})
+
+	RegisterMethod[*Tape]("nframes", 1, func(vm *VM) error {
+		t := Pop[*Tape](vm)
+		vm.PushVal(t.nframes)
+		return nil
+	})
+
+	RegisterMethod[*Tape]("+", 2, func(vm *VM) error {
+		rhs := vm.PopVal()
+		lhs := Top[*Tape](vm)
+		switch v := rhs.(type) {
+		case Num:
+			offset := Smp(v)
+			for i, smp := range lhs.samples {
+				lhs.samples[i] = smp + offset
 			}
+		default:
+			return fmt.Errorf("Tape: + not supported for rhs of type %T", rhs)
+		}
+		return nil
+	})
+
+	RegisterMethod[*Tape]("-", 2, func(vm *VM) error {
+		rhs := vm.PopVal()
+		lhs := Top[*Tape](vm)
+		switch v := rhs.(type) {
+		case Num:
+			offset := Smp(v)
+			for i, smp := range lhs.samples {
+				lhs.samples[i] = smp - offset
+			}
+		default:
+			return fmt.Errorf("Tape: - not supported for rhs of type %T", rhs)
+		}
+		return nil
+	})
+
+	RegisterMethod[*Tape]("*", 2, func(vm *VM) error {
+		rhs := vm.PopVal()
+		lhs := Top[*Tape](vm)
+		switch v := rhs.(type) {
+		case Num:
+			multiplier := Smp(v)
+			for i, smp := range lhs.samples {
+				lhs.samples[i] = smp * multiplier
+			}
+		default:
+			return fmt.Errorf("Tape: * not supported for rhs of type %T", rhs)
+		}
+		return nil
+	})
+
+	RegisterMethod[*Tape]("/", 2, func(vm *VM) error {
+		rhs := vm.PopVal()
+		lhs := Top[*Tape](vm)
+		switch v := rhs.(type) {
+		case Num:
+			divisor := Smp(v)
+			if divisor == 0 {
+				return fmt.Errorf("Tape: attempt to divide by zero")
+			}
+			for i, smp := range lhs.samples {
+				lhs.samples[i] = smp / divisor
+			}
+		default:
+			return fmt.Errorf("Tape: / not supported for rhs of type %T", rhs)
+		}
+		return nil
+	})
+
+	RegisterMethod[*Tape]("join", 2, func(vm *VM) error {
+		rhs := Pop[*Tape](vm)
+		lhs := Pop[*Tape](vm)
+		if lhs.nchannels != rhs.nchannels {
+			return fmt.Errorf("join: lhs and rhs must have the same number of channels, got lhs=%d, rhs=%d", lhs.nchannels, rhs.nchannels)
+		}
+		sr := vm.GetInt(":sr")
+		nf := lhs.nframes + rhs.nframes
+		t := pushTape(vm, sr, lhs.nchannels, nf)
+		leftEnd := lhs.nframes * lhs.nchannels
+		copy(t.samples[:leftEnd], lhs.samples)
+		copy(t.samples[leftEnd:], rhs.samples)
+		return nil
+	})
+
+	RegisterMethod[*Tape]("shift", 2, func(vm *VM) error {
+		amount := Pop[Num](vm)
+		t := Top[*Tape](vm)
+		if amount < 0 {
+			if amount > -1.0 {
+				amount = 1.0 + amount
+			} else {
+				amount = Num(t.nframes) + amount
+			}
+		}
+		if amount < 1.0 {
+			amount = Num(t.nframes) * amount
+		}
+		amountSamples := int(math.Round(float64(amount))) % t.nframes
+		t.samples = append(t.samples[amountSamples:], t.samples[:amountSamples]...)
+		return nil
+	})
+
+	RegisterMethod[*Tape]("stretch", 2, func(vm *VM) error {
+		ratio := float64(Pop[Num](vm))
+		if ratio <= 0 {
+			return fmt.Errorf("stretch: negative ratio: %g", ratio)
+		}
+		t := Pop[*Tape](vm)
+		tempBuf := make([]float32, t.nframes*t.nchannels)
+		for i, smp := range t.samples {
+			tempBuf[i] = float32(smp)
+		}
+		resampledBuf, err := gosamplerate.Simple(tempBuf, ratio, t.nchannels, gosamplerate.SRC_LINEAR)
+		if err != nil {
+			return err
+		}
+		resampledFrames := len(resampledBuf) / t.nchannels
+		resampledTape := pushTape(vm, t.sr, t.nchannels, resampledFrames)
+		for i, smp := range resampledBuf {
+			resampledTape.samples[i] = Smp(smp)
+		}
+		return nil
+	})
+
+	RegisterWord("sin", func(vm *VM) error {
+		sr := vm.GetInt(":sr")
+		nf := vm.GetInt(":nf")
+		t := pushTape(vm, sr, 1, nf)
+		incr := 1.0 / float64(nf)
+		phase := float64(0)
+		for i := range nf {
+			smp := calcSin(phase)
+			t.samples[i] = smp
 			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
@@ -171,22 +322,6 @@ func init() {
 		return nil
 	})
 
-	RegisterMethod[*Tape]("triangle", 1, func(vm *VM) error {
-		t := Top[*Tape](vm)
-		phase := math.Mod(vm.GetFloat(":phase"), 1)
-		incr := 1.0 / float64(t.nframes)
-		writeIndex := 0
-		for i := 0; i < t.nframes; i++ {
-			smp := calcTriangle(phase)
-			for range t.nchannels {
-				t.samples[writeIndex] = smp
-				writeIndex++
-			}
-			phase = math.Mod(phase+incr, 1.0)
-		}
-		return nil
-	})
-
 	RegisterMethod[*Tape]("lfo.triangle", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
 		sr := float64(t.sr)
@@ -205,22 +340,6 @@ func init() {
 		return nil
 	})
 
-	RegisterMethod[*Tape]("saw", 1, func(vm *VM) error {
-		t := Top[*Tape](vm)
-		phase := math.Mod(vm.GetFloat(":phase"), 1)
-		incr := 1.0 / float64(t.nframes)
-		writeIndex := 0
-		for i := 0; i < t.nframes; i++ {
-			smp := calcSaw(phase)
-			for range t.nchannels {
-				t.samples[writeIndex] = smp
-				writeIndex++
-			}
-			phase = math.Mod(phase+incr, 1.0)
-		}
-		return nil
-	})
-
 	RegisterMethod[*Tape]("lfo.saw", 1, func(vm *VM) error {
 		t := Top[*Tape](vm)
 		sr := float64(t.sr)
@@ -234,22 +353,6 @@ func init() {
 				writeIndex++
 			}
 			incr := 1.0 / (sr / freq())
-			phase = math.Mod(phase+incr, 1.0)
-		}
-		return nil
-	})
-
-	RegisterMethod[*Tape]("sin", 1, func(vm *VM) error {
-		t := Top[*Tape](vm)
-		phase := math.Mod(vm.GetFloat(":phase"), 1)
-		incr := 1.0 / float64(t.nframes)
-		writeIndex := 0
-		for i := 0; i < t.nframes; i++ {
-			smp := calcSin(phase)
-			for range t.nchannels {
-				t.samples[writeIndex] = smp
-				writeIndex++
-			}
 			phase = math.Mod(phase+incr, 1.0)
 		}
 		return nil
@@ -586,7 +689,7 @@ func init() {
 }
 
 func makeTape(sr, nchannels, nframes int) *Tape {
-	samples := make([]Smp, nchannels*(nframes+1))
+	samples := make([]Smp, nchannels*nframes)
 	return &Tape{
 		sr:        sr,
 		nchannels: nchannels,

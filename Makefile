@@ -1,4 +1,4 @@
-mixtape: $(wildcard *.go) go.mod go.sum
+mixtape: $(wildcard *.go) go.mod go.sum prelude.tape
 	go build
 
 .PHONY: test

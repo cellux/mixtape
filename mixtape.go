@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"flag"
 	"fmt"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -9,6 +10,9 @@ import (
 	"os"
 	"strings"
 )
+
+//go:embed prelude.tape
+var prelude string
 
 var flags struct {
 	SampleRate int
@@ -159,8 +163,10 @@ func (app *App) Init() error {
 		err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), tapePath)
 		if err != nil {
 			slog.Error("parse error", "err", err)
+			app.result = err
+		} else {
+			app.result = vm.PopVal()
 		}
-		app.result = vm.PopVal()
 	}))
 	editorKeyMap.Bind("C-z", CreateKeyHandler(UndoLastAction))
 	editorKeyMap.Bind("C-q", CreateKeyHandler(app.Quit))
@@ -341,10 +347,20 @@ func (app *App) Render() error {
 	ts.Clear()
 	screenPane := ts.GetPane()
 	switch result := app.result.(type) {
+	case error:
+		editorPane, statusPane := screenPane.SplitY(-1)
+		app.editor.Render(editorPane)
+		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
+			statusPane.DrawString(0, 0, result.Error())
+		})
 	case Str:
 		editorPane, statusPane := screenPane.SplitY(-1)
 		app.editor.Render(editorPane)
 		statusPane.DrawString(0, 0, string(result))
+	case Num:
+		editorPane, statusPane := screenPane.SplitY(-1)
+		app.editor.Render(editorPane)
+		statusPane.DrawString(0, 0, fmt.Sprintf("%g", result))
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)
@@ -395,6 +411,11 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 func setDefaults(vm *VM) {
 	vm.SetVal(":sr", flags.SampleRate)
 	vm.SetVal(":bpm", flags.BPM)
+
+	beatsPerSecond := flags.BPM / 60.0
+	framesPerBeat := float64(flags.SampleRate) / beatsPerSecond
+	vm.SetVal(":nf", int(framesPerBeat))
+
 	vm.SetVal(":freq", 440)
 	vm.SetVal(":phase", 0)
 	vm.SetVal(":width", 0.5)
@@ -438,6 +459,10 @@ func main() {
 		os.Exit(1)
 	}
 	setDefaults(vm)
+	err = vm.ParseAndExecute(strings.NewReader(prelude), "<prelude>")
+	if err != nil {
+		slog.Error("error while parsing the prelude", "err", err)
+	}
 	err = runWithArgs(vm, flag.Args())
 	if err != nil {
 		slog.Error("vm error", "err", err)

@@ -404,7 +404,7 @@ func (tp TilePane) WithBg(bg Color, fn func()) {
 }
 
 func (tp TilePane) WithFgBg(fg, bg Color, fn func()) {
-	defer tp.SetFg(tp.ts.bgColor)
+	defer tp.SetFg(tp.ts.fgColor)
 	defer tp.SetBg(tp.ts.bgColor)
 	tp.SetFg(fg)
 	tp.SetBg(bg)

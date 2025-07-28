@@ -337,6 +337,17 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("swap", func(vm *VM) error {
+		stackSize := len(vm.valStack)
+		if stackSize < 2 {
+			return fmt.Errorf("swap: stack underflow")
+		}
+		top := vm.valStack[stackSize-1]
+		vm.valStack[stackSize-1] = vm.valStack[stackSize-2]
+		vm.valStack[stackSize-2] = top
+		return nil
+	})
+
 	RegisterWord("ps", func(vm *VM) error {
 		fmt.Printf("%s\n", vm.valStack)
 		return nil
