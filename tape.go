@@ -328,13 +328,11 @@ func loadAndPushTape(vm *VM, path string) error {
 		if err != nil {
 			return err
 		}
-		if vm.StackSize() > 0 {
-			val := vm.TopVal()
-			if tape, ok := val.(*Tape); ok {
-				err := tape.WriteToWav(wavPath)
-				if err != nil {
-					return err
-				}
+		val := vm.TopVal()
+		if tape, ok := val.(*Tape); ok {
+			err := tape.WriteToWav(wavPath)
+			if err != nil {
+				return err
 			}
 		}
 	case ".wav":
