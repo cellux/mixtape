@@ -87,8 +87,8 @@ func (app *App) Init() error {
 	}))
 	app.globalKeyMap = &globalKeyMap
 	editorKeyMap := CreateKeyMap()
-	editorKeyMap.Bind("Escape", CreateKeyHandler(app.editor.ResetState))
-	editorKeyMap.Bind("C-g", CreateKeyHandler(app.editor.ResetState))
+	editorKeyMap.Bind("Escape", CreateKeyHandler(app.Reset))
+	editorKeyMap.Bind("C-g", CreateKeyHandler(app.Reset))
 	editorKeyMap.Bind("Enter", CreateKeyHandler(func() {
 		DispatchAction(func() UndoFunc {
 			app.editor.SplitLine()
@@ -360,8 +360,17 @@ func (app *App) Update() error {
 	return nil
 }
 
+func (app *App) Reset() {
+	if app.tapePlayer != nil {
+		app.tapePlayer.Close()
+		app.tapePlayer = nil
+	}
+	app.editor.ResetState()
+}
+
 func (app *App) Close() error {
 	slog.Debug("Close")
+	app.Reset()
 	app.ts.Close()
 	app.tm.Close()
 	app.editor.Close()
