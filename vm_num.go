@@ -104,26 +104,15 @@ func (n Num) String() string {
 	return fmt.Sprintf("%g", n)
 }
 
-func (n Num) GetSampleIterator() SampleIterator {
-	return func() Smp {
-		return Smp(n)
-	}
-}
-
-func (n Num) NChannels() int {
-	return 1
-}
-
-type NumFrameReader struct {
-	s []Smp
-}
-
-func (n Num) GetFrameReader() FrameReader {
-	s := make([]Smp, 1)
-	s[0] = Smp(n)
-	return NumFrameReader{s}
-}
-
-func (reader NumFrameReader) ReadFrame() []Smp {
-	return reader.s
+func (n Num) Stream() Stream {
+	return makeStream(1,
+		func(yield func(Frame) bool) {
+			out := make([]Smp, 1)
+			out[0] = Smp(n)
+			for {
+				if !yield(out) {
+					return
+				}
+			}
+		})
 }

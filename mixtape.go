@@ -5,10 +5,12 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
+
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 //go:embed prelude.tape
@@ -21,6 +23,10 @@ var flags struct {
 	EvalScript string
 }
 
+func SampleRate() int {
+	return flags.SampleRate
+}
+
 type App struct {
 	vm            *VM
 	openFiles     map[string]string
@@ -30,6 +36,7 @@ type App struct {
 	tm            *TileMap
 	ts            *TileScreen
 	editor        *Editor
+	lastScript    []byte
 	result        Val
 	tapeDisplay   *TapeDisplay
 	tapePlayer    *OtoPlayer
@@ -40,7 +47,7 @@ type App struct {
 
 func (app *App) Init() error {
 	slog.Debug("Init")
-	err := InitOtoContext(flags.SampleRate)
+	err := InitOtoContext(SampleRate())
 	if err != nil {
 		return err
 	}
@@ -78,8 +85,30 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
+	executeEditorScriptIfChanged := func() {
+		editorScript := app.editor.GetBytes()
+		if slices.Compare(editorScript, app.lastScript) == 0 {
+			return
+		}
+		vm := app.vm
+		vm.Reset()
+		vm.PushEnv()
+		tapePath := "<temp-tape>"
+		if app.currentFile != "" {
+			tapePath = app.currentFile
+		}
+		app.lastScript = app.editor.GetBytes()
+		err := vm.ParseAndExecute(bytes.NewReader(app.lastScript), tapePath)
+		if err != nil {
+			slog.Error("parse error", "err", err)
+			app.result = err
+		} else {
+			app.result = vm.PopVal()
+		}
+	}
 	globalKeyMap := CreateKeyMap()
 	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
+		executeEditorScriptIfChanged()
 		if tape, ok := app.result.(*Tape); ok {
 			if app.tapePlayer != nil {
 				app.tapePlayer.Close()
@@ -153,20 +182,7 @@ func (app *App) Init() error {
 	editorKeyMap.Bind("End", CreateKeyHandler(app.editor.MoveToEOL))
 	editorKeyMap.Bind("Tab", CreateKeyHandler(app.editor.InsertSpacesUntilNextTabStop))
 	editorKeyMap.Bind("C-Enter", CreateKeyHandler(func() {
-		vm := app.vm
-		vm.Reset()
-		vm.PushEnv()
-		tapePath := "<temp-tape>"
-		if app.currentFile != "" {
-			tapePath = app.currentFile
-		}
-		err := vm.ParseAndExecute(bytes.NewReader(app.editor.GetBytes()), tapePath)
-		if err != nil {
-			slog.Error("parse error", "err", err)
-			app.result = err
-		} else {
-			app.result = vm.PopVal()
-		}
+		executeEditorScriptIfChanged()
 	}))
 	editorKeyMap.Bind("C-z", CreateKeyHandler(UndoLastAction))
 	editorKeyMap.Bind("C-q", CreateKeyHandler(app.Quit))
@@ -366,7 +382,9 @@ func (app *App) Render() error {
 		app.editor.Render(editorPane)
 		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0)
 	default:
-		app.editor.Render(screenPane)
+		editorPane, statusPane := screenPane.SplitY(-1)
+		app.editor.Render(editorPane)
+		statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
 	}
 	ts.Render()
 	return nil
@@ -409,11 +427,10 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 }
 
 func setDefaults(vm *VM) {
-	vm.SetVal(":sr", flags.SampleRate)
 	vm.SetVal(":bpm", flags.BPM)
 
 	beatsPerSecond := flags.BPM / 60.0
-	framesPerBeat := float64(flags.SampleRate) / beatsPerSecond
+	framesPerBeat := float64(SampleRate()) / beatsPerSecond
 	vm.SetVal(":nf", int(framesPerBeat))
 
 	vm.SetVal(":freq", 440)

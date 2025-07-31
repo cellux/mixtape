@@ -43,8 +43,9 @@ stack len 0 = assert
 
 # defaults
 
+sr 48000 = assert
+
 :bpm 120 = assert
-:sr 48000 = assert
 :freq 440 = assert
 :phase 0 = assert
 :width 0.5 = assert
@@ -74,15 +75,16 @@ stack len 0 = assert
 
 1 beats 24000 = assert
 
+( 2 >:freq 1 periods ) 24000 = assert
+( 10 >:freq 2 periods ) 48000 10 / 2 * = assert
+
 1s 1 seconds = assert
 1b 1 beats = assert
+1p 1 periods = assert
 
 1/4s 1 seconds 4 / = assert
 1/4b 1 beats 4 / = assert
-
-( 60 >:bpm 44100 >:sr 1 beats 44100 = assert )
-( 60 >:bpm 48000 >:sr 1 beats 48000 = assert )
-( 120 >:bpm 44100 >:sr 1 beats 22050 = assert )
+1/4p 1 periods 4 / = assert
 
 # utilities
 

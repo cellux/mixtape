@@ -3,23 +3,31 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 )
 
 type Str string
 
+var floatRegex = regexp.MustCompile(`^[0-9_eE./+-]+`)
+
 func scanFloat(text string) (float64, error) {
 	var f float64
-	_, err := fmt.Sscanf(text, "%g", &f)
+	match := floatRegex.FindString(text)
+	if match == "" {
+		return 0, fmt.Errorf("cannot parse float: %s", text)
+	}
+	_, err := fmt.Sscanf(match, "%g", &f)
 	if err == nil {
 		var nominator, denominator int
-		_, err = fmt.Sscanf(text, "%d/%d", &nominator, &denominator)
+		_, err = fmt.Sscanf(match, "%d/%d", &nominator, &denominator)
 		if err == nil {
 			return float64(nominator) / float64(denominator), nil
 		} else {
 			return f, nil
 		}
+	} else {
+		return 0, fmt.Errorf("cannot parse float: %s", text)
 	}
-	return 0, fmt.Errorf("cannot parse float: %s", text)
 }
 
 func init() {
