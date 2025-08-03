@@ -112,7 +112,7 @@ func init() {
 		return nil
 	})
 
-	RegisterMethod[*Tape]("|", 2, func(vm *VM) error {
+	RegisterMethod[*Tape]("join", 2, func(vm *VM) error {
 		rhs := Pop[*Tape](vm)
 		lhs := Pop[*Tape](vm)
 		if lhs.nchannels != rhs.nchannels {

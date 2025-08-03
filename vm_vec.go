@@ -29,8 +29,21 @@ func (v Vec) Equal(other Val) bool {
 
 func init() {
 	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
-		arg := Pop[Vec](vm)
-		vm.PushVal(len(arg))
+		v := Pop[Vec](vm)
+		vm.PushVal(len(v))
+		return nil
+	})
+	RegisterMethod[Vec]("join", 1, func(vm *VM) error {
+		v := Pop[Vec](vm)
+		if len(v) <= 1 {
+			vm.PushVal(v)
+			return nil
+		}
+		vm.PushVal(v[0])
+		for i := 1; i < len(v); i++ {
+			vm.PushVal(v[i])
+			vm.Execute(Sym("join"))
+		}
 		return nil
 	})
 }
