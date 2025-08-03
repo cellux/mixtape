@@ -7,21 +7,16 @@ import (
 
 type Num float64
 
+func (n Num) Equal(other Val) bool {
+	switch rhs := other.(type) {
+	case Num:
+		return n == rhs
+	default:
+		return false
+	}
+}
+
 func init() {
-	RegisterMethod[Num]("=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs == rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("!=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs != rhs)
-		return nil
-	})
-
 	RegisterMethod[Num]("not", 1, func(vm *VM) error {
 		arg := Pop[Num](vm)
 		vm.PushVal(arg == 0)

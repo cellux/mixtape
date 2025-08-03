@@ -42,6 +42,17 @@ func AsVal(x any) Val {
 	}
 }
 
+type Equaler interface {
+	Equal(other Val) bool
+}
+
+func Equal(lhs, rhs Val) bool {
+	if l, ok := lhs.(Equaler); ok {
+		return l.Equal(rhs)
+	}
+	return false
+}
+
 var rootEnv = make(Map)
 
 func RegisterNum(name string, num Num) {
@@ -155,6 +166,43 @@ func (vm *VM) Over() error {
 	}
 	vm.PushVal(vm.valStack[stackSize-2])
 	return nil
+}
+
+var _mark = new(struct{})
+
+func (vm *VM) Mark() error {
+	vm.PushVal(_mark)
+	return nil
+}
+
+func (vm *VM) Collect() error {
+	stackSize := len(vm.valStack)
+	if stackSize == 0 {
+		return fmt.Errorf("collect: empty stack")
+	}
+	for i := stackSize - 1; i >= 0; i-- {
+		if vm.valStack[i] == _mark {
+			result := make(Vec, stackSize-(i+1))
+			copy(result, vm.valStack[i+1:])
+			vm.valStack[i] = result
+			vm.valStack = vm.valStack[:i+1]
+			return nil
+		}
+	}
+	return fmt.Errorf("collect: mark not found")
+}
+
+func (vm *VM) Do() error {
+	word := vm.PopVal()
+	return vm.Execute(word)
+}
+
+func (vm *VM) Dispatch(name string) error {
+	method := vm.FindMethod(name)
+	if method != nil {
+		return method(vm)
+	}
+	return fmt.Errorf("method not found: %s", name)
 }
 
 func (vm *VM) TopEnv() Map {
@@ -370,6 +418,30 @@ func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
 }
 
 func init() {
+	RegisterWord("=", func(vm *VM) error {
+		stacksize := len(vm.valStack)
+		if stacksize < 2 {
+			return fmt.Errorf("=: stack underflow")
+		}
+		rhs := vm.PopVal()
+		lhs := vm.PopVal()
+		vm.PushVal(Equal(lhs, rhs))
+		return nil
+	})
+
+	RegisterWord("!=", func(vm *VM) error {
+		if err := vm.Execute(Sym("=")); err != nil {
+			return err
+		}
+		result := Pop[Num](vm)
+		if result == True {
+			vm.PushVal(False)
+		} else {
+			vm.PushVal(True)
+		}
+		return nil
+	})
+
 	RegisterWord("stack", func(vm *VM) error {
 		vm.PushVal(vm.valStack)
 		return nil
@@ -420,18 +492,21 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("mark", func(vm *VM) error {
+		return vm.Mark()
+	})
+
+	RegisterWord("collect", func(vm *VM) error {
+		return vm.Collect()
+	})
+
 	RegisterWord("do", func(vm *VM) error {
-		word := vm.PopVal()
-		return vm.Execute(word)
+		return vm.Do()
 	})
 
 	RegisterWord("dispatch", func(vm *VM) error {
 		name := string(Pop[Str](vm))
-		method := vm.FindMethod(name)
-		if method != nil {
-			return method(vm)
-		}
-		return fmt.Errorf("method not found: %s", name)
+		return vm.Dispatch(name)
 	})
 
 	RegisterWord("[", func(vm *VM) error {

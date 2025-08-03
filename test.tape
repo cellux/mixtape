@@ -32,6 +32,10 @@ stack len 0 = assert
 ## ratios
 1/4 0.25 = assert
 
+# strings
+
+"foo" "foo" = assert
+
 # vectors
 
 [1 2 3] len 3 = assert
@@ -40,6 +44,9 @@ stack len 0 = assert
 
 [ 2 + 3 * ] >test-op
 5 test-op 21 = assert
+
+[1 2 3] [1 2 3] = assert
+mark 1 2 3 collect [1 2 3] = assert
 
 # defaults
 

@@ -8,6 +8,15 @@ import (
 
 type Str string
 
+func (s Str) Equal(other Val) bool {
+	switch rhs := other.(type) {
+	case Str:
+		return s == rhs
+	default:
+		return false
+	}
+}
+
 var floatRegex = regexp.MustCompile(`^[0-9_eE./+-]+`)
 
 func scanFloat(text string) (float64, error) {
@@ -38,13 +47,6 @@ func init() {
 			return err
 		}
 		vm.PushVal(f)
-		return nil
-	})
-
-	RegisterMethod[Str]("=", 2, func(vm *VM) error {
-		rhs := Pop[Str](vm)
-		lhs := Pop[Str](vm)
-		vm.PushVal(lhs == rhs)
 		return nil
 	})
 
