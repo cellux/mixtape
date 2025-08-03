@@ -139,6 +139,25 @@ func Top[T Val](vm *VM) T {
 	}
 }
 
+func (vm *VM) Drop() error {
+	stackSize := len(vm.valStack)
+	if stackSize == 0 {
+		return fmt.Errorf("drop: stack underflow")
+	}
+	vm.PopVal()
+	return nil
+}
+
+func (vm *VM) Nip() error {
+	stackSize := len(vm.valStack)
+	if stackSize < 2 {
+		return fmt.Errorf("nip: stack underflow")
+	}
+	vm.valStack[stackSize-2] = vm.valStack[stackSize-1]
+	vm.valStack = vm.valStack[:stackSize-1]
+	return nil
+}
+
 func (vm *VM) Dup() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
@@ -452,12 +471,24 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("drop", func(vm *VM) error {
+		return vm.Drop()
+	})
+
+	RegisterWord("nip", func(vm *VM) error {
+		return vm.Nip()
+	})
+
 	RegisterWord("dup", func(vm *VM) error {
 		return vm.Dup()
 	})
 
 	RegisterWord("swap", func(vm *VM) error {
 		return vm.Swap()
+	})
+
+	RegisterWord("over", func(vm *VM) error {
+		return vm.Over()
 	})
 
 	RegisterWord("ps", func(vm *VM) error {

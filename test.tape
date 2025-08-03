@@ -36,6 +36,9 @@ stack len 0 = assert
 
 "foo" "foo" = assert
 
+42 str "42" = assert
+"42" num 42 = assert
+
 # vectors
 
 [1 2 3] len 3 = assert
@@ -70,11 +73,6 @@ sr 48000 = assert
 ( 100 "foo" set foo 100 = assert )
 ( 100 >foo "foo" get 100 = assert )
 
-# conversions
-
-42 str "42" = assert
-"42" num 42 = assert
-
 # seconds and beats
 
 1 seconds 48000 = assert
@@ -95,7 +93,11 @@ sr 48000 = assert
 
 # utilities
 
+3 4 5 drop + 7 = assert
 5 dup * 25 = assert
+2 9 swap - 7 = assert
+2 9 over - 7 = assert 2 = assert
+2 9 7 nip * 14 = assert
 
 # stack is empty at end
 stack len 0 = assert
