@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 )
 
 type Num float64
@@ -28,41 +27,6 @@ func init() {
 		if n == False {
 			return fmt.Errorf("assertion failed")
 		}
-		return nil
-	})
-
-	RegisterMethod[Num]("+", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs + rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("-", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs - rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("*", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs * rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("/", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(lhs / rhs)
-		return nil
-	})
-
-	RegisterMethod[Num]("%", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
-		vm.PushVal(math.Mod(float64(lhs), float64(rhs)))
 		return nil
 	})
 

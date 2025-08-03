@@ -215,7 +215,20 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 	if !ok {
 		return fmt.Errorf("object of type %T does not implement Streamable", top)
 	}
-	vm.PushVal(lhs.Stream().Combine(rhs.Stream(), op))
+	if n1, n1ok := lhs.(Num); n1ok {
+		if n2, n2ok := rhs.(Num); n2ok {
+			vm.PushVal(op(Smp(n1), Smp(n2)))
+			return nil
+		}
+	}
+	result := lhs.Stream().Combine(rhs.Stream(), op)
+	if t, ok := lhs.(*Tape); ok {
+		vm.PushVal(result.Take(t.nframes))
+	} else if t, ok := rhs.(*Tape); ok {
+		vm.PushVal(result.Take(t.nframes))
+	} else {
+		vm.PushVal(result)
+	}
 	return nil
 }
 
@@ -269,19 +282,23 @@ func init() {
 		return nil
 	})
 
-	RegisterMethod[Stream]("+", 2, func(vm *VM) error {
+	RegisterWord("+", func(vm *VM) error {
 		return applySmpBinOp(vm, func(x, y Smp) Smp { return x + y })
 	})
 
-	RegisterMethod[Stream]("-", 2, func(vm *VM) error {
+	RegisterWord("-", func(vm *VM) error {
 		return applySmpBinOp(vm, func(x, y Smp) Smp { return x - y })
 	})
 
-	RegisterMethod[Stream]("*", 2, func(vm *VM) error {
+	RegisterWord("*", func(vm *VM) error {
 		return applySmpBinOp(vm, func(x, y Smp) Smp { return x * y })
 	})
 
-	RegisterMethod[Stream]("/", 2, func(vm *VM) error {
+	RegisterWord("/", func(vm *VM) error {
 		return applySmpBinOp(vm, func(x, y Smp) Smp { return x / y })
+	})
+
+	RegisterWord("%", func(vm *VM) error {
+		return applySmpBinOp(vm, func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) })
 	})
 }
