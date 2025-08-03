@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -378,7 +377,7 @@ func (app *App) Render() error {
 	case Num:
 		editorPane, statusPane := screenPane.SplitY(-1)
 		app.editor.Render(editorPane)
-		statusPane.DrawString(0, 0, strconv.FormatFloat(float64(result), 'f', -1, 64))
+		statusPane.DrawString(0, 0, formatFloat(float64(result)))
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)

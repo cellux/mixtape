@@ -2,10 +2,37 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 )
 
 type Num float64
+
+func formatFloat(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+var floatRegex = regexp.MustCompile(`^[0-9_eE./+-]+`)
+
+func scanFloat(text string) (float64, error) {
+	var f float64
+	match := floatRegex.FindString(text)
+	if match == "" {
+		return 0, fmt.Errorf("cannot parse float: %s", text)
+	}
+	_, err := fmt.Sscanf(match, "%g", &f)
+	if err == nil {
+		var nominator, denominator int
+		_, err = fmt.Sscanf(match, "%d/%d", &nominator, &denominator)
+		if err == nil {
+			return float64(nominator) / float64(denominator), nil
+		} else {
+			return f, nil
+		}
+	} else {
+		return 0, fmt.Errorf("cannot parse float: %s", text)
+	}
+}
 
 func (n Num) Execute(vm *VM) error {
 	vm.Push(n)
@@ -66,7 +93,7 @@ func init() {
 }
 
 func (n Num) String() string {
-	return strconv.FormatFloat(float64(n), 'f', -1, 64)
+	return formatFloat(float64(n))
 }
 
 func (n Num) Stream() Stream {

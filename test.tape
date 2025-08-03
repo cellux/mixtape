@@ -46,7 +46,7 @@ false 0 = assert
 "foo" "foo" = assert
 
 42 str "42" = assert
-"42" num 42 = assert
+"42" parse1 42 = assert
 
 # vectors
 
