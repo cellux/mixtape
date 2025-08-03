@@ -144,17 +144,27 @@ func init() {
 		return nil
 	})
 
-	RegisterMethod[*Tape]("stretch", 2, func(vm *VM) error {
+	RegisterNum("SRC_SINC_BEST_QUALITY", 0)
+	RegisterNum("SRC_SINC_MEDIUM_QUALITY", 1)
+	RegisterNum("SRC_SINC_FASTEST", 2)
+	RegisterNum("SRC_ZERO_ORDER_HOLD", 3)
+	RegisterNum("SRC_LINEAR", 4)
+
+	RegisterMethod[*Tape]("resample", 3, func(vm *VM) error {
 		ratio := float64(Pop[Num](vm))
 		if ratio <= 0 {
-			return fmt.Errorf("stretch: negative ratio: %g", ratio)
+			return fmt.Errorf("resample: invalid ratio: %g", ratio)
+		}
+		converterType := int(Pop[Num](vm))
+		if converterType < 0 || converterType > 4 {
+			return fmt.Errorf("resample: invalid converterType: %d - must be between 0..4", converterType)
 		}
 		t := Pop[*Tape](vm)
 		tempBuf := make([]float32, t.nframes*t.nchannels)
 		for i, smp := range t.samples {
 			tempBuf[i] = float32(smp)
 		}
-		resampledBuf, err := gosamplerate.Simple(tempBuf, ratio, t.nchannels, gosamplerate.SRC_LINEAR)
+		resampledBuf, err := gosamplerate.Simple(tempBuf, ratio, t.nchannels, converterType)
 		if err != nil {
 			return err
 		}
