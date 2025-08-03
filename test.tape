@@ -15,7 +15,7 @@ false 0 = assert
 
 # numbers (Num)
 
-"1234 4321.5 *" parse [1234 4321.5 *] = assert
+"1234 4321.5 *" parse {1234 4321.5 *} = assert
 
 ## equality
 3 3 = assert
@@ -51,28 +51,25 @@ false 0 = assert
 # vectors
 
 [1 2 3] [1 2 3] = assert
-mark 1 2 3 collect [1 2 3] = assert
-
 [1 2 3] len 3 = assert
 
-5 [ 2 + 3 * ] do 21 = assert
+[ 5 2 + 3 * 5 ] [21 5] = assert
+5 { 2 + 3 * } do 21 = assert
 
-[2 3 4] [1 +] map [3 4 5] = assert
+[2 3 4] {1 +} map [3 4 5] = assert
 
-[2 3 4] [+] reduce 9 = assert
-[2 3 4] [*] reduce 24 = assert
+[2 3 4] {+} reduce 9 = assert
+[2 3 4] {*} reduce 24 = assert
 
 [2 3 4] + 9 = assert
 [2 3 4] * 24 = assert
 
-[[1 2 3]] len 5 = assert
-[[1 2 3]] do [1 2 3] = assert
+{[1 2 3]} len 5 = assert
+{[1 2 3]} do [1 2 3] = assert
 
-[[1 2 3] [2 3 4]] len 10 = assert
+{[[1 2 3] [2 3 4]]} do len 2 = assert
 
-mark [[1 2 3] [2 3 4]] do collect len 2 = assert
-
-[ 2 + 3 * ] >test-op
+{ 2 + 3 * } >test-op
 5 test-op 21 = assert
 
 # defaults

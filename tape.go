@@ -81,16 +81,6 @@ func (t *Tape) WriteToWav(path string) error {
 	return nil
 }
 
-func clamp(value float64, lo float64, hi float64) float64 {
-	if value < lo {
-		return lo
-	}
-	if value > hi {
-		return hi
-	}
-	return value
-}
-
 func init() {
 	RegisterMethod[*Tape]("len", 1, func(vm *VM) error {
 		t := Pop[*Tape](vm)

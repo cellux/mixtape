@@ -220,14 +220,6 @@ func (vm *VM) DoDo() error {
 	return vm.Execute(val)
 }
 
-func (vm *VM) Dispatch(name string) error {
-	method := vm.FindMethod(name)
-	if method != nil {
-		return method(vm)
-	}
-	return fmt.Errorf("method not found: %s", name)
-}
-
 func (vm *VM) TopEnv() Map {
 	return vm.envStack[len(vm.envStack)-1]
 }
@@ -356,8 +348,6 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 						} else {
 							code = append(code, Str(text[1:]), Sym("set"))
 						}
-					case '.':
-						code = append(code, Str(text[1:]), Sym("dispatch"))
 					default:
 						code = append(code, Sym(text))
 					}
@@ -389,10 +379,10 @@ func (vm *VM) FindMethod(name string) Fun {
 
 func (vm *VM) Execute(val Val) error {
 	if vm.IsCompiling() {
-		if val == Sym("[") {
+		if val == Sym("{") {
 			vm.compileLevel++
 			vm.compileBuffer = append(vm.compileBuffer, val)
-		} else if val == Sym("]") {
+		} else if val == Sym("}") {
 			vm.compileLevel--
 			if vm.compileLevel > 0 {
 				vm.compileBuffer = append(vm.compileBuffer, val)

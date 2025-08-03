@@ -5,6 +5,11 @@ import (
 )
 
 func init() {
+	RegisterWord("sr", func(vm *VM) error {
+		vm.Push(SampleRate())
+		return nil
+	})
+
 	RegisterWord("=", func(vm *VM) error {
 		stacksize := len(vm.valStack)
 		if stacksize < 2 {
@@ -21,11 +26,7 @@ func init() {
 			return err
 		}
 		result := Pop[Num](vm)
-		if result == True {
-			vm.Push(False)
-		} else {
-			vm.Push(True)
-		}
+		vm.Push(result == 0)
 		return nil
 	})
 
@@ -67,6 +68,20 @@ func init() {
 		return vm.DoPopEnv()
 	})
 
+	RegisterWord("[", func(vm *VM) error {
+		return vm.DoMark()
+	})
+
+	RegisterWord("]", func(vm *VM) error {
+		return vm.DoCollect()
+	})
+
+	RegisterWord("{", func(vm *VM) error {
+		vm.compileBuffer = make(Vec, 0, 64)
+		vm.compileLevel = 1
+		return nil
+	})
+
 	RegisterWord("set", func(vm *VM) error {
 		k := vm.Pop()
 		v := vm.Pop()
@@ -81,31 +96,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("mark", func(vm *VM) error {
-		return vm.DoMark()
-	})
-
-	RegisterWord("collect", func(vm *VM) error {
-		return vm.DoCollect()
-	})
-
 	RegisterWord("do", func(vm *VM) error {
 		return vm.DoDo()
-	})
-
-	RegisterWord("dispatch", func(vm *VM) error {
-		name := string(Pop[Str](vm))
-		return vm.Dispatch(name)
-	})
-
-	RegisterWord("[", func(vm *VM) error {
-		vm.compileBuffer = make(Vec, 0, 64)
-		vm.compileLevel = 1
-		return nil
-	})
-
-	RegisterWord("sr", func(vm *VM) error {
-		vm.Push(SampleRate())
-		return nil
 	})
 }
