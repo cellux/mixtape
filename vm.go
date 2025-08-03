@@ -338,6 +338,8 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 					code = append(code, Num(f), Sym("seconds"))
 				case 'p':
 					code = append(code, Num(f), Sym("periods"))
+				case 'f':
+					code = append(code, Num(f), Str(":freq"), Sym("set"))
 				default:
 					code = append(code, Num(f))
 				}

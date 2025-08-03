@@ -83,6 +83,8 @@ sr 48000 = assert
 ( 2 >:freq 1 periods ) 24000 = assert
 ( 10 >:freq 2 periods ) 48000 10 / 2 * = assert
 
+( 413f :freq ) 413 = assert
+
 1s 1 seconds = assert
 1b 1 beats = assert
 1p 1 periods = assert
