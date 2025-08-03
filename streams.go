@@ -31,9 +31,9 @@ func SinOp() SmpUnOp {
 func PulseOp(width float64) SmpUnOp {
 	return func(phase Smp) Smp {
 		if phase < width {
-			return -1.0
-		} else {
 			return 1.0
+		} else {
+			return -1.0
 		}
 	}
 }
@@ -58,22 +58,6 @@ func SawOp() SmpUnOp {
 			return -1.0 + (phase-0.5)*2.0
 		}
 	}
-}
-
-func Line(nframes int, start, end Smp) Stream {
-	return makeStream(1,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, 1)
-			val := start
-			incr := (end - start) / Smp(nframes)
-			for range nframes {
-				out[0] = val
-				if !yield(out) {
-					return
-				}
-				val += incr
-			}
-		})
 }
 
 func Phasor(freq Stream, op SmpUnOp) Stream {
@@ -205,80 +189,80 @@ func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 }
 
 func applySmpBinOp(vm *VM, op SmpBinOp) error {
-	top := vm.PopVal()
+	top := vm.Pop()
 	rhs, ok := top.(Streamable)
 	if !ok {
 		return fmt.Errorf("object of type %T does not implement Streamable", top)
 	}
-	top = vm.PopVal()
+	top = vm.Pop()
 	lhs, ok := top.(Streamable)
 	if !ok {
 		return fmt.Errorf("object of type %T does not implement Streamable", top)
 	}
 	if n1, n1ok := lhs.(Num); n1ok {
 		if n2, n2ok := rhs.(Num); n2ok {
-			vm.PushVal(op(Smp(n1), Smp(n2)))
+			vm.Push(op(Smp(n1), Smp(n2)))
 			return nil
 		}
 	}
 	result := lhs.Stream().Combine(rhs.Stream(), op)
 	if t, ok := lhs.(*Tape); ok {
-		vm.PushVal(result.Take(t.nframes))
+		vm.Push(result.Take(t.nframes))
 	} else if t, ok := rhs.(*Tape); ok {
-		vm.PushVal(result.Take(t.nframes))
+		vm.Push(result.Take(t.nframes))
 	} else {
-		vm.PushVal(result)
+		vm.Push(result)
 	}
 	return nil
 }
 
 func init() {
 	RegisterWord("~", func(vm *VM) error {
-		top := vm.PopVal()
+		top := vm.Pop()
 		streamable, ok := top.(Streamable)
 		if !ok {
 			return fmt.Errorf("object of type %T does not implement Streamable", top)
 		}
-		vm.PushVal(streamable.Stream())
+		vm.Push(streamable.Stream())
 		return nil
 	})
 
 	RegisterWord("sin~", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
-		vm.PushVal(Phasor(freq, SinOp()))
+		vm.Push(Phasor(freq, SinOp()))
 		return nil
 	})
 
 	RegisterWord("saw~", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
-		vm.PushVal(Phasor(freq, SawOp()))
+		vm.Push(Phasor(freq, SawOp()))
 		return nil
 	})
 
 	RegisterWord("triangle~", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
-		vm.PushVal(Phasor(freq, TriangleOp()))
+		vm.Push(Phasor(freq, TriangleOp()))
 		return nil
 	})
 
 	RegisterWord("pulse~", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
 		width := vm.GetFloat(":width")
-		vm.PushVal(Phasor(freq, PulseOp(width)))
+		vm.Push(Phasor(freq, PulseOp(width)))
 		return nil
 	})
 
 	RegisterWord("take", func(vm *VM) error {
 		nf := int(Pop[Num](vm))
 		s := Pop[Stream](vm)
-		vm.PushVal(s.Take(nf))
+		vm.Push(s.Take(nf))
 		return nil
 	})
 
 	RegisterWord("delay", func(vm *VM) error {
 		nf := int(Pop[Num](vm))
 		s := Pop[Stream](vm)
-		vm.PushVal(s.Delay(nf))
+		vm.Push(s.Delay(nf))
 		return nil
 	})
 

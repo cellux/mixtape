@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 type Str string
+
+func (s Str) Execute(vm *VM) error {
+	vm.Push(s)
+	return nil
+}
 
 func (s Str) Equal(other Val) bool {
 	switch rhs := other.(type) {
@@ -46,14 +52,24 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.PushVal(f)
+		vm.Push(f)
 		return nil
 	})
 
 	RegisterMethod[Str]("path/join", 2, func(vm *VM) error {
 		rhs := Pop[Str](vm)
 		lhs := Pop[Str](vm)
-		vm.PushVal(filepath.Join(string(lhs), string(rhs)))
+		vm.Push(filepath.Join(string(lhs), string(rhs)))
+		return nil
+	})
+
+	RegisterMethod[Str]("parse", 1, func(vm *VM) error {
+		arg := Pop[Str](vm)
+		code, err := vm.Parse(strings.NewReader(string(arg)), "<string>")
+		if err != nil {
+			return err
+		}
+		vm.Push(code)
 		return nil
 	})
 }

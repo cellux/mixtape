@@ -6,6 +6,10 @@ import (
 
 type Fun func(vm *VM) error
 
+func (f Fun) Execute(vm *VM) error {
+	return f(vm)
+}
+
 type Method struct {
 	nargs int
 	fun   Fun

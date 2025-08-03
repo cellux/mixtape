@@ -92,23 +92,9 @@ func clamp(value float64, lo float64, hi float64) float64 {
 }
 
 func init() {
-	RegisterMethod[*Tape]("nchannels", 1, func(vm *VM) error {
+	RegisterMethod[*Tape]("len", 1, func(vm *VM) error {
 		t := Pop[*Tape](vm)
-		vm.PushVal(t.nchannels)
-		return nil
-	})
-
-	RegisterMethod[*Tape]("nframes", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
-		vm.PushVal(t.nframes)
-		return nil
-	})
-
-	RegisterWord("line", func(vm *VM) error {
-		end := Smp(Pop[Num](vm))
-		start := Smp(Pop[Num](vm))
-		nf := vm.GetInt(":nf")
-		vm.PushVal(Line(nf, start, end).Take(nf))
+		vm.Push(t.nframes)
 		return nil
 	})
 
@@ -153,7 +139,7 @@ func init() {
 	RegisterMethod[*Tape]("resample", 3, func(vm *VM) error {
 		ratio := float64(Pop[Num](vm))
 		if ratio <= 0 {
-			return fmt.Errorf("resample: invalid ratio: %g", ratio)
+			return fmt.Errorf("resample: invalid ratio: %f", ratio)
 		}
 		converterType := int(Pop[Num](vm))
 		if converterType < 0 || converterType > 4 {
@@ -231,7 +217,7 @@ func loadAndPushTape(vm *VM, path string) error {
 		if err != nil {
 			return err
 		}
-		val := vm.TopVal()
+		val := vm.Top()
 		if tape, ok := val.(*Tape); ok {
 			err := tape.WriteToWav(wavPath)
 			if err != nil {
@@ -482,7 +468,7 @@ func init() {
 			nframes:   nframes,
 			samples:   t.samples[start*t.nchannels : end*t.nchannels],
 		}
-		vm.PushVal(slicedTape)
+		vm.Push(slicedTape)
 		return nil
 	})
 }
@@ -498,7 +484,7 @@ func makeTape(nchannels, nframes int) *Tape {
 
 func pushTape(vm *VM, nchannels, nframes int) *Tape {
 	tape := makeTape(nchannels, nframes)
-	vm.PushVal(tape)
+	vm.Push(tape)
 	return tape
 }
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -19,6 +20,7 @@ var prelude string
 var flags struct {
 	SampleRate int
 	BPM        float64
+	TPB        int
 	EvalFile   string
 	EvalScript string
 }
@@ -92,7 +94,7 @@ func (app *App) Init() error {
 		}
 		vm := app.vm
 		vm.Reset()
-		vm.PushEnv()
+		vm.DoPushEnv()
 		tapePath := "<temp-tape>"
 		if app.currentFile != "" {
 			tapePath = app.currentFile
@@ -103,7 +105,7 @@ func (app *App) Init() error {
 			slog.Error("parse error", "err", err)
 			app.result = err
 		} else {
-			app.result = vm.PopVal()
+			app.result = vm.Pop()
 		}
 	}
 	globalKeyMap := CreateKeyMap()
@@ -376,7 +378,7 @@ func (app *App) Render() error {
 	case Num:
 		editorPane, statusPane := screenPane.SplitY(-1)
 		app.editor.Render(editorPane)
-		statusPane.DrawString(0, 0, fmt.Sprintf("%g", result))
+		statusPane.DrawString(0, 0, strconv.FormatFloat(float64(result), 'f', -1, 64))
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)
@@ -428,6 +430,7 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 
 func setDefaults(vm *VM) {
 	vm.SetVal(":bpm", flags.BPM)
+	vm.SetVal(":tpb", flags.TPB)
 
 	beatsPerSecond := flags.BPM / 60.0
 	framesPerBeat := float64(SampleRate()) / beatsPerSecond
@@ -467,6 +470,7 @@ func main() {
 	var err error
 	flag.IntVar(&flags.SampleRate, "sr", 48000, "Sample rate")
 	flag.Float64Var(&flags.BPM, "bpm", 120, "Beats per minute")
+	flag.IntVar(&flags.TPB, "tpb", 96, "Ticks per beat")
 	flag.StringVar(&flags.EvalFile, "f", "", "File to evaluate")
 	flag.StringVar(&flags.EvalScript, "e", "", "Script to evaluate")
 	flag.Parse()

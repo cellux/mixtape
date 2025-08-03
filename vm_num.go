@@ -2,9 +2,15 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type Num float64
+
+func (n Num) Execute(vm *VM) error {
+	vm.Push(n)
+	return nil
+}
 
 func (n Num) Equal(other Val) bool {
 	switch rhs := other.(type) {
@@ -18,7 +24,7 @@ func (n Num) Equal(other Val) bool {
 func init() {
 	RegisterMethod[Num]("not", 1, func(vm *VM) error {
 		arg := Pop[Num](vm)
-		vm.PushVal(arg == 0)
+		vm.Push(arg == 0)
 		return nil
 	})
 
@@ -33,34 +39,34 @@ func init() {
 	RegisterMethod[Num]("<", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
-		vm.PushVal(lhs < rhs)
+		vm.Push(lhs < rhs)
 		return nil
 	})
 
 	RegisterMethod[Num]("<=", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
-		vm.PushVal(lhs <= rhs)
+		vm.Push(lhs <= rhs)
 		return nil
 	})
 
 	RegisterMethod[Num](">=", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
-		vm.PushVal(lhs >= rhs)
+		vm.Push(lhs >= rhs)
 		return nil
 	})
 
 	RegisterMethod[Num](">", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)
-		vm.PushVal(lhs > rhs)
+		vm.Push(lhs > rhs)
 		return nil
 	})
 }
 
 func (n Num) String() string {
-	return fmt.Sprintf("%g", n)
+	return strconv.FormatFloat(float64(n), 'f', -1, 64)
 }
 
 func (n Num) Stream() Stream {

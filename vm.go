@@ -53,6 +53,10 @@ func Equal(lhs, rhs Val) bool {
 	return false
 }
 
+type Executable interface {
+	Execute(vm *VM) error
+}
+
 var rootEnv = make(Map)
 
 func RegisterNum(name string, num Num) {
@@ -97,11 +101,11 @@ func (vm *VM) StackSize() int {
 	return len(vm.valStack)
 }
 
-func (vm *VM) PushVal(v any) {
+func (vm *VM) Push(v any) {
 	vm.valStack = append(vm.valStack, AsVal(v))
 }
 
-func (vm *VM) TopVal() Val {
+func (vm *VM) Top() Val {
 	stacksize := len(vm.valStack)
 	if stacksize == 0 {
 		return nil
@@ -109,7 +113,7 @@ func (vm *VM) TopVal() Val {
 	return vm.valStack[stacksize-1]
 }
 
-func (vm *VM) PopVal() Val {
+func (vm *VM) Pop() Val {
 	stacksize := len(vm.valStack)
 	if stacksize == 0 {
 		return nil
@@ -120,7 +124,7 @@ func (vm *VM) PopVal() Val {
 }
 
 func Pop[T Val](vm *VM) T {
-	val := vm.PopVal()
+	val := vm.Pop()
 	if value, ok := val.(T); ok {
 		return value
 	} else {
@@ -130,7 +134,7 @@ func Pop[T Val](vm *VM) T {
 }
 
 func Top[T Val](vm *VM) T {
-	top := vm.TopVal()
+	top := vm.Top()
 	if value, ok := top.(T); ok {
 		return value
 	} else {
@@ -139,16 +143,16 @@ func Top[T Val](vm *VM) T {
 	}
 }
 
-func (vm *VM) Drop() error {
+func (vm *VM) DoDrop() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
 		return fmt.Errorf("drop: stack underflow")
 	}
-	vm.PopVal()
+	vm.Pop()
 	return nil
 }
 
-func (vm *VM) Nip() error {
+func (vm *VM) DoNip() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
 		return fmt.Errorf("nip: stack underflow")
@@ -158,16 +162,16 @@ func (vm *VM) Nip() error {
 	return nil
 }
 
-func (vm *VM) Dup() error {
+func (vm *VM) DoDup() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
 		return fmt.Errorf("dup: stack underflow")
 	}
-	vm.PushVal(vm.TopVal())
+	vm.Push(vm.Top())
 	return nil
 }
 
-func (vm *VM) Swap() error {
+func (vm *VM) DoSwap() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
 		return fmt.Errorf("swap: stack underflow")
@@ -178,23 +182,23 @@ func (vm *VM) Swap() error {
 	return nil
 }
 
-func (vm *VM) Over() error {
+func (vm *VM) DoOver() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
 		return fmt.Errorf("over: stack underflow")
 	}
-	vm.PushVal(vm.valStack[stackSize-2])
+	vm.Push(vm.valStack[stackSize-2])
 	return nil
 }
 
 var _mark = new(struct{})
 
-func (vm *VM) Mark() error {
-	vm.PushVal(_mark)
+func (vm *VM) DoMark() error {
+	vm.Push(_mark)
 	return nil
 }
 
-func (vm *VM) Collect() error {
+func (vm *VM) DoCollect() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
 		return fmt.Errorf("collect: empty stack")
@@ -211,9 +215,9 @@ func (vm *VM) Collect() error {
 	return fmt.Errorf("collect: mark not found")
 }
 
-func (vm *VM) Do() error {
-	word := vm.PopVal()
-	return vm.Execute(word)
+func (vm *VM) DoDo() error {
+	val := vm.Pop()
+	return vm.Execute(val)
 }
 
 func (vm *VM) Dispatch(name string) error {
@@ -228,12 +232,12 @@ func (vm *VM) TopEnv() Map {
 	return vm.envStack[len(vm.envStack)-1]
 }
 
-func (vm *VM) PushEnv() error {
+func (vm *VM) DoPushEnv() error {
 	vm.envStack = append(vm.envStack, make(Map))
 	return nil
 }
 
-func (vm *VM) PopEnv() error {
+func (vm *VM) DoPopEnv() error {
 	stacksize := len(vm.envStack)
 	if stacksize == 1 {
 		return fmt.Errorf("attempt to pop root env")
@@ -334,12 +338,12 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				switch text[len(text)-1] {
 				case 'b':
 					code = append(code, Num(f), Sym("beats"))
-				case 's':
-					code = append(code, Num(f), Sym("seconds"))
 				case 'p':
 					code = append(code, Num(f), Sym("periods"))
-				case 'f':
-					code = append(code, Num(f), Str(":freq"), Sym("set"))
+				case 's':
+					code = append(code, Num(f), Sym("seconds"))
+				case 't':
+					code = append(code, Num(f), Sym("ticks"))
 				default:
 					code = append(code, Num(f))
 				}
@@ -393,7 +397,7 @@ func (vm *VM) Execute(val Val) error {
 			if vm.compileLevel > 0 {
 				vm.compileBuffer = append(vm.compileBuffer, val)
 			} else {
-				vm.PushVal(vm.compileBuffer)
+				vm.Push(vm.compileBuffer)
 				vm.compileBuffer = nil
 			}
 		} else {
@@ -401,33 +405,10 @@ func (vm *VM) Execute(val Val) error {
 		}
 		return nil
 	}
-	switch value := val.(type) {
-	case Fun:
-		return value(vm)
-	case Num, Str:
-		vm.PushVal(value)
-	case Sym:
-		name := string(value)
-		word := vm.GetVal(name)
-		if word != nil {
-			return vm.Execute(word)
-		}
-		method := vm.FindMethod(name)
-		if method != nil {
-			return method(vm)
-		}
-		return fmt.Errorf("word or method not found: %s", name)
-	case Vec:
-		for _, val := range value {
-			err := vm.Execute(val)
-			if err != nil {
-				return err
-			}
-		}
-	default:
-		log.Fatalf("don't know how to execute value of type %T", value)
+	if e, ok := val.(Executable); ok {
+		return e.Execute(vm)
 	}
-	return nil
+	return fmt.Errorf("don't know how to execute value of type %T", val)
 }
 
 func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
@@ -436,143 +417,4 @@ func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
 		return err
 	}
 	return vm.Execute(code)
-}
-
-func init() {
-	RegisterWord("=", func(vm *VM) error {
-		stacksize := len(vm.valStack)
-		if stacksize < 2 {
-			return fmt.Errorf("=: stack underflow")
-		}
-		rhs := vm.PopVal()
-		lhs := vm.PopVal()
-		vm.PushVal(Equal(lhs, rhs))
-		return nil
-	})
-
-	RegisterWord("!=", func(vm *VM) error {
-		if err := vm.Execute(Sym("=")); err != nil {
-			return err
-		}
-		result := Pop[Num](vm)
-		if result == True {
-			vm.PushVal(False)
-		} else {
-			vm.PushVal(True)
-		}
-		return nil
-	})
-
-	RegisterWord("stack", func(vm *VM) error {
-		vm.PushVal(vm.valStack)
-		return nil
-	})
-
-	RegisterWord("str", func(vm *VM) error {
-		vm.PushVal(fmt.Sprintf("%s", vm.PopVal()))
-		return nil
-	})
-
-	RegisterWord("drop", func(vm *VM) error {
-		return vm.Drop()
-	})
-
-	RegisterWord("nip", func(vm *VM) error {
-		return vm.Nip()
-	})
-
-	RegisterWord("dup", func(vm *VM) error {
-		return vm.Dup()
-	})
-
-	RegisterWord("swap", func(vm *VM) error {
-		return vm.Swap()
-	})
-
-	RegisterWord("over", func(vm *VM) error {
-		return vm.Over()
-	})
-
-	RegisterWord("ps", func(vm *VM) error {
-		fmt.Printf("%s\n", vm.valStack)
-		return nil
-	})
-
-	RegisterWord(".", func(vm *VM) error {
-		fmt.Printf("%s\n", vm.PopVal())
-		return nil
-	})
-
-	RegisterWord("(", func(vm *VM) error {
-		return vm.PushEnv()
-	})
-
-	RegisterWord(")", func(vm *VM) error {
-		return vm.PopEnv()
-	})
-
-	RegisterWord("set", func(vm *VM) error {
-		k := vm.PopVal()
-		v := vm.PopVal()
-		vm.SetVal(k, v)
-		return nil
-	})
-
-	RegisterWord("get", func(vm *VM) error {
-		k := vm.PopVal()
-		v := vm.GetVal(k)
-		vm.PushVal(v)
-		return nil
-	})
-
-	RegisterWord("mark", func(vm *VM) error {
-		return vm.Mark()
-	})
-
-	RegisterWord("collect", func(vm *VM) error {
-		return vm.Collect()
-	})
-
-	RegisterWord("do", func(vm *VM) error {
-		return vm.Do()
-	})
-
-	RegisterWord("dispatch", func(vm *VM) error {
-		name := string(Pop[Str](vm))
-		return vm.Dispatch(name)
-	})
-
-	RegisterWord("[", func(vm *VM) error {
-		vm.compileBuffer = make(Vec, 0, 64)
-		vm.compileLevel = 1
-		return nil
-	})
-
-	RegisterWord("sr", func(vm *VM) error {
-		vm.PushVal(SampleRate())
-		return nil
-	})
-
-	RegisterWord("seconds", func(vm *VM) error {
-		n := Pop[Num](vm)
-		vm.PushVal(n * Num(SampleRate()))
-		return nil
-	})
-
-	RegisterWord("beats", func(vm *VM) error {
-		n := Pop[Num](vm)
-		bpm := vm.GetNum(":bpm")
-		beatsPerSecond := bpm / 60.0
-		framesPerBeat := Num(SampleRate()) / beatsPerSecond
-		vm.PushVal(n * framesPerBeat)
-		return nil
-	})
-
-	RegisterWord("periods", func(vm *VM) error {
-		n := Pop[Num](vm)
-		freq := vm.GetNum(":freq")
-		framesPerPeriod := Num(SampleRate()) / freq
-		vm.PushVal(n * framesPerPeriod)
-		return nil
-	})
 }

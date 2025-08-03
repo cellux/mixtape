@@ -1,12 +1,21 @@
 # stack is empty at start
 stack len 0 = assert
 
-# numbers
+# truth:
+#
+# non-zero = true
+# zero     = false
 
-## truth values
 1 assert
 -1 assert
 0 not assert
+
+true -1 = assert
+false 0 = assert
+
+# numbers (Num)
+
+"1234 4321.5 *" parse [1234 4321.5 *] = assert
 
 ## equality
 3 3 = assert
@@ -41,21 +50,37 @@ stack len 0 = assert
 
 # vectors
 
+[1 2 3] [1 2 3] = assert
+mark 1 2 3 collect [1 2 3] = assert
+
 [1 2 3] len 3 = assert
 
 5 [ 2 + 3 * ] do 21 = assert
 
+[2 3 4] [1 +] map [3 4 5] = assert
+
+[2 3 4] [+] reduce 9 = assert
+[2 3 4] [*] reduce 24 = assert
+
+[2 3 4] + 9 = assert
+[2 3 4] * 24 = assert
+
+[[1 2 3]] len 5 = assert
+[[1 2 3]] do [1 2 3] = assert
+
+[[1 2 3] [2 3 4]] len 10 = assert
+
+mark [[1 2 3] [2 3 4]] do collect len 2 = assert
+
 [ 2 + 3 * ] >test-op
 5 test-op 21 = assert
-
-[1 2 3] [1 2 3] = assert
-mark 1 2 3 collect [1 2 3] = assert
 
 # defaults
 
 sr 48000 = assert
 
 :bpm 120 = assert
+:tpb 96 = assert
 :freq 440 = assert
 :phase 0 = assert
 :width 0.5 = assert
@@ -69,6 +94,7 @@ sr 48000 = assert
 :bpm 120 = assert
 
 # set/get
+
 ( 100 "foo" set "foo" get 100 = assert )
 ( 100 "foo" set foo 100 = assert )
 ( 100 >foo "foo" get 100 = assert )
@@ -79,11 +105,12 @@ sr 48000 = assert
 2 seconds 96000 = assert
 
 1 beats 24000 = assert
+1 ticks 24000 96 / = assert
 
 ( 2 >:freq 1 periods ) 24000 = assert
 ( 10 >:freq 2 periods ) 48000 10 / 2 * = assert
 
-( 413f :freq ) 413 = assert
+( 413 f :freq ) 413 = assert
 
 1s 1 seconds = assert
 1b 1 beats = assert
