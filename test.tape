@@ -80,7 +80,7 @@ sr 48000 = assert
 :tpb 96 = assert
 :freq 440 = assert
 :phase 0 = assert
-:width 0.5 = assert
+:pw 0.5 = assert
 
 # environments
 

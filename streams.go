@@ -28,9 +28,9 @@ func SinOp() SmpUnOp {
 	}
 }
 
-func PulseOp(width float64) SmpUnOp {
+func PulseOp(pw float64) SmpUnOp {
 	return func(phase Smp) Smp {
-		if phase < width {
+		if phase < pw {
 			return 1.0
 		} else {
 			return -1.0
@@ -199,8 +199,8 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 	if !ok {
 		return fmt.Errorf("object of type %T does not implement Streamable", top)
 	}
-	if n1, n1ok := lhs.(Num); n1ok {
-		if n2, n2ok := rhs.(Num); n2ok {
+	if n1, ok := lhs.(Num); ok {
+		if n2, ok := rhs.(Num); ok {
 			vm.Push(op(Smp(n1), Smp(n2)))
 			return nil
 		}
@@ -247,8 +247,8 @@ func init() {
 
 	RegisterWord("pulse~", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
-		width := vm.GetFloat(":width")
-		vm.Push(Phasor(freq, PulseOp(width)))
+		pw := vm.GetFloat(":pw")
+		vm.Push(Phasor(freq, PulseOp(pw)))
 		return nil
 	})
 

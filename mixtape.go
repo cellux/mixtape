@@ -437,7 +437,7 @@ func setDefaults(vm *VM) {
 
 	vm.SetVal(":freq", 440)
 	vm.SetVal(":phase", 0)
-	vm.SetVal(":width", 0.5)
+	vm.SetVal(":pw", 0.5)
 }
 
 func runWithArgs(vm *VM, args []string) error {
