@@ -50,6 +50,8 @@ false 0 = assert
 
 # vectors
 
+[] len 0 = assert
+
 [1 2 3] [1 2 3] = assert
 [1 2 3] len 3 = assert
 

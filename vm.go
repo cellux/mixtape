@@ -72,6 +72,7 @@ func RegisterWord(name string, fun Fun) {
 type VM struct {
 	valStack      Vec   // values
 	envStack      []Map // environments
+	markerStack   []int // [] markers
 	compileBuffer Vec   // compiled code
 	compileLevel  int   // nesting level [... [.. [..] ..] ...]
 }
@@ -80,6 +81,7 @@ func CreateVM() (*VM, error) {
 	vm := &VM{
 		valStack:      make(Vec, 0, 4096),
 		envStack:      []Map{rootEnv},
+		markerStack:   make([]int, 0, 16),
 		compileBuffer: nil,
 		compileLevel:  0,
 	}
@@ -191,28 +193,27 @@ func (vm *VM) DoOver() error {
 	return nil
 }
 
-var _mark = new(struct{})
-
 func (vm *VM) DoMark() error {
-	vm.Push(_mark)
+	vm.markerStack = append(vm.markerStack, len(vm.valStack))
 	return nil
 }
 
 func (vm *VM) DoCollect() error {
+	if len(vm.markerStack) == 0 {
+		return fmt.Errorf("collect: no active marker")
+	}
+	markerIndex := vm.markerStack[len(vm.markerStack)-1]
+	vm.markerStack = vm.markerStack[:len(vm.markerStack)-1]
 	stackSize := len(vm.valStack)
-	if stackSize == 0 {
-		return fmt.Errorf("collect: empty stack")
+	result := make(Vec, stackSize-markerIndex)
+	if markerIndex == stackSize {
+		vm.Push(result)
+	} else {
+		copy(result, vm.valStack[markerIndex:])
+		vm.valStack[markerIndex] = result
+		vm.valStack = vm.valStack[:markerIndex+1]
 	}
-	for i := stackSize - 1; i >= 0; i-- {
-		if vm.valStack[i] == _mark {
-			result := make(Vec, stackSize-(i+1))
-			copy(result, vm.valStack[i+1:])
-			vm.valStack[i] = result
-			vm.valStack = vm.valStack[:i+1]
-			return nil
-		}
-	}
-	return fmt.Errorf("collect: mark not found")
+	return nil
 }
 
 func (vm *VM) DoDo() error {
