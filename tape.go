@@ -448,7 +448,7 @@ func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 }
 
 func init() {
-	RegisterMethod[*Tape]("slice", 3, func(vm *VM) error {
+	RegisterMethod[*Tape]("slice", 2, func(vm *VM) error {
 		end := int(Pop[Num](vm))
 		start := int(Pop[Num](vm))
 		t := Top[*Tape](vm)
