@@ -53,6 +53,16 @@ func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
 	return smpLo + (smpHi-smpLo)*frameIndexDelta
 }
 
+func (t *Tape) Slice(start, end int) *Tape {
+	nframes := end - start
+	slicedTape := &Tape{
+		nchannels: t.nchannels,
+		nframes:   nframes,
+		samples:   t.samples[start*t.nchannels : end*t.nchannels],
+	}
+	return slicedTape
+}
+
 func (t *Tape) WriteToWav(path string) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -452,13 +462,29 @@ func init() {
 		end := int(Pop[Num](vm))
 		start := int(Pop[Num](vm))
 		t := Top[*Tape](vm)
-		nframes := end - start
-		slicedTape := &Tape{
-			nchannels: t.nchannels,
-			nframes:   nframes,
-			samples:   t.samples[start*t.nchannels : end*t.nchannels],
+		vm.Push(t.Slice(start, end))
+		return nil
+	})
+
+	RegisterMethod[*Tape]("+@", 3, func(vm *VM) error {
+		offset := int(Pop[Num](vm))
+		rhs := Pop[*Tape](vm)
+		lhs := Top[*Tape](vm)
+		nchannels := lhs.nchannels
+		end := offset + rhs.nframes
+		if lhs.nframes < end {
+			extraFramesNeeded := end - lhs.nframes
+			lhs.samples = append(lhs.samples, make([]Smp, extraFramesNeeded*nchannels)...)
+			lhs.nframes += extraFramesNeeded
 		}
-		vm.Push(slicedTape)
+		s := rhs.Stream().AdaptChannels(nchannels)
+		writeIndex := offset * nchannels
+		for frame := range s.seq {
+			for i := range nchannels {
+				lhs.samples[writeIndex] += frame[i]
+				writeIndex++
+			}
+		}
 		return nil
 	})
 }

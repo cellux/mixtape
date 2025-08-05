@@ -60,6 +60,26 @@ func SawOp() SmpUnOp {
 	}
 }
 
+func AddOp() SmpBinOp {
+	return func(x, y Smp) Smp { return x + y }
+}
+
+func SubOp() SmpBinOp {
+	return func(x, y Smp) Smp { return x - y }
+}
+
+func MulOp() SmpBinOp {
+	return func(x, y Smp) Smp { return x * y }
+}
+
+func DivOp() SmpBinOp {
+	return func(x, y Smp) Smp { return x / y }
+}
+
+func ModOp() SmpBinOp {
+	return func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) }
+}
+
 func Phasor(freq Stream, op SmpUnOp) Stream {
 	return makeStream(1,
 		func(yield func(Frame) bool) {
@@ -156,8 +176,8 @@ func (s Stream) Stereo() Stream {
 		})
 }
 
-func (s Stream) AdaptChannels(other Stream) Stream {
-	switch other.nchannels {
+func (s Stream) AdaptChannels(nchannels int) Stream {
+	switch nchannels {
 	case 1:
 		return s.Mono()
 	case 2:
@@ -171,7 +191,7 @@ func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	return makeStream(nchannels,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, nchannels)
-			onext, ostop := iter.Pull(other.AdaptChannels(s).seq)
+			onext, ostop := iter.Pull(other.AdaptChannels(nchannels).seq)
 			defer ostop()
 			for frame := range s.seq {
 				oframe, ok := onext()
@@ -267,22 +287,22 @@ func init() {
 	})
 
 	RegisterWord("+", func(vm *VM) error {
-		return applySmpBinOp(vm, func(x, y Smp) Smp { return x + y })
+		return applySmpBinOp(vm, AddOp())
 	})
 
 	RegisterWord("-", func(vm *VM) error {
-		return applySmpBinOp(vm, func(x, y Smp) Smp { return x - y })
+		return applySmpBinOp(vm, SubOp())
 	})
 
 	RegisterWord("*", func(vm *VM) error {
-		return applySmpBinOp(vm, func(x, y Smp) Smp { return x * y })
+		return applySmpBinOp(vm, MulOp())
 	})
 
 	RegisterWord("/", func(vm *VM) error {
-		return applySmpBinOp(vm, func(x, y Smp) Smp { return x / y })
+		return applySmpBinOp(vm, DivOp())
 	})
 
 	RegisterWord("%", func(vm *VM) error {
-		return applySmpBinOp(vm, func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) })
+		return applySmpBinOp(vm, ModOp())
 	})
 }
