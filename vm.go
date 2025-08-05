@@ -70,20 +70,20 @@ func RegisterWord(name string, fun Fun) {
 // VM
 
 type VM struct {
-	valStack      Vec   // values
-	envStack      []Map // environments
-	markerStack   []int // [] markers
-	compileBuffer Vec   // compiled code
-	compileLevel  int   // nesting level [... [.. [..] ..] ...]
+	valStack    Vec   // values
+	envStack    []Map // environments
+	markerStack []int // [] markers
+	quoteBuffer Vec   // quoted code
+	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
 }
 
 func CreateVM() (*VM, error) {
 	vm := &VM{
-		valStack:      make(Vec, 0, 4096),
-		envStack:      []Map{rootEnv},
-		markerStack:   make([]int, 0, 16),
-		compileBuffer: nil,
-		compileLevel:  0,
+		valStack:    make(Vec, 0, 4096),
+		envStack:    []Map{rootEnv},
+		markerStack: make([]int, 0, 16),
+		quoteBuffer: nil,
+		quoteDepth:  0,
 	}
 	return vm, nil
 }
@@ -91,12 +91,12 @@ func CreateVM() (*VM, error) {
 func (vm *VM) Reset() {
 	vm.valStack = vm.valStack[:0]
 	vm.envStack = vm.envStack[:1]
-	vm.compileBuffer = nil
-	vm.compileLevel = 0
+	vm.quoteBuffer = nil
+	vm.quoteDepth = 0
 }
 
-func (vm *VM) IsCompiling() bool {
-	return vm.compileLevel > 0
+func (vm *VM) IsQuoting() bool {
+	return vm.quoteDepth > 0
 }
 
 func (vm *VM) StackSize() int {
@@ -379,20 +379,23 @@ func (vm *VM) FindMethod(name string) Fun {
 }
 
 func (vm *VM) Execute(val Val) error {
-	if vm.IsCompiling() {
+	if vm.IsQuoting() {
 		if val == Sym("{") {
-			vm.compileLevel++
-			vm.compileBuffer = append(vm.compileBuffer, val)
+			vm.quoteDepth++
+			vm.quoteBuffer = append(vm.quoteBuffer, val)
 		} else if val == Sym("}") {
-			vm.compileLevel--
-			if vm.compileLevel > 0 {
-				vm.compileBuffer = append(vm.compileBuffer, val)
+			if vm.quoteDepth == 0 {
+				return fmt.Errorf("attempt to unquote when quoteDepth == 0")
+			}
+			vm.quoteDepth--
+			if vm.quoteDepth > 0 {
+				vm.quoteBuffer = append(vm.quoteBuffer, val)
 			} else {
-				vm.Push(vm.compileBuffer)
-				vm.compileBuffer = nil
+				vm.Push(vm.quoteBuffer)
+				vm.quoteBuffer = nil
 			}
 		} else {
-			vm.compileBuffer = append(vm.compileBuffer, val)
+			vm.quoteBuffer = append(vm.quoteBuffer, val)
 		}
 		return nil
 	}

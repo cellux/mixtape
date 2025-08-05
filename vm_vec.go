@@ -12,7 +12,7 @@ func (v Vec) String() string {
 
 func (v Vec) Execute(vm *VM) error {
 	for _, val := range v {
-		if val == Sym("--") && !vm.IsCompiling() {
+		if val == Sym("--") && !vm.IsQuoting() {
 			break
 		}
 		err := vm.Execute(val)
