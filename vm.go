@@ -47,6 +47,9 @@ type Equaler interface {
 }
 
 func Equal(lhs, rhs Val) bool {
+	if lhs == nil && rhs == nil {
+		return true
+	}
 	if l, ok := lhs.(Equaler); ok {
 		return l.Equal(rhs)
 	}
@@ -218,6 +221,17 @@ func (vm *VM) DoCollect() error {
 
 func (vm *VM) DoDo() error {
 	val := vm.Pop()
+	return vm.Execute(val)
+}
+
+func (vm *VM) DoIter() error {
+	iterable := Pop[Iterable](vm)
+	vm.Push(iterable.Iter())
+	return nil
+}
+
+func (vm *VM) DoNext() error {
+	val := vm.Top()
 	return vm.Execute(val)
 }
 

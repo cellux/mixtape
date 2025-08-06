@@ -56,15 +56,15 @@ false 0 = assert
 [1 2 3] len 3 = assert
 
 [ 5 2 + 3 * 5 ] [21 5] = assert
-5 { 2 + 3 * } do 21 = assert
 
-[2 3 4] {1 +} map [3 4 5] = assert
+[1 2 3] iter
+next 1 = assert
+next 2 = assert
+next 3 = assert
+next nil? assert
+drop
 
-[2 3 4] {+} reduce 9 = assert
-[2 3 4] {*} reduce 24 = assert
-
-[2 3 4] + 9 = assert
-[2 3 4] * 24 = assert
+# quoting
 
 {[1 2 3]} len 5 = assert
 {[1 2 3]} do [1 2 3] = assert
@@ -73,6 +73,18 @@ false 0 = assert
 
 { 2 + 3 * } >test-op
 5 test-op 21 = assert
+
+5 { 2 + 3 * } do 21 = assert
+
+[2 3 4] {1 +} map [3 4 5] = assert
+
+[2 3 4] {+} reduce 9 = assert
+[2 3 4] {*} reduce 24 = assert
+
+(
+ { saw~ sin~ pulse~ triangle~ } >:waveform
+ :waveform len 4 = assert
+)
 
 # defaults
 

@@ -40,6 +40,21 @@ func (v Vec) Equal(other Val) bool {
 	}
 }
 
+func (v Vec) Iter() Fun {
+	i := 0
+	return func(vm *VM) error {
+		var next Val
+		if i == len(v) {
+			next = nil
+		} else {
+			next = v[i]
+			i++
+		}
+		vm.Push(next)
+		return nil
+	}
+}
+
 func init() {
 	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
 		v := Pop[Vec](vm)
@@ -72,18 +87,6 @@ func init() {
 			e.Execute(vm)
 		}
 		return nil
-	})
-	RegisterMethod[Vec]("join", 1, func(vm *VM) error {
-		vm.Push(Vec{Sym("join")})
-		return vm.Execute(Sym("reduce"))
-	})
-	RegisterMethod[Vec]("+", 1, func(vm *VM) error {
-		vm.Push(Vec{Sym("+")})
-		return vm.Execute(Sym("reduce"))
-	})
-	RegisterMethod[Vec]("*", 1, func(vm *VM) error {
-		vm.Push(Vec{Sym("*")})
-		return vm.Execute(Sym("reduce"))
 	})
 	RegisterMethod[Vec]("tape", 1, func(vm *VM) error {
 		v := Pop[Vec](vm)

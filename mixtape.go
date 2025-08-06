@@ -370,14 +370,6 @@ func (app *App) Render() error {
 		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
 			statusPane.DrawString(0, 0, result.Error())
 		})
-	case Str:
-		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane)
-		statusPane.DrawString(0, 0, string(result))
-	case Num:
-		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane)
-		statusPane.DrawString(0, 0, formatFloat(float64(result)))
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)

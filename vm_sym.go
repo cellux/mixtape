@@ -8,6 +8,10 @@ type Sym string
 
 func (s Sym) Execute(vm *VM) error {
 	name := string(s)
+	if name[0] == ':' {
+		vm.Push(vm.GetVal(name))
+		return nil
+	}
 	method := vm.FindMethod(name)
 	if method != nil {
 		return method(vm)
@@ -26,8 +30,4 @@ func (s Sym) Equal(other Val) bool {
 	default:
 		return false
 	}
-}
-
-func (s Sym) String() string {
-	return string(s)
 }

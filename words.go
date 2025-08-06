@@ -5,6 +5,11 @@ import (
 )
 
 func init() {
+	RegisterWord("nil", func(vm *VM) error {
+		vm.Push(nil)
+		return nil
+	})
+
 	RegisterWord("sr", func(vm *VM) error {
 		vm.Push(SampleRate())
 		return nil
@@ -98,5 +103,13 @@ func init() {
 
 	RegisterWord("do", func(vm *VM) error {
 		return vm.DoDo()
+	})
+
+	RegisterWord("iter", func(vm *VM) error {
+		return vm.DoIter()
+	})
+
+	RegisterWord("next", func(vm *VM) error {
+		return vm.DoNext()
 	})
 }
