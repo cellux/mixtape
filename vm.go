@@ -357,6 +357,8 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 			} else {
 				if len(text) > 1 {
 					switch text[0] {
+					case '@':
+						code = append(code, Str(text[1:]), Sym("get"))
 					case '>':
 						if text == ">=" {
 							code = append(code, Sym(text))

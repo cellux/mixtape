@@ -126,6 +126,7 @@ sr 48000 = assert
 ( 100 "foo" set "foo" get 100 = assert )
 ( 100 "foo" set foo 100 = assert )
 ( 100 >foo "foo" get 100 = assert )
+( 100 >foo @foo 100 = assert )
 
 # seconds and beats
 
