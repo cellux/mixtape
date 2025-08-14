@@ -13,6 +13,15 @@ stack len 0 = assert
 true -1 = assert
 false 0 = assert
 
+false false? assert
+
+true true? assert
+10 true? assert
+-10 true? assert
+
+nil nil? assert
+0 nil? not assert
+
 # numbers (Num)
 
 "1234 4321.5 *" parse {1234 4321.5 *} = assert

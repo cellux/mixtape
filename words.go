@@ -10,6 +10,10 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("throw", func(vm *VM) error {
+		return fmt.Errorf("%s", vm.Pop())
+	})
+
 	RegisterWord("sr", func(vm *VM) error {
 		vm.Push(SampleRate())
 		return nil

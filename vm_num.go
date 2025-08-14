@@ -49,16 +49,11 @@ func (n Num) Equal(other Val) bool {
 }
 
 func init() {
-	RegisterMethod[Num]("not", 1, func(vm *VM) error {
-		arg := Pop[Num](vm)
-		vm.Push(arg == 0)
-		return nil
-	})
-
-	RegisterMethod[Num]("assert", 1, func(vm *VM) error {
-		n := Pop[Num](vm)
-		if n == False {
-			return fmt.Errorf("assertion failed")
+	RegisterMethod[Num]("if", 2, func(vm *VM) error {
+		block := vm.Pop()
+		cond := Pop[Num](vm)
+		if cond != 0 {
+			return vm.Execute(block)
 		}
 		return nil
 	})
