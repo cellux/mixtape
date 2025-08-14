@@ -58,6 +58,17 @@ func init() {
 		return nil
 	})
 
+	RegisterMethod[Num]("if", 3, func(vm *VM) error {
+		elseBlock := vm.Pop()
+		ifBlock := vm.Pop()
+		cond := Pop[Num](vm)
+		if cond != 0 {
+			return vm.Execute(ifBlock)
+		} else {
+			return vm.Execute(elseBlock)
+		}
+	})
+
 	RegisterMethod[Num]("<", 2, func(vm *VM) error {
 		rhs := Pop[Num](vm)
 		lhs := Pop[Num](vm)

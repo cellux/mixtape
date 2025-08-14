@@ -22,6 +22,14 @@ true true? assert
 nil nil? assert
 0 nil? not assert
 
+5 3 > "gt" if "gt" = assert
+
+5 3 > "gt" "lt" if "gt" = assert
+5 3 < "gt" "lt" if "lt" = assert
+
+7 2 5 3 > {+ 10 +} {*} if 19 = assert
+7 2 5 3 < {+} {* 3 -} if 11 = assert
+
 # numbers (Num)
 
 "1234 4321.5 *" parse {1234 4321.5 *} = assert

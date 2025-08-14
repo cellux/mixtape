@@ -6,6 +6,7 @@
 { = false? } >!=
 { 0 != } >true?
 { nil = } >nil?
+
 { false? { "assertion failed" throw } if } >assert
 
 { ":freq" set } >f

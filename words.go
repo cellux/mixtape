@@ -30,15 +30,6 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("!=", func(vm *VM) error {
-		if err := vm.Execute(Sym("=")); err != nil {
-			return err
-		}
-		result := Pop[Num](vm)
-		vm.Push(result == 0)
-		return nil
-	})
-
 	RegisterWord("stack", func(vm *VM) error {
 		vm.Push(vm.valStack)
 		return nil

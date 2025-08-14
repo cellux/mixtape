@@ -61,6 +61,24 @@ func init() {
 		vm.Push(len(v))
 		return nil
 	})
+	RegisterMethod[Vec]("push", 2, func(vm *VM) error {
+		item := vm.Pop()
+		v := Pop[Vec](vm)
+		v = append(v, item)
+		vm.Push(v)
+		return nil
+	})
+	RegisterMethod[Vec]("pop", 1, func(vm *VM) error {
+		v := Pop[Vec](vm)
+		if len(v) == 0 {
+			return fmt.Errorf("pop: empty vec")
+		}
+		item := v[len(v)-1]
+		v = v[:len(v)-1]
+		vm.Push(v)
+		vm.Push(item)
+		return nil
+	})
 	RegisterMethod[Vec]("map", 2, func(vm *VM) error {
 		e := Pop[Executable](vm)
 		v := Top[Vec](vm)
