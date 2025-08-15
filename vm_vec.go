@@ -61,6 +61,13 @@ func init() {
 		vm.Push(len(v))
 		return nil
 	})
+	RegisterMethod[Vec]("dup", 1, func(vm *VM) error {
+		src := Top[Vec](vm)
+		dst := make(Vec, len(src))
+		copy(dst, src)
+		vm.Push(dst)
+		return nil
+	})
 	RegisterMethod[Vec]("push", 2, func(vm *VM) error {
 		item := vm.Pop()
 		v := Pop[Vec](vm)

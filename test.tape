@@ -102,7 +102,14 @@ drop
 { pop 2 = } assert
 { pop 5 = } assert
 { pop 1 = } assert
-drop
+{ [] = } assert
+
+[1 5 2] dup
+{ pop 2 = } assert
+dup { [1 5] = } assert
+9 push
+{ [1 5 9] = } assert
+{ [1 5 2] = } assert
 
 # quoting
 
