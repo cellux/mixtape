@@ -212,6 +212,15 @@ func (vm *VM) DoCollect() error {
 	return nil
 }
 
+func (vm *VM) DoQuote() error {
+	if vm.quoteDepth != 0 {
+		return fmt.Errorf("attempt to evaluate { when quoteDepth=%d", vm.quoteDepth)
+	}
+	vm.quoteBuffer = make(Vec, 0, 64)
+	vm.quoteDepth++
+	return nil
+}
+
 func (vm *VM) DoEval() error {
 	val := vm.Pop()
 	return vm.Eval(val)

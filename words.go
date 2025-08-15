@@ -77,9 +77,7 @@ func init() {
 	})
 
 	RegisterWord("{", func(vm *VM) error {
-		vm.quoteBuffer = make(Vec, 0, 64)
-		vm.quoteDepth++
-		return nil
+		return vm.DoQuote()
 	})
 
 	RegisterWord("set", func(vm *VM) error {
