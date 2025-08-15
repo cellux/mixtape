@@ -67,7 +67,7 @@ func RegisterWord(name string, fun Fun) {
 type VM struct {
 	valStack    Vec   // values
 	envStack    []Map // environments
-	markerStack []int // [] markers
+	markerStack []int // [ indices in valStack
 	quoteBuffer Vec   // quoted code
 	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
 }
@@ -86,6 +86,7 @@ func CreateVM() (*VM, error) {
 func (vm *VM) Reset() {
 	vm.valStack = vm.valStack[:0]
 	vm.envStack = vm.envStack[:1]
+	vm.markerStack = vm.markerStack[:0]
 	vm.quoteBuffer = nil
 	vm.quoteDepth = 0
 }
@@ -374,7 +375,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 func (vm *VM) FindMethod(name string) Fun {
 	nargs := 1
 	index := len(vm.valStack) - 1
-	for index >= 0 {
+	for index >= 0 && nargs < 4 {
 		val := vm.valStack[index]
 		method := FindMethod(val, name, nargs)
 		if method != nil {
