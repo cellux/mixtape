@@ -96,8 +96,8 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("do", func(vm *VM) error {
-		return vm.DoDo()
+	RegisterWord("eval", func(vm *VM) error {
+		return vm.DoEval()
 	})
 
 	RegisterWord("iter", func(vm *VM) error {

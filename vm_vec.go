@@ -10,12 +10,12 @@ func (v Vec) String() string {
 	return fmt.Sprintf("%v", []Val(v))
 }
 
-func (v Vec) Execute(vm *VM) error {
+func (v Vec) Eval(vm *VM) error {
 	for _, val := range v {
 		if val == Sym("--") && !vm.IsQuoting() {
 			break
 		}
-		err := vm.Execute(val)
+		err := vm.Eval(val)
 		if err != nil {
 			return err
 		}
@@ -80,20 +80,20 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("map", 2, func(vm *VM) error {
-		e := Pop[Executable](vm)
+		e := Pop[Evaler](vm)
 		v := Top[Vec](vm)
 		if len(v) == 0 {
 			return nil
 		}
 		for i, item := range v {
 			vm.Push(item)
-			e.Execute(vm)
+			e.Eval(vm)
 			v[i] = vm.Pop()
 		}
 		return nil
 	})
 	RegisterMethod[Vec]("reduce", 2, func(vm *VM) error {
-		e := Pop[Executable](vm)
+		e := Pop[Evaler](vm)
 		v := Pop[Vec](vm)
 		if len(v) == 0 {
 			vm.Push(v)
@@ -102,7 +102,7 @@ func init() {
 		vm.Push(v[0])
 		for i := 1; i < len(v); i++ {
 			vm.Push(v[i])
-			e.Execute(vm)
+			e.Eval(vm)
 		}
 		return nil
 	})

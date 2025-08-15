@@ -84,14 +84,14 @@ drop
 # quoting
 
 {[1 2 3]} len 5 = assert
-{[1 2 3]} do [1 2 3] = assert
+{[1 2 3]} eval [1 2 3] = assert
 
-{[[1 2 3] [2 3 4]]} do len 2 = assert
+{[[1 2 3] [2 3 4]]} eval len 2 = assert
 
 { 2 + 3 * } >test-op
 5 test-op 21 = assert
 
-5 { 2 + 3 * } do 21 = assert
+5 { 2 + 3 * } eval 21 = assert
 
 [2 3 4] {1 +} map [3 4 5] = assert
 

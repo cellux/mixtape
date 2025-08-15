@@ -8,7 +8,7 @@ import (
 
 type Str string
 
-func (s Str) Execute(vm *VM) error {
+func (s Str) Eval(vm *VM) error {
 	vm.Push(s)
 	return nil
 }
@@ -41,7 +41,7 @@ func init() {
 	})
 
 	RegisterMethod[Str]("parse1", 1, func(vm *VM) error {
-		vm.Execute(Sym("parse"))
+		vm.Eval(Sym("parse"))
 		v := Pop[Vec](vm)
 		if len(v) == 0 {
 			return fmt.Errorf("parse1: empty string")

@@ -18,7 +18,7 @@ func init() {
 			if !ok {
 				return fmt.Errorf("seq: syms vec contains value of type %T", val)
 			}
-			sym.Execute(vm)
+			sym.Eval(vm)
 			symIterable := vm.Pop()
 			if iterable, ok := symIterable.(Iterable); ok {
 				symIterators[i] = iterable.Iter()
@@ -28,7 +28,7 @@ func init() {
 		}
 		for {
 			for i, val := range syms {
-				symIterators[i].Execute(vm)
+				symIterators[i].Eval(vm)
 				next := vm.Pop()
 				if next == nil {
 					return nil
@@ -36,7 +36,7 @@ func init() {
 				sym := val.(Sym)
 				vm.SetVal(string(sym), next)
 			}
-			body.Execute(vm)
+			body.Eval(vm)
 		}
 	})
 }

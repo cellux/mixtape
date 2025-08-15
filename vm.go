@@ -17,10 +17,8 @@ const (
 
 func AsVal(x any) Val {
 	switch v := x.(type) {
-	case Num, Str, Sym, Fun, Vec, Map:
-		return v
 	case int:
-		return Num(float64(v))
+		return Num(v)
 	case float64:
 		return Num(v)
 	case string:
@@ -31,12 +29,6 @@ func AsVal(x any) Val {
 		} else {
 			return False
 		}
-	case func(vm *VM) error:
-		return Fun(v)
-	case []Val:
-		return Vec(v)
-	case map[Val]Val:
-		return Map(v)
 	default:
 		return x
 	}
@@ -56,8 +48,8 @@ func Equal(lhs, rhs Val) bool {
 	return false
 }
 
-type Executable interface {
-	Execute(vm *VM) error
+type Evaler interface {
+	Eval(vm *VM) error
 }
 
 var rootEnv = make(Map)
@@ -219,9 +211,9 @@ func (vm *VM) DoCollect() error {
 	return nil
 }
 
-func (vm *VM) DoDo() error {
+func (vm *VM) DoEval() error {
 	val := vm.Pop()
-	return vm.Execute(val)
+	return vm.Eval(val)
 }
 
 func (vm *VM) DoIter() error {
@@ -232,7 +224,7 @@ func (vm *VM) DoIter() error {
 
 func (vm *VM) DoNext() error {
 	val := vm.Top()
-	return vm.Execute(val)
+	return vm.Eval(val)
 }
 
 func (vm *VM) TopEnv() Map {
@@ -394,7 +386,7 @@ func (vm *VM) FindMethod(name string) Fun {
 	return nil
 }
 
-func (vm *VM) Execute(val Val) error {
+func (vm *VM) Eval(val Val) error {
 	if vm.IsQuoting() {
 		if val == Sym("{") {
 			vm.quoteDepth++
@@ -415,16 +407,16 @@ func (vm *VM) Execute(val Val) error {
 		}
 		return nil
 	}
-	if e, ok := val.(Executable); ok {
-		return e.Execute(vm)
+	if e, ok := val.(Evaler); ok {
+		return e.Eval(vm)
 	}
-	return fmt.Errorf("don't know how to execute value of type %T", val)
+	return fmt.Errorf("don't know how to evaluate value of type %T", val)
 }
 
-func (vm *VM) ParseAndExecute(r io.Reader, filename string) error {
+func (vm *VM) ParseAndEval(r io.Reader, filename string) error {
 	code, err := vm.Parse(r, filename)
 	if err != nil {
 		return err
 	}
-	return vm.Execute(code)
+	return vm.Eval(code)
 }

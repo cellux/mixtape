@@ -6,7 +6,7 @@ import (
 
 type Sym string
 
-func (s Sym) Execute(vm *VM) error {
+func (s Sym) Eval(vm *VM) error {
 	name := string(s)
 	if name[0] == ':' {
 		vm.Push(vm.GetVal(name))
@@ -18,7 +18,7 @@ func (s Sym) Execute(vm *VM) error {
 	}
 	word := vm.GetVal(name)
 	if word != nil {
-		return vm.Execute(word)
+		return vm.Eval(word)
 	}
 	return fmt.Errorf("word or method not found: %s", name)
 }

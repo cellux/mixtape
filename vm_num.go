@@ -34,7 +34,7 @@ func scanFloat(text string) (float64, error) {
 	}
 }
 
-func (n Num) Execute(vm *VM) error {
+func (n Num) Eval(vm *VM) error {
 	vm.Push(n)
 	return nil
 }
@@ -53,7 +53,7 @@ func init() {
 		block := vm.Pop()
 		cond := Pop[Num](vm)
 		if cond != 0 {
-			return vm.Execute(block)
+			return vm.Eval(block)
 		}
 		return nil
 	})
@@ -63,9 +63,9 @@ func init() {
 		ifBlock := vm.Pop()
 		cond := Pop[Num](vm)
 		if cond != 0 {
-			return vm.Execute(ifBlock)
+			return vm.Eval(ifBlock)
 		} else {
-			return vm.Execute(elseBlock)
+			return vm.Eval(elseBlock)
 		}
 	})
 

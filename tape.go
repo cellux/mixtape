@@ -213,7 +213,7 @@ func loadAndPushTape(vm *VM, path string) error {
 				return loadAndPushTape(vm, wavPath)
 			}
 		}
-		err = vm.ParseAndExecute(f, path)
+		err = vm.ParseAndEval(f, path)
 		if err != nil {
 			return err
 		}

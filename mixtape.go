@@ -86,7 +86,7 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
-	executeEditorScriptIfChanged := func() {
+	evalEditorScriptIfChanged := func() {
 		editorScript := app.editor.GetBytes()
 		if slices.Compare(editorScript, app.lastScript) == 0 {
 			return
@@ -99,7 +99,7 @@ func (app *App) Init() error {
 			tapePath = app.currentFile
 		}
 		app.lastScript = app.editor.GetBytes()
-		err := vm.ParseAndExecute(bytes.NewReader(app.lastScript), tapePath)
+		err := vm.ParseAndEval(bytes.NewReader(app.lastScript), tapePath)
 		if err != nil {
 			slog.Error("parse error", "err", err)
 			app.result = err
@@ -109,7 +109,7 @@ func (app *App) Init() error {
 	}
 	globalKeyMap := CreateKeyMap()
 	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
-		executeEditorScriptIfChanged()
+		evalEditorScriptIfChanged()
 		if tape, ok := app.result.(*Tape); ok {
 			if app.tapePlayer != nil {
 				app.tapePlayer.Close()
@@ -183,7 +183,7 @@ func (app *App) Init() error {
 	editorKeyMap.Bind("End", CreateKeyHandler(app.editor.MoveToEOL))
 	editorKeyMap.Bind("Tab", CreateKeyHandler(app.editor.InsertSpacesUntilNextTabStop))
 	editorKeyMap.Bind("C-Enter", CreateKeyHandler(func() {
-		executeEditorScriptIfChanged()
+		evalEditorScriptIfChanged()
 	}))
 	editorKeyMap.Bind("C-z", CreateKeyHandler(UndoLastAction))
 	editorKeyMap.Bind("C-q", CreateKeyHandler(app.Quit))
@@ -436,14 +436,14 @@ func runWithArgs(vm *VM, args []string) error {
 	openFiles := make(map[string]string)
 	currentFile := ""
 	if flags.EvalScript != "" {
-		return vm.ParseAndExecute(strings.NewReader(flags.EvalScript), "<script>")
+		return vm.ParseAndEval(strings.NewReader(flags.EvalScript), "<script>")
 	}
 	if flags.EvalFile != "" {
 		data, err := os.ReadFile(flags.EvalFile)
 		if err != nil {
 			return err
 		}
-		return vm.ParseAndExecute(bytes.NewReader(data), flags.EvalFile)
+		return vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
 	}
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
@@ -471,7 +471,7 @@ func main() {
 		os.Exit(1)
 	}
 	setDefaults(vm)
-	err = vm.ParseAndExecute(strings.NewReader(prelude), "<prelude>")
+	err = vm.ParseAndEval(strings.NewReader(prelude), "<prelude>")
 	if err != nil {
 		slog.Error("error while parsing the prelude", "err", err)
 	}
