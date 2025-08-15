@@ -426,10 +426,6 @@ func setDefaults(vm *VM) {
 	beatsPerSecond := flags.BPM / 60.0
 	framesPerBeat := float64(SampleRate()) / beatsPerSecond
 	vm.SetVal(":nf", int(framesPerBeat))
-
-	vm.SetVal(":freq", 440)
-	vm.SetVal(":phase", 0)
-	vm.SetVal(":pw", 0.5)
 }
 
 func runWithArgs(vm *VM, args []string) error {

@@ -8,6 +8,9 @@
 { nil = } >nil?
 
 { false? { "assertion failed" throw } if } >assert
+440 >:freq
+0 >:phase
+0.5 >:pw
 
 { ":freq" set } >f
 { sr * } >seconds
