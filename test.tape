@@ -38,8 +38,6 @@ stack len 0 = assert
 
 # numbers (Num)
 
-{ "1234 4321.5 *" parse {1234 4321.5 *} = } assert
-
 ## equality
 { 3 3 = } assert
 { 3 4 != } assert
@@ -69,7 +67,6 @@ stack len 0 = assert
 { "foo" "foo" = } assert
 
 { 42 str "42" = } assert
-{ "42" parse1 42 = } assert
 
 { "hello, " "world" + "hello, world" = } assert
 
@@ -111,6 +108,8 @@ dup { [1 5] = } assert
 { [1 5 9] = } assert
 { [1 5 2] = } assert
 
+( { 0 >:sum [1 2 3] {:sum + >:sum} each :sum 6 = } assert )
+
 # quoting
 
 { {[1 2 3]} len 5 = } assert
@@ -138,6 +137,11 @@ dup { [1 5] = } assert
   { pop "triangle~" sym = } assert
   drop
 )
+
+# parsing
+
+{ "1234 4321.5 *" parse {1234 4321.5 *} = } assert
+{ "42 24" parse1 42 = } assert
 
 # defaults
 

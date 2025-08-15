@@ -86,6 +86,18 @@ func init() {
 		vm.Push(item)
 		return nil
 	})
+	RegisterMethod[Vec]("each", 2, func(vm *VM) error {
+		e := Pop[Evaler](vm)
+		v := Pop[Vec](vm)
+		if len(v) == 0 {
+			return nil
+		}
+		for _, item := range v {
+			vm.Push(item)
+			e.Eval(vm)
+		}
+		return nil
+	})
 	RegisterMethod[Vec]("map", 2, func(vm *VM) error {
 		e := Pop[Evaler](vm)
 		v := Top[Vec](vm)

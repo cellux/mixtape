@@ -48,8 +48,8 @@ func init() {
 	})
 
 	RegisterMethod[Str]("parse", 1, func(vm *VM) error {
-		arg := Pop[Str](vm)
-		code, err := vm.Parse(strings.NewReader(string(arg)), "<string>")
+		s := Pop[Str](vm)
+		code, err := vm.Parse(strings.NewReader(string(s)), "<string>")
 		if err != nil {
 			return err
 		}
