@@ -39,8 +39,8 @@ type Equaler interface {
 }
 
 func Equal(lhs, rhs Val) bool {
-	if lhs == nil && rhs == nil {
-		return true
+	if lhs == nil {
+		return rhs == nil
 	}
 	if l, ok := lhs.(Equaler); ok {
 		return l.Equal(rhs)

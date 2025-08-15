@@ -7,7 +7,11 @@
 { 0 != } >true?
 { nil = } >nil?
 
-{ false? { "assertion failed" throw } if } >assert
+{ dup >:assert/value
+  eval
+  false? { "assertion failed: " :assert/value str + throw } if
+} >assert
+
 440 >:freq
 0 >:phase
 0.5 >:pw

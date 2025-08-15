@@ -8,6 +8,10 @@ import (
 
 type Str string
 
+func (s Str) String() string {
+	return string(s)
+}
+
 func (s Str) Eval(vm *VM) error {
 	vm.Push(s)
 	return nil
@@ -23,6 +27,19 @@ func (s Str) Equal(other Val) bool {
 }
 
 func init() {
+	RegisterMethod[Str]("sym", 1, func(vm *VM) error {
+		s := Pop[Str](vm)
+		vm.Push(Sym(s))
+		return nil
+	})
+
+	RegisterMethod[Str]("+", 2, func(vm *VM) error {
+		rhs := Pop[Str](vm)
+		lhs := Pop[Str](vm)
+		vm.Push(lhs + rhs)
+		return nil
+	})
+
 	RegisterMethod[Str]("path/join", 2, func(vm *VM) error {
 		rhs := Pop[Str](vm)
 		lhs := Pop[Str](vm)
@@ -49,8 +66,4 @@ func init() {
 		vm.Push(v[0])
 		return nil
 	})
-}
-
-func (s Str) String() string {
-	return string(s)
 }
