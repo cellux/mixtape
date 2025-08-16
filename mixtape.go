@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -17,6 +16,7 @@ import (
 var prelude string
 
 var flags struct {
+	LogLevel   string
 	SampleRate int
 	BPM        float64
 	TPB        int
@@ -29,25 +29,24 @@ func SampleRate() int {
 }
 
 type App struct {
-	vm            *VM
-	openFiles     map[string]string
-	currentFile   string
-	shouldExit    bool
-	font          *Font
-	tm            *TileMap
-	ts            *TileScreen
-	editor        *Editor
-	lastScript    []byte
-	result        Val
-	tapeDisplay   *TapeDisplay
-	tapePlayer    *OtoPlayer
-	globalKeyMap  *KeyMap
-	editorKeyMap  *KeyMap
-	currentKeyMap *KeyMap
+	vm           *VM
+	openFiles    map[string]string
+	currentFile  string
+	shouldExit   bool
+	font         *Font
+	tm           *TileMap
+	ts           *TileScreen
+	editor       *Editor
+	lastScript   []byte
+	result       Val
+	tapeDisplay  *TapeDisplay
+	tapePlayer   *OtoPlayer
+	kmm          *KeyMapManager
+	editorKeyMap KeyMap
 }
 
 func (app *App) Init() error {
-	slog.Debug("Init")
+	logger.Debug("Init")
 	err := InitOtoContext(SampleRate())
 	if err != nil {
 		return err
@@ -101,14 +100,19 @@ func (app *App) Init() error {
 		app.lastScript = app.editor.GetBytes()
 		err := vm.ParseAndEval(bytes.NewReader(app.lastScript), tapePath)
 		if err != nil {
-			slog.Error("parse error", "err", err)
+			logger.Error("parse error", "err", err)
 			app.result = err
 		} else {
 			app.result = vm.Pop()
 		}
 	}
-	globalKeyMap := CreateKeyMap()
-	globalKeyMap.Bind("C-p", CreateKeyHandler(func() {
+	globalKeyMap := CreateKeyMap(nil)
+	globalKeyMap.Bind("C-g", app.Reset)
+	globalKeyMap.Bind("Escape", app.Reset)
+	globalKeyMap.Bind("C-z", UndoLastAction)
+	globalKeyMap.Bind("C-x u", UndoLastAction)
+	globalKeyMap.Bind("C-q", app.Quit)
+	globalKeyMap.Bind("C-p", func() {
 		evalEditorScriptIfChanged()
 		if tape, ok := app.result.(*Tape); ok {
 			if app.tapePlayer != nil {
@@ -118,12 +122,9 @@ func (app *App) Init() error {
 			player.Play()
 			app.tapePlayer = player
 		}
-	}))
-	app.globalKeyMap = &globalKeyMap
-	editorKeyMap := CreateKeyMap()
-	editorKeyMap.Bind("Escape", CreateKeyHandler(app.Reset))
-	editorKeyMap.Bind("C-g", CreateKeyHandler(app.Reset))
-	editorKeyMap.Bind("Enter", CreateKeyHandler(func() {
+	})
+	editorKeyMap := CreateKeyMap(globalKeyMap)
+	editorKeyMap.Bind("Enter", func() {
 		DispatchAction(func() UndoFunc {
 			app.editor.SplitLine()
 			return func() {
@@ -131,30 +132,30 @@ func (app *App) Init() error {
 				app.editor.DeleteRune()
 			}
 		})
-	}))
-	editorKeyMap.Bind("Left", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Left", func() {
 		app.editor.AdvanceColumn(-1)
-	}))
-	editorKeyMap.Bind("Right", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Right", func() {
 		app.editor.AdvanceColumn(1)
-	}))
-	editorKeyMap.Bind("Up", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Up", func() {
 		app.editor.AdvanceLine(-1)
-	}))
-	editorKeyMap.Bind("Down", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Down", func() {
 		app.editor.AdvanceLine(1)
-	}))
-	editorKeyMap.Bind("PageUp", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("PageUp", func() {
 		for range app.editor.height {
 			app.editor.AdvanceLine(-1)
 		}
-	}))
-	editorKeyMap.Bind("PageDown", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("PageDown", func() {
 		for range app.editor.height {
 			app.editor.AdvanceLine(1)
 		}
-	}))
-	editorKeyMap.Bind("Delete", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Delete", func() {
 		DispatchAction(func() UndoFunc {
 			deletedRune := app.editor.DeleteRune()
 			return func() {
@@ -164,8 +165,8 @@ func (app *App) Init() error {
 				}
 			}
 		})
-	}))
-	editorKeyMap.Bind("Backspace", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Backspace", func() {
 		if app.editor.AtBOF() {
 			return
 		}
@@ -178,22 +179,20 @@ func (app *App) Init() error {
 				}
 			}
 		})
-	}))
-	editorKeyMap.Bind("Home", CreateKeyHandler(app.editor.MoveToBOL))
-	editorKeyMap.Bind("End", CreateKeyHandler(app.editor.MoveToEOL))
-	editorKeyMap.Bind("Tab", CreateKeyHandler(app.editor.InsertSpacesUntilNextTabStop))
-	editorKeyMap.Bind("C-Enter", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("Home", app.editor.MoveToBOL)
+	editorKeyMap.Bind("End", app.editor.MoveToEOL)
+	editorKeyMap.Bind("Tab", app.editor.InsertSpacesUntilNextTabStop)
+	editorKeyMap.Bind("C-Enter", func() {
 		evalEditorScriptIfChanged()
-	}))
-	editorKeyMap.Bind("C-z", CreateKeyHandler(UndoLastAction))
-	editorKeyMap.Bind("C-q", CreateKeyHandler(app.Quit))
-	editorKeyMap.Bind("C-Left", CreateKeyHandler(app.editor.WordLeft))
-	editorKeyMap.Bind("C-Right", CreateKeyHandler(app.editor.WordRight))
-	editorKeyMap.Bind("C-a", CreateKeyHandler(app.editor.MoveToBOL))
-	editorKeyMap.Bind("C-e", CreateKeyHandler(app.editor.MoveToEOL))
-	editorKeyMap.Bind("C-Home", CreateKeyHandler(app.editor.MoveToBOF))
-	editorKeyMap.Bind("C-End", CreateKeyHandler(app.editor.MoveToEOF))
-	editorKeyMap.Bind("C-k", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-Left", app.editor.WordLeft)
+	editorKeyMap.Bind("C-Right", app.editor.WordRight)
+	editorKeyMap.Bind("C-a", app.editor.MoveToBOL)
+	editorKeyMap.Bind("C-e", app.editor.MoveToEOL)
+	editorKeyMap.Bind("C-Home", app.editor.MoveToBOF)
+	editorKeyMap.Bind("C-End", app.editor.MoveToEOF)
+	editorKeyMap.Bind("C-k", func() {
 		if app.editor.AtEOL() {
 			app.editor.DeleteRune()
 		} else {
@@ -201,8 +200,8 @@ func (app *App) Init() error {
 				app.editor.DeleteRune()
 			}
 		}
-	}))
-	editorKeyMap.Bind("C-Backspace", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-Backspace", func() {
 		DispatchAction(func() UndoFunc {
 			app.editor.SetMark()
 			app.editor.WordLeft()
@@ -211,8 +210,8 @@ func (app *App) Init() error {
 				app.editor.InsertRunes(deletedRunes)
 			}
 		})
-	}))
-	editorKeyMap.Bind("C-u", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-u", func() {
 		DispatchAction(func() UndoFunc {
 			app.editor.SetMark()
 			app.editor.MoveToBOL()
@@ -221,9 +220,9 @@ func (app *App) Init() error {
 				app.editor.InsertRunes(deletedRunes)
 			}
 		})
-	}))
-	editorKeyMap.Bind("C-Space", CreateKeyHandler(app.editor.SetMark))
-	editorKeyMap.Bind("C-w", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-Space", app.editor.SetMark)
+	editorKeyMap.Bind("C-w", func() {
 		DispatchAction(func() UndoFunc {
 			p, _ := app.editor.PointAndMarkInOrder()
 			deletedRunes := app.editor.KillRegion()
@@ -232,8 +231,8 @@ func (app *App) Init() error {
 				app.editor.InsertRunes(deletedRunes)
 			}
 		})
-	}))
-	editorKeyMap.Bind("C-y", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-y", func() {
 		DispatchAction(func() UndoFunc {
 			p0 := app.editor.GetPoint()
 			app.editor.Paste()
@@ -242,22 +241,23 @@ func (app *App) Init() error {
 				app.editor.KillBetween(p0, p1)
 			}
 		})
-	}))
-	editorKeyMap.Bind("C-s", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("C-s", func() {
 		if app.currentFile != "" {
 			os.WriteFile(app.currentFile, app.editor.GetBytes(), 0o644)
 		}
-	}))
-	editorKeyMap.Bind("M-b", CreateKeyHandler(app.editor.WordLeft))
-	editorKeyMap.Bind("M-f", CreateKeyHandler(app.editor.WordRight))
-	editorKeyMap.Bind("M-w", CreateKeyHandler(app.editor.YankRegion))
-	editorKeyMap.Bind("M-Backspace", CreateKeyHandler(func() {
+	})
+	editorKeyMap.Bind("M-b", app.editor.WordLeft)
+	editorKeyMap.Bind("M-f", app.editor.WordRight)
+	editorKeyMap.Bind("M-w", app.editor.YankRegion)
+	editorKeyMap.Bind("M-Backspace", func() {
 		app.editor.SetMark()
 		app.editor.WordLeft()
 		app.editor.KillRegion()
-	}))
-	app.editorKeyMap = &editorKeyMap
-	app.currentKeyMap = app.editorKeyMap
+	})
+	app.editorKeyMap = editorKeyMap
+	app.kmm = CreateKeyMapManager()
+	app.kmm.SetCurrentKeyMap(editorKeyMap)
 	return nil
 }
 
@@ -270,12 +270,16 @@ func (app *App) Quit() {
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
-	//slog.Debug("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
+	//logger.Debug("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
 	if action != glfw.Press && action != glfw.Repeat {
 		return
 	}
 	var keyName string
 	switch key {
+	case glfw.KeyLeftShift, glfw.KeyLeftControl, glfw.KeyLeftAlt, glfw.KeyLeftSuper:
+		return
+	case glfw.KeyRightShift, glfw.KeyRightControl, glfw.KeyRightAlt, glfw.KeyRightSuper:
+		return
 	case glfw.KeySpace:
 		keyName = "Space"
 	case glfw.KeyEscape:
@@ -342,21 +346,25 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 	if modes&glfw.ModControl != 0 {
 		keyName = "C-" + keyName
 	}
-	if app.globalKeyMap != nil && app.globalKeyMap.HandleKey(keyName) {
-		return
-	}
-	if app.currentKeyMap != nil && app.currentKeyMap.HandleKey(keyName) {
-		return
-	}
+	app.kmm.HandleKey(keyName)
 }
 
 func (app *App) OnChar(char rune) {
-	//slog.Debug("OnChar", "char", char)
-	app.editor.InsertRune(char)
+	//logger.Debug("OnChar", "char", char)
+	if app.kmm.IsInsideKeySequence() {
+		return
+	}
+	DispatchAction(func() UndoFunc {
+		app.editor.InsertRune(char)
+		return func() {
+			app.editor.AdvanceColumn(-1)
+			app.editor.DeleteRune()
+		}
+	})
 }
 
 func (app *App) OnFramebufferSize(width, height int) {
-	slog.Debug("OnFramebufferSize", "width", width, "height", height)
+	logger.Debug("OnFramebufferSize", "width", width, "height", height)
 }
 
 func (app *App) Render() error {
@@ -392,11 +400,12 @@ func (app *App) Reset() {
 		app.tapePlayer.Close()
 		app.tapePlayer = nil
 	}
-	app.editor.ResetState()
+	app.editor.Reset()
+	app.kmm.Reset()
 }
 
 func (app *App) Close() error {
-	slog.Debug("Close")
+	logger.Debug("Close")
 	app.Reset()
 	app.ts.Close()
 	app.tm.Close()
@@ -455,24 +464,31 @@ func runWithArgs(vm *VM, args []string) error {
 func main() {
 	var vm *VM
 	var err error
+	flag.StringVar(&flags.LogLevel, "loglevel", "info", "Log level")
 	flag.IntVar(&flags.SampleRate, "sr", 48000, "Sample rate")
 	flag.Float64Var(&flags.BPM, "bpm", 120, "Beats per minute")
 	flag.IntVar(&flags.TPB, "tpb", 96, "Ticks per beat")
 	flag.StringVar(&flags.EvalFile, "f", "", "File to evaluate")
 	flag.StringVar(&flags.EvalScript, "e", "", "Script to evaluate")
 	flag.Parse()
+	if err := InitLogger(flags.LogLevel); err != nil {
+		fmt.Fprintf(os.Stderr, "%s", err)
+		os.Exit(1)
+	}
 	vm, err = CreateVM()
 	if err != nil {
-		slog.Error("vm initialization error", "err", err)
+		logger.Error("vm initialization error", "err", err)
 		os.Exit(1)
 	}
 	setDefaults(vm)
 	err = vm.ParseAndEval(strings.NewReader(prelude), "<prelude>")
 	if err != nil {
-		slog.Error("error while parsing the prelude", "err", err)
+		logger.Error("error while parsing the prelude", "err", err)
+		os.Exit(1)
 	}
 	err = runWithArgs(vm, flag.Args())
 	if err != nil {
-		slog.Error("vm error", "err", err)
+		logger.Error("vm error", "err", err)
+		os.Exit(1)
 	}
 }

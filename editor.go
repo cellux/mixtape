@@ -318,7 +318,7 @@ func (e *Editor) Paste() {
 	e.InsertRunes(sourceRunes)
 }
 
-func (e *Editor) ResetState() {
+func (e *Editor) Reset() {
 	e.ForgetMark()
 }
 
