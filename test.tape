@@ -105,12 +105,16 @@ drop
 { pop 1 = } assert
 { [] = } assert
 
-[1 5 2] dup
-{ pop 2 = } assert
-dup { [1 5] = } assert
-9 push
-{ [1 5 9] = } assert
-{ [1 5 2] = } assert
+(
+  { [1 5 2] swap eval
+    { pop 2 = } assert
+    dup { [1 5] = } assert
+    9 push
+    { [1 5 9] = } assert
+  } >copy-with
+  { clone } copy-with { [1 5 2] = } assert
+  { dup } copy-with { [1 5 9] = } assert
+)
 
 ( { 0 >:sum [1 2 3] {:sum + >:sum} each :sum 6 = } assert )
 

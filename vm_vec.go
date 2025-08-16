@@ -78,7 +78,7 @@ func init() {
 		vm.Push(v[index])
 		return nil
 	})
-	RegisterMethod[Vec]("dup", 1, func(vm *VM) error {
+	RegisterMethod[Vec]("clone", 1, func(vm *VM) error {
 		src := Top[Vec](vm)
 		dst := make(Vec, len(src))
 		copy(dst, src)
