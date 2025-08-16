@@ -84,6 +84,10 @@ stack len 0 = assert
 
 { [ 5 2 + 3 * 5 ] [21 5] = } assert
 
+{ [5 9 3] 0 at 5 = } assert
+{ [5 9 3] 1 at 9 = } assert
+{ [5 9 3] 2 at 3 = } assert
+
 [1 2 3] iter
 { next 1 = } assert
 { next 2 = } assert
@@ -137,6 +141,8 @@ dup { [1 5] = } assert
   { pop "triangle~" sym = } assert
   drop
 )
+
+{ [ 5 2 9 4 ] 2 1 partition [ [5 2] [2 9] [9 4] ] = } assert
 
 # parsing
 

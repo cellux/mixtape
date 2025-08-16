@@ -22,3 +22,9 @@
 { sr :freq / * } >periods
 { beats :tpb / } >ticks
 { SRC_LINEAR swap resample } >stretch
+
+{ 2 1 partition
+  dup { 0 at } map >:start
+  dup { 1 at } map >:end
+  drop
+} >start->end

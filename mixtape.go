@@ -111,6 +111,7 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("Escape", app.Reset)
 	globalKeyMap.Bind("C-z", UndoLastAction)
 	globalKeyMap.Bind("C-x u", UndoLastAction)
+	globalKeyMap.Bind("C-S--", UndoLastAction)
 	globalKeyMap.Bind("C-q", app.Quit)
 	globalKeyMap.Bind("C-p", func() {
 		evalEditorScriptIfChanged()
@@ -242,7 +243,7 @@ func (app *App) Init() error {
 			}
 		})
 	})
-	editorKeyMap.Bind("C-s", func() {
+	editorKeyMap.Bind("C-x C-s", func() {
 		if app.currentFile != "" {
 			os.WriteFile(app.currentFile, app.editor.GetBytes(), 0o644)
 		}

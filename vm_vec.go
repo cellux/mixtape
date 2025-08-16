@@ -55,10 +55,27 @@ func (v Vec) Iter() Fun {
 	}
 }
 
+func (v Vec) Partition(size, step int) Vec {
+	var out Vec
+	for i := 0; i+size <= len(v); i += step {
+		out = append(out, v[i:i+size])
+	}
+	return out
+}
+
 func init() {
 	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
 		v := Pop[Vec](vm)
 		vm.Push(len(v))
+		return nil
+	})
+	RegisterMethod[Vec]("at", 2, func(vm *VM) error {
+		index := int(Pop[Num](vm))
+		v := Pop[Vec](vm)
+		if index < 0 || index >= len(v) {
+			return fmt.Errorf("at: index out of bounds: %d", index)
+		}
+		vm.Push(v[index])
 		return nil
 	})
 	RegisterMethod[Vec]("dup", 1, func(vm *VM) error {
@@ -123,6 +140,13 @@ func init() {
 			vm.Push(v[i])
 			e.Eval(vm)
 		}
+		return nil
+	})
+	RegisterMethod[Vec]("partition", 3, func(vm *VM) error {
+		step := int(Pop[Num](vm))
+		size := int(Pop[Num](vm))
+		v := Pop[Vec](vm)
+		vm.Push(v.Partition(size, step))
 		return nil
 	})
 	RegisterMethod[Vec]("tape", 1, func(vm *VM) error {
