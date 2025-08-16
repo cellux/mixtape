@@ -128,7 +128,8 @@ dup { [1 5] = } assert
 
 { 5 { 2 + 3 * } eval 21 = } assert
 
-{ [2 3 4] {1 +} map [3 4 5] = } assert
+{ [2 3 4] { 1 + } map [3 4 5] = } assert
+{ [2 4 6] { 2 / } map [1 2 3] = } assert
 
 { [2 3 4] {+} reduce 9 = } assert
 { [2 3 4] {*} reduce 24 = } assert

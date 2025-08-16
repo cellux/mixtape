@@ -27,4 +27,14 @@
   dup { 0 at } map >:start
   dup { 1 at } map >:end
   drop
-} >start->end
+} >start:end
+
+{( over {+} reduce / >:unit { :unit * } map )} >distribute
+
+{ >:envseg >:nf start:end
+  [
+    { :start :end :nf :envseg }
+    { :envseg eval }
+    seq
+  ] { join } reduce
+} >env
