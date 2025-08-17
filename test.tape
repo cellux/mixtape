@@ -155,8 +155,16 @@ drop
 
 # throw/catch
 
-{ "foo" throw } catch "foo" = assert
-{ [ 1 7 9 4 3 ] { dup 2 % 0 = { throw } if drop } each } catch 4 = assert
+{ { "foo" throw } catch "foo" = } assert
+{ { [ 1 7 9 4 3 ] { dup 2 % 0 = { throw } if drop } each } catch 4 = } assert
+
+# loop/break
+
+( 0 >:sum
+  { [ 1 7 9 4 3 ] iter
+    { next dup 2 % 0 = { break } if :sum + >:sum } loop
+    drop
+    :sum 17 = } assert )
 
 # parsing
 

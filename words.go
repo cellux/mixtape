@@ -37,6 +37,27 @@ func init() {
 		return err
 	})
 
+	RegisterWord("loop", func(vm *VM) error {
+		body := vm.Pop()
+		for {
+			stackSize := len(vm.valStack)
+			err := vm.Eval(body)
+			if len(vm.valStack) > stackSize {
+				vm.valStack = vm.valStack[:stackSize]
+			}
+			if err != nil {
+				if tv, ok := err.(ThrowValue); ok {
+					if str, ok := tv.v.(Str); ok {
+						if str == "*break*" {
+							return nil
+						}
+					}
+				}
+				return err
+			}
+		}
+	})
+
 	RegisterWord("log", func(vm *VM) error {
 		v := vm.Top()
 		logger.Info(fmt.Sprintf("%s", v))

@@ -12,6 +12,8 @@
   false? { "assertion failed: " :assert/value str + throw } if
 } >assert
 
+{ "*break*" throw } >break
+
 440 >:freq
 0 >:phase
 0.5 >:pw
