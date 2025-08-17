@@ -122,6 +122,12 @@ drop
    [ 1 7 9 4 3 ] { dup 2 % 0 = { dup >:even } if drop } each
    :even 4 = } assert)
 
+{ [ 5 2 9 4 ] 2 1 partition [ [5 2] [2 9] [9 4] ] = } assert
+
+{ [[1 5 2] [4 7 3]] zip [[1 4] [5 7] [2 3]] = } assert
+{ [[1 5 2] [4 7]] zip [[1 4] [5 7]] = } assert
+{ [[1 5] [4 7 3]] zip [[1 4] [5 7]] = } assert
+
 # quoting
 
 { {[1 2 3]} len 5 = } assert
@@ -150,8 +156,6 @@ drop
   { pop "triangle~" sym = } assert
   drop
 )
-
-{ [ 5 2 9 4 ] 2 1 partition [ [5 2] [2 9] [9 4] ] = } assert
 
 # throw/catch
 

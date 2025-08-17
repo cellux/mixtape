@@ -14,6 +14,15 @@
 
 { "*break*" throw } >break
 
+{( { iter } map >:zip/iters
+   [] >:zip/result
+   {
+     [ :zip/iters { eval dup nil? { break } if } each ]
+     :zip/result swap push >:zip/result
+   } loop
+   :zip/result
+)} >zip
+
 440 >:freq
 0 >:phase
 0.5 >:pw
