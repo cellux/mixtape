@@ -4,6 +4,14 @@ import (
 	"fmt"
 )
 
+type ThrowValue struct {
+	v Val
+}
+
+func (e ThrowValue) Error() string {
+	return fmt.Sprintf("%s", e.v)
+}
+
 func init() {
 	RegisterWord("nil", func(vm *VM) error {
 		vm.Push(nil)
@@ -11,7 +19,28 @@ func init() {
 	})
 
 	RegisterWord("throw", func(vm *VM) error {
-		return fmt.Errorf("%s", vm.Pop())
+		v := vm.Pop()
+		return ThrowValue{v}
+	})
+
+	RegisterWord("catch", func(vm *VM) error {
+		body := vm.Pop()
+		stackSize := len(vm.valStack)
+		err := vm.Eval(body)
+		if len(vm.valStack) > stackSize {
+			vm.valStack = vm.valStack[:stackSize]
+		}
+		if tv, ok := err.(ThrowValue); ok {
+			vm.Push(tv.v)
+			err = nil
+		}
+		return err
+	})
+
+	RegisterWord("log", func(vm *VM) error {
+		v := vm.Top()
+		logger.Info(fmt.Sprintf("%s", v))
+		return nil
 	})
 
 	RegisterWord("sr", func(vm *VM) error {

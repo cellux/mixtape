@@ -58,7 +58,9 @@ func init() {
 	})
 
 	RegisterMethod[Str]("parse1", 1, func(vm *VM) error {
-		vm.Eval(Sym("parse"))
+		if err := vm.Eval(Sym("parse")); err != nil {
+			return err
+		}
 		v := Pop[Vec](vm)
 		if len(v) == 0 {
 			return fmt.Errorf("parse1: empty string")

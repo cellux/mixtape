@@ -111,7 +111,9 @@ func init() {
 		}
 		for _, item := range v {
 			vm.Push(item)
-			e.Eval(vm)
+			if err := e.Eval(vm); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -123,7 +125,9 @@ func init() {
 		}
 		for i, item := range v {
 			vm.Push(item)
-			e.Eval(vm)
+			if err := e.Eval(vm); err != nil {
+				return err
+			}
 			v[i] = vm.Pop()
 		}
 		return nil
@@ -138,7 +142,9 @@ func init() {
 		vm.Push(v[0])
 		for i := 1; i < len(v); i++ {
 			vm.Push(v[i])
-			e.Eval(vm)
+			if err := e.Eval(vm); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

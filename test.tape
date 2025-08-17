@@ -118,6 +118,10 @@ drop
 
 ( { 0 >:sum [1 2 3] {:sum + >:sum} each :sum 6 = } assert )
 
+({ 0 >:even
+   [ 1 7 9 4 3 ] { dup 2 % 0 = { dup >:even } if drop } each
+   :even 4 = } assert)
+
 # quoting
 
 { {[1 2 3]} len 5 = } assert
@@ -148,6 +152,11 @@ drop
 )
 
 { [ 5 2 9 4 ] 2 1 partition [ [5 2] [2 9] [9 4] ] = } assert
+
+# throw/catch
+
+{ "foo" throw } catch "foo" = assert
+{ [ 1 7 9 4 3 ] { dup 2 % 0 = { throw } if drop } each } catch 4 = assert
 
 # parsing
 
