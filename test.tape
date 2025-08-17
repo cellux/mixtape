@@ -76,6 +76,7 @@ stack len 0 = assert
 { "foo" sym "foo" != } assert
 { { foo } 0 at "foo" sym = } assert
 ( { { foo } 0 at 5 set "foo" get 5 = } assert )
+( { "foo" 5 set { foo } 0 at get 5 = } assert )
 
 # vectors
 

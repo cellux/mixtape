@@ -33,6 +33,12 @@ func (s Sym) Equal(other Val) bool {
 }
 
 func init() {
+	RegisterMethod[Sym]("get", 1, func(vm *VM) error {
+		sym := Pop[Sym](vm)
+		vm.Push(vm.GetVal(Str(sym)))
+		return nil
+	})
+
 	RegisterMethod[Sym]("set", 2, func(vm *VM) error {
 		val := vm.Pop()
 		sym := Pop[Sym](vm)
