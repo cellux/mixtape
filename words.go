@@ -42,10 +42,10 @@ func init() {
 		for {
 			stackSize := len(vm.valStack)
 			err := vm.Eval(body)
-			if len(vm.valStack) > stackSize {
-				vm.valStack = vm.valStack[:stackSize]
-			}
 			if err != nil {
+				if len(vm.valStack) > stackSize {
+					vm.valStack = vm.valStack[:stackSize]
+				}
 				if tv, ok := err.(ThrowValue); ok {
 					if str, ok := tv.v.(Str); ok {
 						if str == "*break*" {
