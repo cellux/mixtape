@@ -12,7 +12,7 @@
   false? { "assertion failed: " :assert/value str + throw } if
 } >assert
 
-{ "*break*" throw } >break
+{ nil throw } >break
 
 {( { iter } map >:zip/iters
    [] >:zip/result

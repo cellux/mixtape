@@ -28,7 +28,9 @@ func init() {
 		stackState := vm.SaveStackState()
 		err := vm.Eval(body)
 		vm.RestoreStackState(stackState)
-		if tv, ok := err.(ThrowValue); ok {
+		if err == nil {
+			vm.Push(nil)
+		} else if tv, ok := err.(ThrowValue); ok {
 			vm.Push(tv.v)
 			err = nil
 		}
@@ -43,10 +45,8 @@ func init() {
 			if err != nil {
 				vm.RestoreStackState(stackState)
 				if tv, ok := err.(ThrowValue); ok {
-					if str, ok := tv.v.(Str); ok {
-						if str == "*break*" {
-							return nil
-						}
+					if tv.v == nil {
+						return nil
 					}
 				}
 				return err
