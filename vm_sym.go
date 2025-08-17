@@ -31,3 +31,12 @@ func (s Sym) Equal(other Val) bool {
 		return false
 	}
 }
+
+func init() {
+	RegisterMethod[Sym]("set", 2, func(vm *VM) error {
+		val := vm.Pop()
+		sym := Pop[Sym](vm)
+		vm.SetVal(Str(sym), val)
+		return nil
+	})
+}

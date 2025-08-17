@@ -131,8 +131,8 @@ func init() {
 	})
 
 	RegisterWord("set", func(vm *VM) error {
-		k := vm.Pop()
 		v := vm.Pop()
+		k := vm.Pop()
 		vm.SetVal(k, v)
 		return nil
 	})

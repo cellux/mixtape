@@ -365,7 +365,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 						if text == ">=" {
 							code = append(code, Sym(text))
 						} else {
-							code = append(code, Str(text[1:]), Sym("set"))
+							code = append(code, Str(text[1:]), Sym("swap"), Sym("set"))
 						}
 					default:
 						code = append(code, Sym(text))

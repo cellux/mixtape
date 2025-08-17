@@ -27,7 +27,7 @@
 0 >:phase
 0.5 >:pw
 
-{ ":freq" set } >f
+{ ":freq" swap set } >f
 { sr * } >seconds
 { sr :bpm 60 / / * } >beats
 { sr :freq / * } >periods

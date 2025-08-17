@@ -74,6 +74,8 @@ stack len 0 = assert
 
 { "foo" sym "foo" sym = } assert
 { "foo" sym "foo" != } assert
+{ { foo } 0 at "foo" sym = } assert
+( { { foo } 0 at 5 set "foo" get 5 = } assert )
 
 # vectors
 
@@ -195,8 +197,8 @@ drop
 
 # set/get
 
-( { 100 "foo" set "foo" get 100 = } assert )
-( { 100 "foo" set foo 100 = } assert )
+( { "foo" 100 set "foo" get 100 = } assert )
+( { "foo" 100 set foo 100 = } assert )
 ( { 100 >foo "foo" get 100 = } assert )
 ( { 100 >foo @foo 100 = } assert )
 
