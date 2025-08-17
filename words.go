@@ -25,11 +25,9 @@ func init() {
 
 	RegisterWord("catch", func(vm *VM) error {
 		body := vm.Pop()
-		stackSize := len(vm.valStack)
+		stackState := vm.SaveStackState()
 		err := vm.Eval(body)
-		if len(vm.valStack) > stackSize {
-			vm.valStack = vm.valStack[:stackSize]
-		}
+		vm.RestoreStackState(stackState)
 		if tv, ok := err.(ThrowValue); ok {
 			vm.Push(tv.v)
 			err = nil
@@ -40,12 +38,10 @@ func init() {
 	RegisterWord("loop", func(vm *VM) error {
 		body := vm.Pop()
 		for {
-			stackSize := len(vm.valStack)
+			stackState := vm.SaveStackState()
 			err := vm.Eval(body)
 			if err != nil {
-				if len(vm.valStack) > stackSize {
-					vm.valStack = vm.valStack[:stackSize]
-				}
+				vm.RestoreStackState(stackState)
 				if tv, ok := err.(ThrowValue); ok {
 					if str, ok := tv.v.(Str); ok {
 						if str == "*break*" {

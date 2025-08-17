@@ -23,6 +23,19 @@
    :zip/result
 )} >zip
 
+{( >seq/body >:seq/syms
+   :seq/syms { get iter } map >:seq/symiters
+   {
+     [:seq/syms :seq/symiters] zip {
+       dup 1 at # symiter
+       swap 0 at # sym
+       swap
+       eval dup nil? { break } if set
+     } each
+     seq/body
+   } loop
+)} >seq
+
 440 >:freq
 0 >:phase
 0.5 >:pw

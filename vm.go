@@ -52,6 +52,10 @@ type Evaler interface {
 	Eval(vm *VM) error
 }
 
+type Iterable interface {
+	Iter() Fun
+}
+
 var rootEnv = make(Map)
 
 func RegisterNum(name string, num Num) {
@@ -81,6 +85,32 @@ func CreateVM() (*VM, error) {
 		quoteDepth:  0,
 	}
 	return vm, nil
+}
+
+type VMStackState struct {
+	valStackSize    int
+	envStackSize    int
+	markerStackSize int
+}
+
+func (vm *VM) SaveStackState() *VMStackState {
+	return &VMStackState{
+		valStackSize:    len(vm.valStack),
+		envStackSize:    len(vm.envStack),
+		markerStackSize: len(vm.markerStack),
+	}
+}
+
+func (vm *VM) RestoreStackState(state *VMStackState) {
+	if state.valStackSize < len(vm.valStack) {
+		vm.valStack = vm.valStack[:state.valStackSize]
+	}
+	if state.envStackSize < len(vm.envStack) {
+		vm.envStack = vm.envStack[:state.envStackSize]
+	}
+	if state.markerStackSize < len(vm.markerStack) {
+		vm.markerStack = vm.markerStack[:state.markerStackSize]
+	}
 }
 
 func (vm *VM) Reset() {
