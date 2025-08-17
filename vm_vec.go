@@ -119,17 +119,16 @@ func init() {
 	})
 	RegisterMethod[Vec]("map", 2, func(vm *VM) error {
 		e := Pop[Evaler](vm)
-		v := Top[Vec](vm)
-		if len(v) == 0 {
-			return nil
-		}
-		for i, item := range v {
+		v := Pop[Vec](vm)
+		mapped := make(Vec, 0, len(v))
+		for _, item := range v {
 			vm.Push(item)
 			if err := e.Eval(vm); err != nil {
 				return err
 			}
-			v[i] = vm.Pop()
+			mapped = append(mapped, vm.Pop())
 		}
+		vm.Push(mapped)
 		return nil
 	})
 	RegisterMethod[Vec]("reduce", 2, func(vm *VM) error {
