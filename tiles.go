@@ -10,12 +10,12 @@ import (
 )
 
 type TileMap struct {
-	img        image.Image
-	cols, rows int
-	tex        Texture
+	img         image.Image
+	sizeInTiles Size
+	tex         Texture
 }
 
-func CreateTileMap(img image.Image, cols, rows int) (*TileMap, error) {
+func CreateTileMap(img image.Image, sizeInTiles Size) (*TileMap, error) {
 	tex, err := CreateTexture()
 	if err != nil {
 		return nil, err
@@ -36,10 +36,9 @@ func CreateTileMap(img image.Image, cols, rows int) (*TileMap, error) {
 		return nil, fmt.Errorf("cannot create TileMap OpenGL texture from image of type %T", img)
 	}
 	tm := &TileMap{
-		img:  img,
-		cols: cols,
-		rows: rows,
-		tex:  tex,
+		img:         img,
+		sizeInTiles: sizeInTiles,
+		tex:         tex,
 	}
 	return tm, nil
 }
@@ -50,7 +49,7 @@ func (tm *TileMap) GetMapSize() Size {
 
 func (tm *TileMap) GetTileSize() Size {
 	mapSize := tm.GetMapSize()
-	return Size{X: mapSize.X / tm.cols, Y: mapSize.Y / tm.rows}
+	return Size{X: mapSize.X / tm.sizeInTiles.X, Y: mapSize.Y / tm.sizeInTiles.Y}
 }
 
 func (tm *TileMap) Close() error {
@@ -80,9 +79,13 @@ const (
     varying vec2 v_texcoord;
     varying vec4 v_fgColor;
     varying vec4 v_bgColor;
+    vec4 gammaCorrect(vec4 linear) {
+      vec3 gammaCorrectedRGB = pow(linear.rgb, vec3(1.0 / 2.2));
+      return vec4(gammaCorrectedRGB, linear.a);
+    }
     void main(void) {
       vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = v_bgColor + v_fgColor * t.a;
+      gl_FragColor = gammaCorrect(v_bgColor + v_fgColor * t.a);
     };` + "\x00"
 	tileFragmentShaderRGBA = `
     precision highp float;
@@ -90,9 +93,13 @@ const (
     varying vec2 v_texcoord;
     varying vec4 v_fgColor;
     varying vec4 v_bgColor;
+    vec4 gammaCorrect(vec4 linear) {
+      vec3 gammaCorrectedRGB = pow(linear.rgb, vec3(1.0 / 2.2));
+      return vec4(gammaCorrectedRGB, linear.a);
+    }
     void main(void) {
       vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = v_bgColor + v_fgColor * t;
+      gl_FragColor = gammaCorrect(v_bgColor + v_fgColor * t);
     };` + "\x00"
 )
 
@@ -152,8 +159,8 @@ func (ts *TileScreen) Clear() {
 }
 
 func (ts *TileScreen) DrawRune(x, y int, r rune) {
-	rows := ts.tm.rows
-	cols := ts.tm.cols
+	rows := ts.tm.sizeInTiles.Y
+	cols := ts.tm.sizeInTiles.X
 	col := int(r) % cols
 	row := int(r) / cols
 	x0 := float32(x)

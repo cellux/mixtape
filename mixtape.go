@@ -60,12 +60,12 @@ func (app *App) Init() error {
 	if err != nil {
 		return err
 	}
-	tileMapSize := Size{X: 16, Y: 32}
-	faceImage, err := font.GetFaceImage(face, tileMapSize.X, tileMapSize.Y)
+	sizeInTiles := Size{X: 16, Y: 32}
+	faceImage, err := font.GetFaceImage(face, sizeInTiles)
 	if err != nil {
 		return err
 	}
-	tm, err := CreateTileMap(faceImage, tileMapSize.X, tileMapSize.Y)
+	tm, err := CreateTileMap(faceImage, sizeInTiles)
 	if err != nil {
 		return err
 	}

@@ -11,12 +11,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+type FontSizeInPoints = float64
+
 type Font struct {
 	font  *opentype.Font
-	faces map[float64]font.Face
+	faces map[FontSizeInPoints]font.Face
 }
 
-func (f *Font) GetFace(size float64) (font.Face, error) {
+func (f *Font) GetFace(size FontSizeInPoints) (font.Face, error) {
 	if face, ok := f.faces[size]; ok {
 		return face, nil
 	}
@@ -28,7 +30,7 @@ func (f *Font) GetFace(size float64) (font.Face, error) {
 	return opentype.NewFace(f.font, faceOpts)
 }
 
-func (f *Font) GetFaceImage(face font.Face, cols, rows int) (image.Image, error) {
+func (f *Font) GetFaceImage(face font.Face, sizeInTiles Size) (image.Image, error) {
 	metrics := face.Metrics()
 	descent := metrics.Descent.Ceil()
 	ascent := metrics.Ascent.Ceil()
@@ -38,6 +40,7 @@ func (f *Font) GetFaceImage(face font.Face, cols, rows int) (image.Image, error)
 		return nil, fmt.Errorf("Font face does not provide a glyph for rune 'm'")
 	}
 	charWidth := mAdvance.Ceil()
+	cols, rows := sizeInTiles.X, sizeInTiles.Y
 	result := image.NewAlpha(image.Rect(0, 0, charWidth*cols, charHeight*rows))
 	d := font.Drawer{
 		Src:  image.Opaque,
@@ -63,7 +66,7 @@ func LoadFontFromBytes(bytes []byte) (*Font, error) {
 	}
 	return &Font{
 		font:  f,
-		faces: make(map[float64]font.Face),
+		faces: make(map[FontSizeInPoints]font.Face),
 	}, nil
 }
 
