@@ -274,14 +274,14 @@ func init() {
 
 	RegisterWord("take", func(vm *VM) error {
 		nf := int(Pop[Num](vm))
-		s := Pop[Stream](vm)
+		s := Pop[Streamable](vm).Stream()
 		vm.Push(s.Take(nf))
 		return nil
 	})
 
 	RegisterWord("delay", func(vm *VM) error {
 		nf := int(Pop[Num](vm))
-		s := Pop[Stream](vm)
+		s := Pop[Streamable](vm).Stream()
 		vm.Push(s.Delay(nf))
 		return nil
 	})
