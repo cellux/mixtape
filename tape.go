@@ -28,7 +28,7 @@ func (t *Tape) String() string {
 }
 
 func (t *Tape) Stream() Stream {
-	return makeStream(t.nchannels,
+	return makeStream(t.nchannels, t.nframes,
 		func(yield func(Frame) bool) {
 			index := 0
 			for range t.nframes {

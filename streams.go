@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"iter"
 	"math"
 )
 
 type Stream struct {
 	nchannels int
+	nframes   int
 	seq       iter.Seq[Frame]
 }
 
@@ -15,9 +15,10 @@ type Streamable interface {
 	Stream() Stream
 }
 
-func makeStream(nchannels int, seq iter.Seq[Frame]) Stream {
+func makeStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	return Stream{
 		nchannels: nchannels,
+		nframes:   nframes,
 		seq:       seq,
 	}
 }
@@ -81,7 +82,7 @@ func ModOp() SmpBinOp {
 }
 
 func Phasor(freq Stream, op SmpUnOp) Stream {
-	return makeStream(1,
+	return makeStream(1, freq.nframes,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, 1)
 			fnext, fstop := iter.Pull(freq.Mono().seq)
@@ -127,7 +128,11 @@ func (s Stream) Take(nframes int) *Tape {
 
 func (s Stream) Delay(nframes int) Stream {
 	nchannels := s.nchannels
-	return makeStream(nchannels,
+	streamNFrames := s.nframes
+	if streamNFrames > 0 {
+		streamNFrames += nframes
+	}
+	return makeStream(nchannels, streamNFrames,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, nchannels)
 			for range nframes {
@@ -147,7 +152,7 @@ func (s Stream) Mono() Stream {
 	if s.nchannels == 1 {
 		return s
 	}
-	return makeStream(1,
+	return makeStream(1, s.nframes,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, 1)
 			for frame := range s.seq {
@@ -163,7 +168,7 @@ func (s Stream) Stereo() Stream {
 	if s.nchannels == 2 {
 		return s
 	}
-	return makeStream(2,
+	return makeStream(2, s.nframes,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, 2)
 			for frame := range s.seq {
@@ -186,9 +191,20 @@ func (s Stream) AdaptChannels(nchannels int) Stream {
 	return s
 }
 
+func minNFrames(nframes ...int) int {
+	min := 0
+	for _, nf := range nframes {
+		if nf > 0 && (min == 0 || nf < min) {
+			min = nf
+		}
+	}
+	return min
+}
+
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
-	return makeStream(nchannels,
+	nframes := minNFrames(s.nframes, other.nframes)
+	return makeStream(nchannels, nframes,
 		func(yield func(Frame) bool) {
 			out := make([]Smp, nchannels)
 			onext, ostop := iter.Pull(other.AdaptChannels(nchannels).seq)
@@ -209,16 +225,8 @@ func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 }
 
 func applySmpBinOp(vm *VM, op SmpBinOp) error {
-	top := vm.Pop()
-	rhs, ok := top.(Streamable)
-	if !ok {
-		return fmt.Errorf("object of type %T does not implement Streamable", top)
-	}
-	top = vm.Pop()
-	lhs, ok := top.(Streamable)
-	if !ok {
-		return fmt.Errorf("object of type %T does not implement Streamable", top)
-	}
+	rhs := Pop[Streamable](vm)
+	lhs := Pop[Streamable](vm)
 	if n1, ok := lhs.(Num); ok {
 		if n2, ok := rhs.(Num); ok {
 			vm.Push(op(Smp(n1), Smp(n2)))
@@ -226,24 +234,14 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 		}
 	}
 	result := lhs.Stream().Combine(rhs.Stream(), op)
-	if t, ok := lhs.(*Tape); ok {
-		vm.Push(result.Take(t.nframes))
-	} else if t, ok := rhs.(*Tape); ok {
-		vm.Push(result.Take(t.nframes))
-	} else {
-		vm.Push(result)
-	}
+	vm.Push(result)
 	return nil
 }
 
 func init() {
 	RegisterWord("~", func(vm *VM) error {
-		top := vm.Pop()
-		streamable, ok := top.(Streamable)
-		if !ok {
-			return fmt.Errorf("object of type %T does not implement Streamable", top)
-		}
-		vm.Push(streamable.Stream())
+		top := Pop[Streamable](vm)
+		vm.Push(top.Stream())
 		return nil
 	})
 

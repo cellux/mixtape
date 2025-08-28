@@ -103,7 +103,13 @@ func (app *App) Init() error {
 			logger.Error("parse error", "err", err)
 			app.result = err
 		} else {
-			app.result = vm.Pop()
+			result := vm.Pop()
+			if s, ok := result.(Stream); ok {
+				if s.nframes > 0 {
+					result = s.Take(s.nframes)
+				}
+			}
+			app.result = result
 		}
 	}
 	globalKeyMap := CreateKeyMap(nil)
