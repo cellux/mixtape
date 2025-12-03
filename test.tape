@@ -178,6 +178,19 @@ drop
     drop
     :sum 17 = } assert )
 
+# seq
+
+( [ 3 8 2 ] >:lo
+  [ 7 9 5 ] >:hi
+  {
+    [
+      { :lo :hi }
+      { :hi :lo - }
+      seq
+    ] [ 4 1 3 ] =
+  } assert
+)
+
 # parsing
 
 { "1234 4321.5 *" parse {1234 4321.5 *} = } assert
