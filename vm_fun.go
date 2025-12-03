@@ -39,19 +39,41 @@ func (mm MethodMap) FindMethod(name string, nargs int) Fun {
 type TypeMethodMap map[reflect.Type]MethodMap
 
 var typeMethods = make(TypeMethodMap)
+var interfaceMethods = make(TypeMethodMap)
 
 func RegisterMethod[T any](name string, nargs int, fun Fun) {
 	t := reflect.TypeFor[T]()
-	if _, ok := typeMethods[t]; !ok {
-		typeMethods[t] = make(MethodMap)
+	if t.Kind() == reflect.Interface {
+		if _, ok := interfaceMethods[t]; !ok {
+			interfaceMethods[t] = make(MethodMap)
+		}
+		interfaceMethods[t].RegisterMethod(name, nargs, fun)
+	} else {
+		if _, ok := typeMethods[t]; !ok {
+			typeMethods[t] = make(MethodMap)
+		}
+		typeMethods[t].RegisterMethod(name, nargs, fun)
 	}
-	typeMethods[t].RegisterMethod(name, nargs, fun)
 }
 
 func FindMethod(val Val, name string, nargs int) Fun {
 	t := reflect.TypeOf(val)
-	if _, ok := typeMethods[t]; !ok {
+	if t == nil {
 		return nil
 	}
-	return typeMethods[t].FindMethod(name, nargs)
+	if typeMethodMap, ok := typeMethods[t]; ok {
+		m := typeMethodMap.FindMethod(name, nargs)
+		if m != nil {
+			return m
+		}
+	}
+	for interfaceType, interfaceMethodMap := range interfaceMethods {
+		if t.Implements(interfaceType) {
+			m := interfaceMethodMap.FindMethod(name, nargs)
+			if m != nil {
+				return m
+			}
+		}
+	}
+	return nil
 }

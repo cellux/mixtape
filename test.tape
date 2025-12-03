@@ -152,11 +152,11 @@ drop
 { [2 3 4] {*} reduce 24 = } assert
 
 (
-  { saw~ sin~ pulse~ triangle~ } >:waveform
+  { ~saw ~sin ~pulse ~triangle } >:waveform
   { :waveform len 4 = } assert
   { :waveform len 4 = } assert
   :waveform
-  { pop "triangle~" sym = } assert
+  { pop "~triangle" sym = } assert
   drop
 )
 

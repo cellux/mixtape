@@ -1,5 +1,5 @@
 (
-{ saw~ sin~ pulse~ saw~ triangle~ } >:waveform
+{ ~saw ~sin ~pulse ~saw ~triangle } >:waveform
 [ 110 110 220 330 110 220 ] >:freq
 [
   { :waveform :freq }

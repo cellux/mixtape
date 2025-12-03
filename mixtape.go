@@ -38,7 +38,7 @@ type App struct {
 	ts           *TileScreen
 	editor       *Editor
 	lastScript   []byte
-	result       Val
+	evalResult   Val
 	tapeDisplay  *TapeDisplay
 	tapePlayer   *OtoPlayer
 	kmm          *KeyMapManager
@@ -79,7 +79,8 @@ func (app *App) Init() error {
 	if app.currentFile != "" {
 		tapeScript = app.openFiles[app.currentFile]
 	}
-	app.editor = CreateEditor(tapeScript)
+	app.editor = CreateEditor()
+	app.editor.SetText(tapeScript)
 	tapeDisplay, err := CreateTapeDisplay()
 	if err != nil {
 		return err
@@ -101,7 +102,7 @@ func (app *App) Init() error {
 		err := vm.ParseAndEval(bytes.NewReader(app.lastScript), tapePath)
 		if err != nil {
 			logger.Error("parse error", "err", err)
-			app.result = err
+			app.evalResult = err
 		} else {
 			result := vm.Pop()
 			if s, ok := result.(Stream); ok {
@@ -109,7 +110,7 @@ func (app *App) Init() error {
 					result = s.Take(s.nframes)
 				}
 			}
-			app.result = result
+			app.evalResult = result
 		}
 	}
 	globalKeyMap := CreateKeyMap(nil)
@@ -121,7 +122,7 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-q", app.Quit)
 	globalKeyMap.Bind("C-p", func() {
 		evalEditorScriptIfChanged()
-		if tape, ok := app.result.(*Tape); ok {
+		if tape, ok := app.evalResult.(*Tape); ok {
 			if app.tapePlayer != nil {
 				app.tapePlayer.Close()
 			}
@@ -378,7 +379,7 @@ func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	screenPane := ts.GetPane()
-	switch result := app.result.(type) {
+	switch result := app.evalResult.(type) {
 	case error:
 		editorPane, statusPane := screenPane.SplitY(-1)
 		app.editor.Render(editorPane)

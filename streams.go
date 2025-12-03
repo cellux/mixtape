@@ -15,7 +15,14 @@ type Streamable interface {
 	Stream() Stream
 }
 
-func makeStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
+func makeStream(nchannels int, seq iter.Seq[Frame]) Stream {
+	return Stream{
+		nchannels: nchannels,
+		seq:       seq,
+	}
+}
+
+func makeFiniteStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	return Stream{
 		nchannels: nchannels,
 		nframes:   nframes,
@@ -82,27 +89,26 @@ func ModOp() SmpBinOp {
 }
 
 func Phasor(freq Stream, op SmpUnOp) Stream {
-	return makeStream(1, freq.nframes,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, 1)
-			fnext, fstop := iter.Pull(freq.Mono().seq)
-			defer fstop()
-			phase := Smp(0)
-			sr := Smp(SampleRate())
-			for {
-				out[0] = op(phase)
-				if !yield(out) {
-					return
-				}
-				f, ok := fnext()
-				if !ok {
-					return
-				}
-				periodSamples := sr / f[0]
-				incr := 1.0 / periodSamples
-				phase = math.Mod(phase+incr, 1.0)
+	return makeStream(1, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		fnext, fstop := iter.Pull(freq.Mono().seq)
+		defer fstop()
+		phase := Smp(0)
+		sr := Smp(SampleRate())
+		for {
+			out[0] = op(phase)
+			if !yield(out) {
+				return
 			}
-		})
+			f, ok := fnext()
+			if !ok {
+				return
+			}
+			periodSamples := sr / f[0]
+			incr := 1.0 / periodSamples
+			phase = math.Mod(phase+incr, 1.0)
+		}
+	})
 }
 
 func (s Stream) Stream() Stream {
@@ -128,60 +134,53 @@ func (s Stream) Take(nframes int) *Tape {
 
 func (s Stream) Delay(nframes int) Stream {
 	nchannels := s.nchannels
-	streamNFrames := s.nframes
-	if streamNFrames > 0 {
-		streamNFrames += nframes
-	}
-	return makeStream(nchannels, streamNFrames,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, nchannels)
-			for range nframes {
-				if !yield(out) {
-					return
-				}
+	return makeStream(nchannels, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		for range nframes {
+			if !yield(out) {
+				return
 			}
-			for frame := range s.seq {
-				if !yield(frame) {
-					return
-				}
+		}
+		for frame := range s.seq {
+			if !yield(frame) {
+				return
 			}
-		})
+		}
+	})
 }
 
 func (s Stream) Mono() Stream {
 	if s.nchannels == 1 {
 		return s
 	}
-	return makeStream(1, s.nframes,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, 1)
-			for frame := range s.seq {
-				out[0] = (frame[0] + frame[1]) / 2.0
-				if !yield(out) {
-					return
-				}
+	return makeStream(1, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		for frame := range s.seq {
+			out[0] = (frame[0] + frame[1]) / 2.0
+			if !yield(out) {
+				return
 			}
-		})
+		}
+	})
 }
 
 func (s Stream) Stereo() Stream {
 	if s.nchannels == 2 {
 		return s
 	}
-	return makeStream(2, s.nframes,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, 2)
-			for frame := range s.seq {
-				out[0] = frame[0]
-				out[1] = frame[0]
-				if !yield(out) {
-					return
-				}
+	return makeStream(2, func(yield func(Frame) bool) {
+		out := make(Frame, 2)
+		for frame := range s.seq {
+			out[0] = frame[0]
+			out[1] = frame[0]
+			if !yield(out) {
+				return
 			}
-		})
+		}
+	})
 }
 
-func (s Stream) AdaptChannels(nchannels int) Stream {
+func (s Stream) WithNChannels(nchannels int) Stream {
 	switch nchannels {
 	case 1:
 		return s.Mono()
@@ -191,37 +190,55 @@ func (s Stream) AdaptChannels(nchannels int) Stream {
 	return s
 }
 
-func minNFrames(nframes ...int) int {
-	min := 0
-	for _, nf := range nframes {
-		if nf > 0 && (min == 0 || nf < min) {
-			min = nf
-		}
-	}
-	return min
-}
-
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
-	nframes := minNFrames(s.nframes, other.nframes)
-	return makeStream(nchannels, nframes,
-		func(yield func(Frame) bool) {
-			out := make([]Smp, nchannels)
-			onext, ostop := iter.Pull(other.AdaptChannels(nchannels).seq)
-			defer ostop()
-			for frame := range s.seq {
-				oframe, ok := onext()
-				if !ok {
-					return
-				}
-				for i := range nchannels {
-					out[i] = op(frame[i], oframe[i])
-				}
-				if !yield(out) {
-					return
-				}
+	result := makeStream(nchannels, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		onext, ostop := iter.Pull(other.WithNChannels(nchannels).seq)
+		defer ostop()
+		for frame := range s.seq {
+			oframe, ok := onext()
+			if !ok {
+				return
 			}
-		})
+			for i := range nchannels {
+				out[i] = op(frame[i], oframe[i])
+			}
+			if !yield(out) {
+				return
+			}
+		}
+	})
+	if s.nframes > 0 || other.nframes > 0 {
+		if s.nframes == 0 {
+			result.nframes = other.nframes
+		} else if other.nframes == 0 {
+			result.nframes = s.nframes
+		} else {
+			result.nframes = min(s.nframes, other.nframes)
+		}
+	}
+	return result
+}
+
+func (s Stream) Join(other Stream) Stream {
+	nchannels := s.nchannels
+	result := makeStream(nchannels, func(yield func(Frame) bool) {
+		for frame := range s.seq {
+			if !yield(frame) {
+				return
+			}
+		}
+		for frame := range other.seq {
+			if !yield(frame) {
+				return
+			}
+		}
+	})
+	if s.nframes > 0 && other.nframes > 0 {
+		result.nframes = s.nframes + other.nframes
+	}
+	return result
 }
 
 func applySmpBinOp(vm *VM, op SmpBinOp) error {
@@ -245,25 +262,25 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("sin~", func(vm *VM) error {
+	RegisterWord("~sin", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
 		vm.Push(Phasor(freq, SinOp()))
 		return nil
 	})
 
-	RegisterWord("saw~", func(vm *VM) error {
+	RegisterWord("~saw", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
 		vm.Push(Phasor(freq, SawOp()))
 		return nil
 	})
 
-	RegisterWord("triangle~", func(vm *VM) error {
+	RegisterWord("~triangle", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
 		vm.Push(Phasor(freq, TriangleOp()))
 		return nil
 	})
 
-	RegisterWord("pulse~", func(vm *VM) error {
+	RegisterWord("~pulse", func(vm *VM) error {
 		freq := vm.GetStream(":freq")
 		pw := vm.GetFloat(":pw")
 		vm.Push(Phasor(freq, PulseOp(pw)))
@@ -274,6 +291,13 @@ func init() {
 		nf := int(Pop[Num](vm))
 		s := Pop[Streamable](vm).Stream()
 		vm.Push(s.Take(nf))
+		return nil
+	})
+
+	RegisterMethod[Streamable]("join", 2, func(vm *VM) error {
+		rhs := Pop[Streamable](vm)
+		lhs := Pop[Streamable](vm)
+		vm.Push(lhs.Stream().Join(rhs.Stream()))
 		return nil
 	})
 

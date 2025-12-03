@@ -16,7 +16,7 @@ func envseg(start, end float64, nframes int, shape func(float64) float64) *Tape 
 }
 
 func init() {
-	RegisterWord("line/", func(vm *VM) error {
+	RegisterWord("/line", func(vm *VM) error {
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))
 		nf := int(Get[Num](vm, ":nf"))
@@ -24,7 +24,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("exp/", func(vm *VM) error {
+	RegisterWord("/exp", func(vm *VM) error {
 		k := float64(Pop[Num](vm))
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))
@@ -39,7 +39,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("log/", func(vm *VM) error {
+	RegisterWord("/log", func(vm *VM) error {
 		k := float64(Pop[Num](vm))
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))
@@ -54,7 +54,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("cos/", func(vm *VM) error {
+	RegisterWord("/cos", func(vm *VM) error {
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))
 		nf := int(Get[Num](vm, ":nf"))
@@ -64,7 +64,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("pow/", func(vm *VM) error {
+	RegisterWord("/pow", func(vm *VM) error {
 		p := float64(Pop[Num](vm))
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))
@@ -73,7 +73,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("sigmoid/", func(vm *VM) error {
+	RegisterWord("/sigmoid", func(vm *VM) error {
 		k := float64(Pop[Num](vm))
 		start := float64(Get[Num](vm, ":start"))
 		end := float64(Get[Num](vm, ":end"))

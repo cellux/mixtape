@@ -28,16 +28,15 @@ func (t *Tape) String() string {
 }
 
 func (t *Tape) Stream() Stream {
-	return makeStream(t.nchannels, t.nframes,
-		func(yield func(Frame) bool) {
-			index := 0
-			for range t.nframes {
-				if !yield(t.samples[index : index+t.nchannels]) {
-					return
-				}
-				index += t.nchannels
+	return makeFiniteStream(t.nchannels, t.nframes, func(yield func(Frame) bool) {
+		index := 0
+		for range t.nframes {
+			if !yield(t.samples[index : index+t.nchannels]) {
+				return
 			}
-		})
+			index += t.nchannels
+		}
+	})
 }
 
 func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
@@ -94,20 +93,6 @@ func init() {
 	RegisterMethod[*Tape]("nf", 1, func(vm *VM) error {
 		t := Pop[*Tape](vm)
 		vm.Push(t.nframes)
-		return nil
-	})
-
-	RegisterMethod[*Tape]("join", 2, func(vm *VM) error {
-		rhs := Pop[*Tape](vm)
-		lhs := Pop[*Tape](vm)
-		if lhs.nchannels != rhs.nchannels {
-			return fmt.Errorf("join: lhs and rhs must have the same number of channels, got lhs=%d, rhs=%d", lhs.nchannels, rhs.nchannels)
-		}
-		nf := lhs.nframes + rhs.nframes
-		t := pushTape(vm, lhs.nchannels, nf)
-		leftEnd := lhs.nframes * lhs.nchannels
-		copy(t.samples[:leftEnd], lhs.samples)
-		copy(t.samples[leftEnd:], rhs.samples)
 		return nil
 	})
 
@@ -476,7 +461,7 @@ func init() {
 			lhs.samples = append(lhs.samples, make([]Smp, extraFramesNeeded*nchannels)...)
 			lhs.nframes += extraFramesNeeded
 		}
-		s := rhs.Stream().AdaptChannels(nchannels)
+		s := rhs.Stream().WithNChannels(nchannels)
 		writeIndex := offset * nchannels
 		for frame := range s.seq {
 			for i := range nchannels {
@@ -519,17 +504,17 @@ func init() {
 
 const (
 	pointVertexShader = `
-    precision highp float;
-    attribute vec2 a_position;
-    uniform mat4 u_transform;
-    void main(void) {
-      gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
-    };` + "\x00"
+		precision highp float;
+		attribute vec2 a_position;
+		uniform mat4 u_transform;
+		void main(void) {
+			gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
+		};` + "\x00"
 	pointFragmentShader = `
-    precision highp float;
-    void main(void) {
-      gl_FragColor = vec4(1.0);
-    };` + "\x00"
+		precision highp float;
+		void main(void) {
+			gl_FragColor = vec4(1.0);
+		};` + "\x00"
 )
 
 type PointVertex struct {

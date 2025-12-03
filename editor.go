@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"github.com/atotto/clipboard"
 	"slices"
 	"strings"
@@ -30,30 +31,19 @@ type Editor struct {
 	height      int
 }
 
-// https://stackoverflow.com/a/61938973
-func splitLines(s string) []string {
-	var lines []string
-	sc := bufio.NewScanner(strings.NewReader(s))
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-	}
-	if len(s) > 0 && s[len(s)-1] == '\n' {
-		lines = append(lines, "")
-	}
-	return lines
+func CreateEditor() *Editor {
+	return &Editor{}
 }
 
-func CreateEditor(text string) *Editor {
+func (e *Editor) SetText(text string) {
+	sc := bufio.NewScanner(strings.NewReader(text))
 	var lines []EditorLine
-	for _, line := range splitLines(text) {
+	for sc.Scan() {
+		line := sc.Text()
 		lines = append(lines, EditorLine(line))
 	}
-	if len(lines) == 0 {
-		lines = append(lines, EditorLine(""))
-	}
-	return &Editor{
-		lines: lines,
-	}
+	lines = append(lines, EditorLine(""))
+	e.lines = lines
 }
 
 func (e *Editor) GetLine(index int) EditorLine {
@@ -85,7 +75,7 @@ func (e *Editor) CurrentRune() rune {
 	if currentLine == nil {
 		return 0x85 // NEL (NExtLine)
 	}
-	if e.point.column == len(currentLine) {
+	if e.point.column >= len(currentLine) {
 		return 0x85 // NEL (NExtLine)
 	}
 	return currentLine[e.point.column]
@@ -254,9 +244,8 @@ func (e *Editor) InsideRegion(line, column int) bool {
 	return false
 }
 
-func (e *Editor) KillBetween(start, end EditorPoint) []rune {
+func (e *Editor) KillBetween(start, end EditorPoint) (result []rune) {
 	e.point = end
-	var result []rune
 	for e.point.line > start.line || e.point.column > start.column {
 		e.AdvanceColumn(-1)
 		result = append(result, e.DeleteRune())
@@ -421,14 +410,18 @@ func (e *Editor) Render(tp TilePane) {
 }
 
 func (e *Editor) GetBytes() []byte {
-	bytes := make([]byte, 0, 65536)
-	for i, line := range e.lines {
-		if i > 0 {
-			bytes = append(bytes, '\n')
-		}
-		bytes = append(bytes, []byte(string(line))...)
+	lines := e.lines
+	numEmptyLinesAtEnd := 0
+	for i := len(lines) - 1; i >= 0 && len(lines[i]) == 0; i-- {
+		numEmptyLinesAtEnd++
 	}
-	return bytes
+	lines = lines[:len(lines)-numEmptyLinesAtEnd]
+	var b bytes.Buffer
+	for _, line := range lines {
+		b.WriteString(string(line))
+		b.WriteByte('\n')
+	}
+	return b.Bytes()
 }
 
 func (e *Editor) Close() error {
