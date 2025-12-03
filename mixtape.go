@@ -122,13 +122,17 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-q", app.Quit)
 	globalKeyMap.Bind("C-p", func() {
 		evalEditorScriptIfChanged()
-		if tape, ok := app.evalResult.(*Tape); ok {
-			if app.tapePlayer != nil {
-				app.tapePlayer.Close()
+		if streamable, ok := app.evalResult.(Streamable); ok {
+			stream := streamable.Stream()
+			if stream.nframes > 0 {
+				tape := stream.Take(stream.nframes)
+				if app.tapePlayer != nil {
+					app.tapePlayer.Close()
+				}
+				player := otoContext.NewPlayer(MakeTapeReader(tape, 2))
+				player.Play()
+				app.tapePlayer = player
 			}
-			player := otoContext.NewPlayer(MakeTapeReader(tape, 2))
-			player.Play()
-			app.tapePlayer = player
 		}
 	})
 	editorKeyMap := CreateKeyMap(globalKeyMap)
