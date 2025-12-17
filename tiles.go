@@ -20,6 +20,9 @@ func CreateTileMap(img image.Image, sizeInTiles Size) (*TileMap, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Ensure tightly-packed pixel rows for uploads (important for single-channel Alpha textures).
+	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
+
 	mapSize := img.Bounds().Size()
 	switch img := img.(type) {
 	case *image.Alpha:
@@ -161,18 +164,41 @@ func (ts *TileScreen) Clear() {
 func (ts *TileScreen) DrawRune(x, y int, r rune) {
 	rows := ts.tm.sizeInTiles.Y
 	cols := ts.tm.sizeInTiles.X
+	if rows <= 0 || cols <= 0 {
+		return
+	}
+
+	// The font atlas only contains rows*cols glyphs. Clamp out-of-range runes to a
+	// fallback to avoid sampling outside the atlas (which otherwise clamps to the
+	// texture edge and looks like garbage glyphs).
+	nGlyphs := rows * cols
+	if r < 0 || int(r) >= nGlyphs {
+		r = '?'
+	}
+
 	col := int(r) % cols
 	row := int(r) / cols
 	x0 := float32(x)
 	x1 := float32(x + 1)
 	y0 := float32(-y)
 	y1 := float32(-y - 1)
-	tx := float32(1.0) / float32(cols)
-	ty := float32(1.0) / float32(rows)
-	s0 := float32(col) / float32(cols)
-	s1 := float32(s0 + tx)
-	t0 := float32(row) / float32(rows)
-	t1 := float32(t0 + ty)
+
+	// Compute UVs in pixel space and inset by half a texel. This avoids bilinear
+	// filtering bleeding between adjacent atlas cells.
+	mapSize := ts.tm.GetMapSize()
+	tileSize := ts.tm.GetTileSize()
+	atlasW := float32(mapSize.X)
+	atlasH := float32(mapSize.Y)
+	tileW := float32(tileSize.X)
+	tileH := float32(tileSize.Y)
+	insetS := float32(0.5) / atlasW
+	insetT := float32(0.5) / atlasH
+
+	s0 := (float32(col)*tileW)/atlasW + insetS
+	s1 := (float32(col+1)*tileW)/atlasW - insetS
+	t0 := (float32(row)*tileH)/atlasH + insetT
+	t1 := (float32(row+1)*tileH)/atlasH - insetT
+
 	fgColor := ColorTo4Float32(ts.fgColor)
 	bgColor := ColorTo4Float32(ts.bgColor)
 	ts.vertices = append(ts.vertices, TileVertex{
@@ -222,8 +248,11 @@ func (ts *TileScreen) SetBg(c Color) {
 }
 
 func (ts *TileScreen) DrawString(x, y int, s string) {
-	for offset, r := range s {
-		ts.DrawRune(x+offset, y, r)
+	// range over a string gives byte offsets; we want rune cell offsets.
+	i := 0
+	for _, r := range s {
+		ts.DrawRune(x+i, y, r)
+		i++
 	}
 }
 

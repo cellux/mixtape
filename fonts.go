@@ -78,7 +78,20 @@ func (f *Font) GetFaceImage(face font.Face, sizeInTiles Size) (image.Image, erro
 		if !ok || mask == nil {
 			continue
 		}
-		draw.Draw(atlas, dstRect, mask, maskPt, draw.Src)
+
+		// Clip to the tile's cell. Some glyphs/fonts can extend outside the expected
+		// cell bounds (e.g. negative bearings), which would otherwise scribble into
+		// neighboring glyph cells in the atlas.
+		cellRect := image.Rect(col*maxWidth, row*tileHeight, (col+1)*maxWidth, (row+1)*tileHeight)
+		clipped := dstRect.Intersect(cellRect)
+		if clipped.Empty() {
+			continue
+		}
+		dx := clipped.Min.X - dstRect.Min.X
+		dy := clipped.Min.Y - dstRect.Min.Y
+		maskPt = image.Point{X: maskPt.X + dx, Y: maskPt.Y + dy}
+
+		draw.Draw(atlas, clipped, mask, maskPt, draw.Src)
 	}
 	return atlas, nil
 }
