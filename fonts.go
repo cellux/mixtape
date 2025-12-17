@@ -13,25 +13,35 @@ import (
 
 type FontSizeInPoints = float64
 
-type Font struct {
-	font  *opentype.Font
-	faces map[FontSizeInPoints]font.Face
+type faceKey struct {
+	size  FontSizeInPoints
+	scale float32
 }
 
-func (f *Font) GetFace(size FontSizeInPoints) (font.Face, error) {
-	if face, ok := f.faces[size]; ok {
+type Font struct {
+	font  *opentype.Font
+	faces map[faceKey]font.Face
+}
+
+func (f *Font) GetFace(size FontSizeInPoints, scale float32) (font.Face, error) {
+	key := faceKey{size: size, scale: scale}
+	if face, ok := f.faces[key]; ok {
 		return face, nil
 	}
+	// Use the content scale to compute the effective DPI. A base DPI of 96
+	// is assumed for 1x scale; HiDPI displays (scale > 1) render at
+	// proportionally higher resolution for crisp glyphs.
+	dpi := 96.0 * float64(scale)
 	faceOpts := &opentype.FaceOptions{
 		Size:    size,
-		DPI:     96,
+		DPI:     dpi,
 		Hinting: font.HintingFull,
 	}
 	face, err := opentype.NewFace(f.font, faceOpts)
 	if err != nil {
 		return nil, err
 	}
-	f.faces[size] = face
+	f.faces[key] = face
 	return face, nil
 }
 
@@ -103,7 +113,7 @@ func LoadFontFromBytes(bytes []byte) (*Font, error) {
 	}
 	return &Font{
 		font:  f,
-		faces: make(map[FontSizeInPoints]font.Face),
+		faces: make(map[faceKey]font.Face),
 	}, nil
 }
 

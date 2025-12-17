@@ -10,6 +10,7 @@ import (
 const desiredFPS = 30
 
 var fbSize Size
+var contentScale float32 = 1.0
 
 func init() {
 	runtime.LockOSThread()
@@ -79,6 +80,8 @@ func WithGL(windowTitle string, app GlfwApp) error {
 	}
 	width, height := glfw.GetCurrentContext().GetFramebufferSize()
 	framebufferSizeCallback(nil, width, height)
+	xscale, _ := window.GetContentScale()
+	contentScale = xscale
 	if err := app.Init(); err != nil {
 		return err
 	}
