@@ -183,21 +183,18 @@ func (ts *TileScreen) DrawRune(x, y int, r rune) {
 	y0 := float32(-y)
 	y1 := float32(-y - 1)
 
-	// Compute UVs in pixel space and inset by half a texel. This avoids bilinear
-	// filtering bleeding between adjacent atlas cells.
+	// Compute UVs in pixel space. No texel inset needed with GL_NEAREST filtering.
 	mapSize := ts.tm.GetMapSize()
 	tileSize := ts.tm.GetTileSize()
 	atlasW := float32(mapSize.X)
 	atlasH := float32(mapSize.Y)
 	tileW := float32(tileSize.X)
 	tileH := float32(tileSize.Y)
-	insetS := float32(0.5) / atlasW
-	insetT := float32(0.5) / atlasH
 
-	s0 := (float32(col)*tileW)/atlasW + insetS
-	s1 := (float32(col+1)*tileW)/atlasW - insetS
-	t0 := (float32(row)*tileH)/atlasH + insetT
-	t1 := (float32(row+1)*tileH)/atlasH - insetT
+	s0 := (float32(col) * tileW) / atlasW
+	s1 := (float32(col+1) * tileW) / atlasW
+	t0 := (float32(row) * tileH) / atlasH
+	t1 := (float32(row+1) * tileH) / atlasH
 
 	fgColor := ColorTo4Float32(ts.fgColor)
 	bgColor := ColorTo4Float32(ts.bgColor)
