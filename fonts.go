@@ -25,38 +25,62 @@ func (f *Font) GetFace(size FontSizeInPoints) (font.Face, error) {
 	faceOpts := &opentype.FaceOptions{
 		Size:    size,
 		DPI:     96,
-		Hinting: font.HintingNone,
+		Hinting: font.HintingFull,
 	}
-	return opentype.NewFace(f.font, faceOpts)
+	face, err := opentype.NewFace(f.font, faceOpts)
+	if err != nil {
+		return nil, err
+	}
+	f.faces[size] = face
+	return face, nil
 }
 
 func (f *Font) GetFaceImage(face font.Face, sizeInTiles Size) (image.Image, error) {
-	metrics := face.Metrics()
-	descent := metrics.Descent.Ceil()
-	ascent := metrics.Ascent.Ceil()
-	charHeight := descent + ascent
-	mAdvance, ok := face.GlyphAdvance('m')
-	if !ok {
-		return nil, fmt.Errorf("Font face does not provide a glyph for rune 'm'")
-	}
-	charWidth := mAdvance.Ceil()
 	cols, rows := sizeInTiles.X, sizeInTiles.Y
-	result := image.NewAlpha(image.Rect(0, 0, charWidth*cols, charHeight*rows))
-	d := font.Drawer{
-		Src:  image.Opaque,
-		Face: face,
+	if cols <= 0 || rows <= 0 {
+		return nil, fmt.Errorf("sizeInTiles must be positive, got %v", sizeInTiles)
 	}
-	charRect := image.Rect(0, 0, charWidth, charHeight)
-	for y := range rows {
-		for x := range cols {
-			d.Dst = image.NewAlpha(charRect)
-			d.Dot = fixed.P(0, charHeight-descent)
-			d.DrawString(string(rune(y*cols + x)))
-			dp := image.Pt(x*charWidth, y*charHeight)
-			draw.Copy(result, dp, d.Dst, charRect, draw.Src, nil)
+	metrics := face.Metrics()
+	ascent := metrics.Ascent.Ceil()
+	descent := metrics.Descent.Ceil()
+	tileHeight := metrics.Height.Ceil()
+	if tileHeight == 0 {
+		tileHeight = ascent + descent
+	}
+	nGlyphs := cols * rows
+	maxWidth := 0
+	for i := range nGlyphs {
+		r := rune(i)
+		if adv, ok := face.GlyphAdvance(r); ok {
+			if w := adv.Ceil(); w > maxWidth {
+				maxWidth = w
+			}
 		}
 	}
-	return result, nil
+	if maxWidth <= 0 {
+		adv, ok := face.GlyphAdvance('m')
+		if !ok {
+			return nil, fmt.Errorf("Font face does not provide a glyph for rune 'm'")
+		}
+		maxWidth = adv.Ceil()
+	}
+
+	atlas := image.NewAlpha(image.Rect(0, 0, maxWidth*cols, tileHeight*rows))
+	for i := range nGlyphs {
+		r := rune(i)
+		col := i % cols
+		row := i / cols
+		dot := fixed.Point26_6{
+			X: fixed.I(col * maxWidth),
+			Y: fixed.I(row*tileHeight + ascent),
+		}
+		dstRect, mask, maskPt, _, ok := face.Glyph(dot, r)
+		if !ok || mask == nil {
+			continue
+		}
+		draw.Draw(atlas, dstRect, mask, maskPt, draw.Src)
+	}
+	return atlas, nil
 }
 
 func LoadFontFromBytes(bytes []byte) (*Font, error) {
