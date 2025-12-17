@@ -82,13 +82,9 @@ const (
     varying vec2 v_texcoord;
     varying vec4 v_fgColor;
     varying vec4 v_bgColor;
-    vec4 gammaCorrect(vec4 linear) {
-      vec3 gammaCorrectedRGB = pow(linear.rgb, vec3(1.0 / 2.2));
-      return vec4(gammaCorrectedRGB, linear.a);
-    }
     void main(void) {
-      vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = gammaCorrect(v_bgColor + v_fgColor * t.a);
+      float a = texture2D(u_tex, v_texcoord).a;
+      gl_FragColor = mix(v_bgColor, v_fgColor, a);
     };` + "\x00"
 	tileFragmentShaderRGBA = `
     precision highp float;
@@ -96,13 +92,9 @@ const (
     varying vec2 v_texcoord;
     varying vec4 v_fgColor;
     varying vec4 v_bgColor;
-    vec4 gammaCorrect(vec4 linear) {
-      vec3 gammaCorrectedRGB = pow(linear.rgb, vec3(1.0 / 2.2));
-      return vec4(gammaCorrectedRGB, linear.a);
-    }
     void main(void) {
       vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = gammaCorrect(v_bgColor + v_fgColor * t);
+      gl_FragColor = mix(v_bgColor, v_fgColor * t, t.a);
     };` + "\x00"
 )
 
