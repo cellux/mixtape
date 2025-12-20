@@ -6,7 +6,7 @@ import (
 
 type Sym string
 
-func (s Sym) implVal() {}
+func (s Sym) getVal() Val { return s }
 
 func (s Sym) Eval(vm *VM) error {
 	name := string(s)

@@ -6,7 +6,7 @@ import (
 
 type Fun func(vm *VM) error
 
-func (f Fun) implVal() {}
+func (f Fun) getVal() Val { return f }
 
 func (f Fun) Eval(vm *VM) error {
 	return f(vm)

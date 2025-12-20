@@ -6,7 +6,7 @@ import (
 
 type Vec []Val
 
-func (v Vec) implVal() {}
+func (v Vec) getVal() Val { return v }
 
 func (v Vec) String() string {
 	return fmt.Sprintf("%v", []Val(v))

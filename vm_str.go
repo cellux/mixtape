@@ -8,7 +8,7 @@ import (
 
 type Str string
 
-func (s Str) implVal() {}
+func (s Str) getVal() Val { return s }
 
 func (s Str) String() string {
 	return string(s)

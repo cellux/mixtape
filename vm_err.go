@@ -4,7 +4,7 @@ type Err struct {
 	err error
 }
 
-func (e Err) implVal() {}
+func (e Err) getVal() Val { return e }
 
 func (e Err) Error() string {
 	return e.err.Error()

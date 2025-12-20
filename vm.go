@@ -9,7 +9,7 @@ import (
 )
 
 type Val interface {
-	implVal()
+	getVal() Val
 }
 
 const (
@@ -55,12 +55,12 @@ func Equal(lhs, rhs Val) bool {
 }
 
 type Evaler interface {
-	implVal()
+	Val
 	Eval(vm *VM) error
 }
 
 type Iterable interface {
-	implVal()
+	Val
 	Iter() Fun
 }
 

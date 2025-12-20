@@ -2,6 +2,6 @@ package main
 
 type NilType struct{}
 
-func (nil NilType) implVal() {}
+func (nil NilType) getVal() Val { return Nil }
 
 var Nil = NilType{}

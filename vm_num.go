@@ -8,7 +8,7 @@ import (
 
 type Num float64
 
-func (n Num) implVal() {}
+func (n Num) getVal() Val { return n }
 
 func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)

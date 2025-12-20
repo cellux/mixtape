@@ -6,7 +6,7 @@ import (
 
 type Map map[Val]Val
 
-func (m Map) implVal() {}
+func (m Map) getVal() Val { return m }
 
 func (m Map) Equal(other Val) bool {
 	switch rhs := other.(type) {
