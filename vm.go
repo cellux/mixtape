@@ -9,6 +9,7 @@ import (
 )
 
 type Val interface {
+	fmt.Stringer
 	getVal() Val
 }
 
@@ -18,8 +19,11 @@ const (
 )
 
 func AsVal(x any) Val {
+	if x == nil {
+		return Nil
+	}
 	if v, ok := x.(Val); ok {
-		return v
+		return v.getVal()
 	}
 	switch v := x.(type) {
 	case int:
@@ -336,6 +340,27 @@ func (vm *VM) GetStream(k any) Stream {
 	return Get[Streamable](vm, k).Stream()
 }
 
+type Token struct {
+	v   Val
+	pos scanner.Position
+}
+
+func (t Token) getVal() Val {
+	return t.v
+}
+
+func (t Token) Eval(vm *VM) error {
+	return vm.Eval(t.getVal())
+}
+
+func (t Token) String() string {
+	return t.getVal().String()
+}
+
+func (t Token) Equal(other Val) bool {
+	return Equal(t.getVal(), other.getVal())
+}
+
 func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 	var s scanner.Scanner
 	s.Init(r)
@@ -364,11 +389,17 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 	}
 	s.Filename = filename
 	var code = make(Vec, 0, 16384)
+	appendTokens := func(vs ...Val) {
+		pos := s.Position
+		for _, v := range vs {
+			code = append(code, Token{v, pos})
+		}
+	}
 	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
 		switch tok {
 		case scanner.Char, scanner.String, scanner.RawString:
 			text := s.TokenText()
-			code = append(code, Str(text[1:len(text)-1]))
+			appendTokens(Str(text[1 : len(text)-1]))
 		case '#':
 			for {
 				ch := s.Next()
@@ -377,39 +408,39 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				}
 			}
 		case '(', ')', '{', '}', '[', ']':
-			code = append(code, Sym(string(tok)))
+			appendTokens(Sym(string(tok)))
 		case scanner.Ident:
 			text := s.TokenText()
 			f, err := scanFloat(text)
 			if err == nil {
 				switch text[len(text)-1] {
 				case 'b':
-					code = append(code, Num(f), Sym("beats"))
+					appendTokens(Num(f), Sym("beats"))
 				case 'p':
-					code = append(code, Num(f), Sym("periods"))
+					appendTokens(Num(f), Sym("periods"))
 				case 's':
-					code = append(code, Num(f), Sym("seconds"))
+					appendTokens(Num(f), Sym("seconds"))
 				case 't':
-					code = append(code, Num(f), Sym("ticks"))
+					appendTokens(Num(f), Sym("ticks"))
 				default:
-					code = append(code, Num(f))
+					appendTokens(Num(f))
 				}
 			} else {
 				if len(text) > 1 {
 					switch text[0] {
 					case '@':
-						code = append(code, Str(text[1:]), Sym("get"))
+						appendTokens(Str(text[1:]), Sym("get"))
 					case '>':
 						if text == ">=" {
-							code = append(code, Sym(text))
+							appendTokens(Sym(text))
 						} else {
-							code = append(code, Str(text[1:]), Sym("swap"), Sym("set"))
+							appendTokens(Str(text[1:]), Sym("swap"), Sym("set"))
 						}
 					default:
-						code = append(code, Sym(text))
+						appendTokens(Sym(text))
 					}
 				} else {
-					code = append(code, Sym(text))
+					appendTokens(Sym(text))
 				}
 			}
 		default:
@@ -435,11 +466,12 @@ func (vm *VM) FindMethod(name string) Fun {
 }
 
 func (vm *VM) Eval(val Val) error {
+	v := val.getVal()
 	if vm.IsQuoting() {
-		if val == Sym("{") {
+		if v == Sym("{") {
 			vm.quoteDepth++
 			vm.quoteBuffer = append(vm.quoteBuffer, val)
-		} else if val == Sym("}") {
+		} else if v == Sym("}") {
 			if vm.quoteDepth == 0 {
 				return fmt.Errorf("attempt to unquote when quoteDepth == 0")
 			}

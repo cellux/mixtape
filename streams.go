@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"iter"
 	"math"
 )
@@ -12,6 +13,10 @@ type Stream struct {
 }
 
 func (s Stream) getVal() Val { return s }
+
+func (s Stream) String() string {
+	return fmt.Sprintf("Stream(%d,%d)", s.nchannels, s.nframes)
+}
 
 type Streamable interface {
 	Val

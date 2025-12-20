@@ -8,6 +8,8 @@ type Sym string
 
 func (s Sym) getVal() Val { return s }
 
+func (s Sym) String() string { return string(s) }
+
 func (s Sym) Eval(vm *VM) error {
 	name := string(s)
 	if name[0] == ':' {

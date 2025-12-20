@@ -14,7 +14,7 @@ func (v Vec) String() string {
 
 func (v Vec) Eval(vm *VM) error {
 	for _, val := range v {
-		if val == Sym("--") && !vm.IsQuoting() {
+		if val.getVal() == Sym("--") && !vm.IsQuoting() {
 			break
 		}
 		err := vm.Eval(val)
