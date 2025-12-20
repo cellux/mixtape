@@ -8,7 +8,7 @@ type Fun func(vm *VM) error
 
 func (f Fun) getVal() Val { return f }
 
-func (f Fun) String() string { return f.String() }
+func (f Fun) String() string { return "<fun>" }
 
 func (f Fun) Eval(vm *VM) error {
 	return f(vm)

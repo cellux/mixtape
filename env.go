@@ -17,18 +17,46 @@ func envseg(start, end float64, nframes int, shape func(float64) float64) *Tape 
 
 func init() {
 	RegisterWord("/line", func(vm *VM) error {
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		vm.Push(envseg(start, end, nf, func(x float64) float64 { return x }))
 		return nil
 	})
 
 	RegisterWord("/exp", func(vm *VM) error {
-		k := float64(Pop[Num](vm))
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		kNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		k := float64(kNum)
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		if k == 0 {
 			vm.Push(envseg(start, end, nf, func(x float64) float64 { return x }))
 		} else {
@@ -40,10 +68,26 @@ func init() {
 	})
 
 	RegisterWord("/log", func(vm *VM) error {
-		k := float64(Pop[Num](vm))
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		kNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		k := float64(kNum)
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		if k == 0 {
 			vm.Push(envseg(start, end, nf, func(x float64) float64 { return x }))
 		} else {
@@ -55,9 +99,21 @@ func init() {
 	})
 
 	RegisterWord("/cos", func(vm *VM) error {
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		vm.Push(envseg(start, end, nf, func(x float64) float64 {
 			return 0.5 - 0.5*math.Cos(math.Pi*x)
 		}))
@@ -65,19 +121,51 @@ func init() {
 	})
 
 	RegisterWord("/pow", func(vm *VM) error {
-		p := float64(Pop[Num](vm))
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		pNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		p := float64(pNum)
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		vm.Push(envseg(start, end, nf, func(x float64) float64 { return math.Pow(x, p) }))
 		return nil
 	})
 
 	RegisterWord("/sigmoid", func(vm *VM) error {
-		k := float64(Pop[Num](vm))
-		start := float64(Get[Num](vm, ":start"))
-		end := float64(Get[Num](vm, ":end"))
-		nf := int(Get[Num](vm, ":nf"))
+		kNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		startNum, err := vm.GetNum(":start")
+		if err != nil {
+			return err
+		}
+		endNum, err := vm.GetNum(":end")
+		if err != nil {
+			return err
+		}
+		nfNum, err := vm.GetNum(":nf")
+		if err != nil {
+			return err
+		}
+		k := float64(kNum)
+		start := float64(startNum)
+		end := float64(endNum)
+		nf := int(nfNum)
 		vm.Push(envseg(start, end, nf, func(x float64) float64 {
 			return 1 / (1 + math.Exp(-k*(x-0.5)))
 		}))

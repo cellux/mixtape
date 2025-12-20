@@ -250,8 +250,14 @@ func (s Stream) Join(other Stream) Stream {
 }
 
 func applySmpBinOp(vm *VM, op SmpBinOp) error {
-	rhs := Pop[Streamable](vm)
-	lhs := Pop[Streamable](vm)
+	rhs, err := Pop[Streamable](vm)
+	if err != nil {
+		return err
+	}
+	lhs, err := Pop[Streamable](vm)
+	if err != nil {
+		return err
+	}
 	if n1, ok := lhs.(Num); ok {
 		if n2, ok := rhs.(Num); ok {
 			vm.Push(op(Smp(n1), Smp(n2)))
@@ -265,54 +271,92 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 
 func init() {
 	RegisterWord("~", func(vm *VM) error {
-		top := Pop[Streamable](vm)
+		top, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(top.Stream())
 		return nil
 	})
 
 	RegisterWord("~sin", func(vm *VM) error {
-		freq := vm.GetStream(":freq")
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
 		vm.Push(Phasor(freq, SinOp()))
 		return nil
 	})
 
 	RegisterWord("~saw", func(vm *VM) error {
-		freq := vm.GetStream(":freq")
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
 		vm.Push(Phasor(freq, SawOp()))
 		return nil
 	})
 
 	RegisterWord("~triangle", func(vm *VM) error {
-		freq := vm.GetStream(":freq")
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
 		vm.Push(Phasor(freq, TriangleOp()))
 		return nil
 	})
 
 	RegisterWord("~pulse", func(vm *VM) error {
-		freq := vm.GetStream(":freq")
-		pw := vm.GetFloat(":pw")
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
+		pw, err := vm.GetFloat(":pw")
+		if err != nil {
+			return err
+		}
 		vm.Push(Phasor(freq, PulseOp(pw)))
 		return nil
 	})
 
 	RegisterWord("take", func(vm *VM) error {
-		nf := int(Pop[Num](vm))
-		s := Pop[Streamable](vm).Stream()
-		vm.Push(s.Take(nf))
+		nfNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		streamable, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
+		stream := streamable.Stream()
+		vm.Push(stream.Take(int(nfNum)))
 		return nil
 	})
 
 	RegisterMethod[Streamable]("join", 2, func(vm *VM) error {
-		rhs := Pop[Streamable](vm)
-		lhs := Pop[Streamable](vm)
+		rhs, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs.Stream().Join(rhs.Stream()))
 		return nil
 	})
 
 	RegisterWord("delay", func(vm *VM) error {
-		nf := int(Pop[Num](vm))
-		s := Pop[Streamable](vm).Stream()
-		vm.Push(s.Delay(nf))
+		nfNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		streamable, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
+		stream := streamable.Stream()
+		vm.Push(stream.Delay(int(nfNum)))
 		return nil
 	})
 

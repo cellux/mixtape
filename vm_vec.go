@@ -67,13 +67,23 @@ func (v Vec) Partition(size, step int) Vec {
 
 func init() {
 	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
-		v := Pop[Vec](vm)
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(len(v))
 		return nil
 	})
 	RegisterMethod[Vec]("at", 2, func(vm *VM) error {
-		index := int(Pop[Num](vm))
-		v := Pop[Vec](vm)
+		indexNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
+		index := int(indexNum)
 		if index < 0 || index >= len(v) {
 			return fmt.Errorf("at: index out of bounds: %d", index)
 		}
@@ -81,7 +91,10 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("clone", 1, func(vm *VM) error {
-		src := Top[Vec](vm)
+		src, err := Top[Vec](vm)
+		if err != nil {
+			return err
+		}
 		dst := make(Vec, len(src))
 		copy(dst, src)
 		vm.Push(dst)
@@ -89,13 +102,19 @@ func init() {
 	})
 	RegisterMethod[Vec]("push", 2, func(vm *VM) error {
 		item := vm.Pop()
-		v := Pop[Vec](vm)
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		v = append(v, item)
 		vm.Push(v)
 		return nil
 	})
 	RegisterMethod[Vec]("pop", 1, func(vm *VM) error {
-		v := Pop[Vec](vm)
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		if len(v) == 0 {
 			return fmt.Errorf("pop: empty vec")
 		}
@@ -106,8 +125,14 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("each", 2, func(vm *VM) error {
-		e := Pop[Evaler](vm)
-		v := Pop[Vec](vm)
+		e, err := Pop[Evaler](vm)
+		if err != nil {
+			return err
+		}
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		if len(v) == 0 {
 			return nil
 		}
@@ -120,8 +145,14 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("map", 2, func(vm *VM) error {
-		e := Pop[Evaler](vm)
-		v := Pop[Vec](vm)
+		e, err := Pop[Evaler](vm)
+		if err != nil {
+			return err
+		}
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		mapped := make(Vec, 0, len(v))
 		for _, item := range v {
 			vm.Push(item)
@@ -134,8 +165,14 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("reduce", 2, func(vm *VM) error {
-		e := Pop[Evaler](vm)
-		v := Pop[Vec](vm)
+		e, err := Pop[Evaler](vm)
+		if err != nil {
+			return err
+		}
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		if len(v) == 0 {
 			vm.Push(v)
 			return nil
@@ -150,14 +187,28 @@ func init() {
 		return nil
 	})
 	RegisterMethod[Vec]("partition", 3, func(vm *VM) error {
-		step := int(Pop[Num](vm))
-		size := int(Pop[Num](vm))
-		v := Pop[Vec](vm)
+		stepNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		sizeNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
+		step := int(stepNum)
+		size := int(sizeNum)
 		vm.Push(v.Partition(size, step))
 		return nil
 	})
 	RegisterMethod[Vec]("tape", 1, func(vm *VM) error {
-		v := Pop[Vec](vm)
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		t := pushTape(vm, 1, len(v))
 		for i, item := range v {
 			if n, ok := item.(Num); ok {

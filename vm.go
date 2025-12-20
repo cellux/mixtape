@@ -1,9 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"text/scanner"
 	"unicode"
 )
@@ -39,9 +39,8 @@ func AsVal(x any) Val {
 			return False
 		}
 	default:
-		log.Fatalf("AsVal: cannot convert value of type %T to Val", x)
+		return makeErr(fmt.Errorf("cannot convert value of type %T to Val", x))
 	}
-	return Num(0)
 }
 
 type Equaler interface {
@@ -86,6 +85,7 @@ type VM struct {
 	markerStack []int // [ indices in valStack
 	quoteBuffer Vec   // quoted code
 	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
+	currentPos  scanner.Position
 }
 
 func CreateVM() (*VM, error) {
@@ -163,23 +163,23 @@ func (vm *VM) Pop() Val {
 	return result
 }
 
-func Pop[T Val](vm *VM) T {
+func Pop[T Val](vm *VM) (T, error) {
 	val := vm.Pop()
 	if value, ok := val.(T); ok {
-		return value
+		return value, nil
 	} else {
-		log.Fatalf("top of value stack has type %T, expected %T", val, *new(T))
-		return *new(T)
+		var zeroT T
+		return zeroT, fmt.Errorf("top of value stack has type %T, expected %T", val, zeroT)
 	}
 }
 
-func Top[T Val](vm *VM) T {
+func Top[T Val](vm *VM) (T, error) {
 	top := vm.Top()
 	if value, ok := top.(T); ok {
-		return value
+		return value, nil
 	} else {
-		log.Fatalf("top of value stack has type %T, expected %T", top, *new(T))
-		return *new(T)
+		var zeroT T
+		return zeroT, fmt.Errorf("top of value stack has type %T, expected %T", top, zeroT)
 	}
 }
 
@@ -269,7 +269,10 @@ func (vm *VM) DoEval() error {
 }
 
 func (vm *VM) DoIter() error {
-	iterable := Pop[Iterable](vm)
+	iterable, err := Pop[Iterable](vm)
+	if err != nil {
+		return err
+	}
 	vm.Push(iterable.Iter())
 	return nil
 }
@@ -314,30 +317,39 @@ func (vm *VM) GetVal(k any) Val {
 	return nil
 }
 
-func Get[T Val](vm *VM, k any) T {
+func Get[T Val](vm *VM, k any) (T, error) {
 	val := vm.GetVal(k)
-	if value, ok := val.(T); ok {
-		return value
-	} else {
-		log.Fatalf("value at key %s is of type %T, expected %T", k, val, *new(T))
-		return *new(T)
+	if val == nil {
+		var zeroT T
+		return zeroT, fmt.Errorf("key not found: %v", k)
 	}
+	if value, ok := val.(T); ok {
+		return value, nil
+	}
+	var zeroT T
+	return zeroT, fmt.Errorf("value at key %v is of type %T, expected %T", k, val, zeroT)
 }
 
-func (vm *VM) GetNum(k any) Num {
+func (vm *VM) GetNum(k any) (Num, error) {
 	return Get[Num](vm, k)
 }
 
-func (vm *VM) GetFloat(k any) float64 {
-	return float64(Get[Num](vm, k))
+func (vm *VM) GetFloat(k any) (float64, error) {
+	n, err := vm.GetNum(k)
+	return float64(n), err
 }
 
-func (vm *VM) GetInt(k any) int {
-	return int(Get[Num](vm, k))
+func (vm *VM) GetInt(k any) (int, error) {
+	n, err := vm.GetNum(k)
+	return int(n), err
 }
 
-func (vm *VM) GetStream(k any) Stream {
-	return Get[Streamable](vm, k).Stream()
+func (vm *VM) GetStream(k any) (Stream, error) {
+	streamable, err := Get[Streamable](vm, k)
+	if err != nil {
+		return Stream{}, err
+	}
+	return streamable.Stream(), nil
 }
 
 type Token struct {
@@ -350,6 +362,7 @@ func (t Token) getVal() Val {
 }
 
 func (t Token) Eval(vm *VM) error {
+	vm.currentPos = t.pos
 	return vm.Eval(t.getVal())
 }
 
@@ -396,6 +409,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 		}
 	}
 	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
+		vm.currentPos = s.Position
 		switch tok {
 		case scanner.Char, scanner.String, scanner.RawString:
 			text := s.TokenText()
@@ -444,7 +458,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				}
 			}
 		default:
-			return nil, fmt.Errorf("parse error at %s: %s", s.Position, s.TokenText())
+			return nil, Err{Pos: s.Position, Err: fmt.Errorf("parse error at %s: %s", s.Position, s.TokenText())}
 		}
 	}
 	return code, nil
@@ -473,7 +487,7 @@ func (vm *VM) Eval(val Val) error {
 			vm.quoteBuffer = append(vm.quoteBuffer, val)
 		} else if v == Sym("}") {
 			if vm.quoteDepth == 0 {
-				return fmt.Errorf("attempt to unquote when quoteDepth == 0")
+				return Err{Pos: vm.currentPos, Err: fmt.Errorf("attempt to unquote when quoteDepth == 0")}
 			}
 			vm.quoteDepth--
 			if vm.quoteDepth > 0 {
@@ -488,9 +502,21 @@ func (vm *VM) Eval(val Val) error {
 		return nil
 	}
 	if e, ok := val.(Evaler); ok {
-		return e.Eval(vm)
+		err := e.Eval(vm)
+		if err == nil {
+			return nil
+		}
+		var pe Err
+		if errors.As(err, &pe) {
+			return err
+		}
+		var tv ThrowValue
+		if errors.As(err, &tv) {
+			return err
+		}
+		return Err{Pos: vm.currentPos, Err: err}
 	}
-	return fmt.Errorf("don't know how to evaluate value of type %T", val)
+	return Err{Pos: vm.currentPos, Err: fmt.Errorf("don't know how to evaluate value of type %T", val)}
 }
 
 func (vm *VM) ParseAndEval(r io.Reader, filename string) error {

@@ -102,7 +102,7 @@ func (app *App) Init() error {
 		err := vm.ParseAndEval(bytes.NewReader(app.lastScript), tapePath)
 		if err != nil {
 			logger.Error("parse error", "err", err)
-			app.evalResult = Err{err}
+			app.evalResult = makeErr(err)
 		} else {
 			result := vm.Pop()
 			if s, ok := result.(Stream); ok {

@@ -53,7 +53,10 @@ func (n Num) Equal(other Val) bool {
 func init() {
 	RegisterMethod[Num]("if", 2, func(vm *VM) error {
 		block := vm.Pop()
-		cond := Pop[Num](vm)
+		cond, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		if cond != 0 {
 			return vm.Eval(block)
 		}
@@ -63,7 +66,10 @@ func init() {
 	RegisterMethod[Num]("if", 3, func(vm *VM) error {
 		elseBlock := vm.Pop()
 		ifBlock := vm.Pop()
-		cond := Pop[Num](vm)
+		cond, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		if cond != 0 {
 			return vm.Eval(ifBlock)
 		} else {
@@ -72,29 +78,53 @@ func init() {
 	})
 
 	RegisterMethod[Num]("<", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
+		rhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs < rhs)
 		return nil
 	})
 
 	RegisterMethod[Num]("<=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
+		rhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs <= rhs)
 		return nil
 	})
 
 	RegisterMethod[Num](">=", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
+		rhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs >= rhs)
 		return nil
 	})
 
 	RegisterMethod[Num](">", 2, func(vm *VM) error {
-		rhs := Pop[Num](vm)
-		lhs := Pop[Num](vm)
+		rhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs > rhs)
 		return nil
 	})

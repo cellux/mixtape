@@ -30,27 +30,45 @@ func (s Str) Equal(other Val) bool {
 
 func init() {
 	RegisterMethod[Str]("sym", 1, func(vm *VM) error {
-		s := Pop[Str](vm)
+		s, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(Sym(s))
 		return nil
 	})
 
 	RegisterMethod[Str]("+", 2, func(vm *VM) error {
-		rhs := Pop[Str](vm)
-		lhs := Pop[Str](vm)
+		rhs, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(lhs + rhs)
 		return nil
 	})
 
 	RegisterMethod[Str]("path/join", 2, func(vm *VM) error {
-		rhs := Pop[Str](vm)
-		lhs := Pop[Str](vm)
+		rhs, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(filepath.Join(string(lhs), string(rhs)))
 		return nil
 	})
 
 	RegisterMethod[Str]("parse", 1, func(vm *VM) error {
-		s := Pop[Str](vm)
+		s, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
 		code, err := vm.Parse(strings.NewReader(string(s)), "<string>")
 		if err != nil {
 			return err
@@ -63,7 +81,10 @@ func init() {
 		if err := vm.Eval(Sym("parse")); err != nil {
 			return err
 		}
-		v := Pop[Vec](vm)
+		v, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
 		if len(v) == 0 {
 			return fmt.Errorf("parse1: empty string")
 		}

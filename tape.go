@@ -93,14 +93,23 @@ func (t *Tape) WriteToWav(path string) error {
 
 func init() {
 	RegisterMethod[*Tape]("nf", 1, func(vm *VM) error {
-		t := Pop[*Tape](vm)
+		t, err := Pop[*Tape](vm)
+		if err != nil {
+			return err
+		}
 		vm.Push(t.nframes)
 		return nil
 	})
 
 	RegisterMethod[*Tape]("shift", 2, func(vm *VM) error {
-		amount := Pop[Num](vm)
-		t := Top[*Tape](vm)
+		amount, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		t, err := Top[*Tape](vm)
+		if err != nil {
+			return err
+		}
 		if amount < 0 {
 			if amount > -1.0 {
 				amount = 1.0 + amount
@@ -123,15 +132,26 @@ func init() {
 	RegisterNum("SRC_LINEAR", 4)
 
 	RegisterMethod[*Tape]("resample", 3, func(vm *VM) error {
-		ratio := float64(Pop[Num](vm))
+		ratioNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		ratio := float64(ratioNum)
 		if ratio <= 0 {
 			return fmt.Errorf("resample: invalid ratio: %f", ratio)
 		}
-		converterType := int(Pop[Num](vm))
+		converterTypeNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		converterType := int(converterTypeNum)
 		if converterType < 0 || converterType > 4 {
 			return fmt.Errorf("resample: invalid converterType: %d - must be between 0..4", converterType)
 		}
-		t := Pop[*Tape](vm)
+		t, err := Pop[*Tape](vm)
+		if err != nil {
+			return err
+		}
 		tempBuf := make([]float32, t.nframes*t.nchannels)
 		for i, smp := range t.samples {
 			tempBuf[i] = float32(smp)
@@ -347,7 +367,11 @@ func loadAndPushTape(vm *VM, path string) error {
 
 func init() {
 	RegisterMethod[Str]("load", 1, func(vm *VM) error {
-		path, err := resolveTapePath(string(Pop[Str](vm)))
+		pathVal, err := Pop[Str](vm)
+		if err != nil {
+			return err
+		}
+		path, err := resolveTapePath(string(pathVal))
 		if err != nil {
 			return err
 		}
@@ -445,17 +469,36 @@ func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 
 func init() {
 	RegisterMethod[*Tape]("slice", 2, func(vm *VM) error {
-		end := int(Pop[Num](vm))
-		start := int(Pop[Num](vm))
-		t := Top[*Tape](vm)
-		vm.Push(t.Slice(start, end))
+		endNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		startNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		t, err := Top[*Tape](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(t.Slice(int(startNum), int(endNum)))
 		return nil
 	})
 
 	RegisterMethod[*Tape]("+@", 3, func(vm *VM) error {
-		offset := int(Pop[Num](vm))
-		rhs := Pop[*Tape](vm)
-		lhs := Top[*Tape](vm)
+		offsetNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		rhs, err := Pop[*Tape](vm)
+		if err != nil {
+			return err
+		}
+		lhs, err := Top[*Tape](vm)
+		if err != nil {
+			return err
+		}
+		offset := int(offsetNum)
 		nchannels := lhs.nchannels
 		end := offset + rhs.nframes
 		if lhs.nframes < end {
@@ -492,14 +535,20 @@ func pushTape(vm *VM, nchannels, nframes int) *Tape {
 
 func init() {
 	RegisterWord("tape1", func(vm *VM) error {
-		nframes := int(Pop[Num](vm))
-		pushTape(vm, 1, nframes)
+		nframesNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pushTape(vm, 1, int(nframesNum))
 		return nil
 	})
 
 	RegisterWord("tape2", func(vm *VM) error {
-		nframes := int(Pop[Num](vm))
-		pushTape(vm, 2, nframes)
+		nframesNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pushTape(vm, 2, int(nframesNum))
 		return nil
 	})
 }

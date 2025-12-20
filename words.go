@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -20,7 +21,7 @@ func init() {
 
 	RegisterWord("throw", func(vm *VM) error {
 		v := vm.Pop()
-		return ThrowValue{v}
+		return Err{Pos: vm.currentPos, Err: ThrowValue{v}}
 	})
 
 	RegisterWord("catch", func(vm *VM) error {
@@ -30,9 +31,12 @@ func init() {
 		vm.RestoreStackState(stackState)
 		if err == nil {
 			vm.Push(Nil)
-		} else if tv, ok := err.(ThrowValue); ok {
-			vm.Push(tv.v)
-			err = nil
+		} else {
+			var tv ThrowValue
+			if errors.As(err, &tv) {
+				vm.Push(tv.v)
+				err = nil
+			}
 		}
 		return err
 	})
@@ -44,7 +48,8 @@ func init() {
 			err := vm.Eval(body)
 			if err != nil {
 				vm.RestoreStackState(stackState)
-				if tv, ok := err.(ThrowValue); ok {
+				var tv ThrowValue
+				if errors.As(err, &tv) {
 					if tv.v == Nil {
 						return nil
 					}
