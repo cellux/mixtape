@@ -14,7 +14,7 @@ func (e ThrowValue) Error() string {
 
 func init() {
 	RegisterWord("nil", func(vm *VM) error {
-		vm.Push(nil)
+		vm.Push(Nil)
 		return nil
 	})
 
@@ -29,7 +29,7 @@ func init() {
 		err := vm.Eval(body)
 		vm.RestoreStackState(stackState)
 		if err == nil {
-			vm.Push(nil)
+			vm.Push(Nil)
 		} else if tv, ok := err.(ThrowValue); ok {
 			vm.Push(tv.v)
 			err = nil
@@ -45,7 +45,7 @@ func init() {
 			if err != nil {
 				vm.RestoreStackState(stackState)
 				if tv, ok := err.(ThrowValue); ok {
-					if tv.v == nil {
+					if tv.v == Nil {
 						return nil
 					}
 				}

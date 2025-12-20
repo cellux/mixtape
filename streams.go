@@ -11,7 +11,10 @@ type Stream struct {
 	seq       iter.Seq[Frame]
 }
 
+func (s Stream) implVal() {}
+
 type Streamable interface {
+	implVal()
 	Stream() Stream
 }
 

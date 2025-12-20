@@ -23,6 +23,8 @@ type Tape struct {
 	samples   []Smp
 }
 
+func (t *Tape) implVal() {}
+
 func (t *Tape) String() string {
 	return fmt.Sprintf("Tape(nchannels=%d nframes=%d)", t.nchannels, t.nframes)
 }

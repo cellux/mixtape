@@ -6,6 +6,8 @@ import (
 
 type Sym string
 
+func (s Sym) implVal() {}
+
 func (s Sym) Eval(vm *VM) error {
 	name := string(s)
 	if name[0] == ':' {

@@ -6,6 +6,8 @@ import (
 
 type Vec []Val
 
+func (v Vec) implVal() {}
+
 func (v Vec) String() string {
 	return fmt.Sprintf("%v", []Val(v))
 }
@@ -45,7 +47,7 @@ func (v Vec) Iter() Fun {
 	return func(vm *VM) error {
 		var next Val
 		if i == len(v) {
-			next = nil
+			next = Nil
 		} else {
 			next = v[i]
 			i++

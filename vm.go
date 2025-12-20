@@ -8,7 +8,9 @@ import (
 	"unicode"
 )
 
-type Val = any
+type Val interface {
+	implVal()
+}
 
 const (
 	True  = Num(-1)
@@ -16,6 +18,9 @@ const (
 )
 
 func AsVal(x any) Val {
+	if v, ok := x.(Val); ok {
+		return v
+	}
 	switch v := x.(type) {
 	case int:
 		return Num(v)
@@ -30,8 +35,9 @@ func AsVal(x any) Val {
 			return False
 		}
 	default:
-		return x
+		log.Fatalf("AsVal: cannot convert value of type %T to Val", x)
 	}
+	return Num(0)
 }
 
 type Equaler interface {
@@ -39,8 +45,8 @@ type Equaler interface {
 }
 
 func Equal(lhs, rhs Val) bool {
-	if lhs == nil {
-		return rhs == nil
+	if lhs == Nil {
+		return rhs == Nil
 	}
 	if l, ok := lhs.(Equaler); ok {
 		return l.Equal(rhs)
@@ -49,10 +55,12 @@ func Equal(lhs, rhs Val) bool {
 }
 
 type Evaler interface {
+	implVal()
 	Eval(vm *VM) error
 }
 
 type Iterable interface {
+	implVal()
 	Iter() Fun
 }
 

@@ -8,6 +8,8 @@ import (
 
 type Str string
 
+func (s Str) implVal() {}
+
 func (s Str) String() string {
 	return string(s)
 }
