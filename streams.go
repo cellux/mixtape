@@ -201,6 +201,28 @@ func (s Stream) WithNChannels(nchannels int) Stream {
 	return s
 }
 
+// DCBlock applies a simple one-pole high-pass filter to remove DC offset.
+// alpha controls the cutoff; typical small value like 0.995.
+func DCBlock(s Stream, alpha float64) Stream {
+	nchannels := s.nchannels
+	return makeStream(nchannels, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		prevIn := make([]Smp, nchannels)
+		prevOut := make([]Smp, nchannels)
+		for frame := range s.seq {
+			for c := range nchannels {
+				y := frame[c] - prevIn[c] + Smp(alpha)*prevOut[c]
+				prevIn[c] = frame[c]
+				prevOut[c] = y
+				out[c] = y
+			}
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
 	result := makeStream(nchannels, func(yield func(Frame) bool) {
@@ -335,6 +357,24 @@ func init() {
 			return err
 		}
 		vm.Push(Phasor(freq, phase, PulseOp(pw)))
+		return nil
+	})
+
+	RegisterWord("dcblock", func(vm *VM) error {
+		streamable, err := Pop[Streamable](vm)
+		if err != nil {
+			return err
+		}
+		stream := streamable.Stream()
+		alpha := 0.995
+		if aval := vm.GetVal(":alpha"); aval != nil {
+			if anum, ok := aval.(Num); ok {
+				alpha = float64(anum)
+			} else {
+				return fmt.Errorf("dcblock: :alpha must be number")
+			}
+		}
+		vm.Push(DCBlock(stream, alpha))
 		return nil
 	})
 

@@ -24,6 +24,25 @@ type Wavetable struct {
 	mips [][]WTFrame // mips[level][frame][sample]; level 0 is the base table
 }
 
+// removeDCInPlace subtracts the mean from the frame to center it at 0.
+func removeDCInPlace(frame WTFrame) {
+	n := len(frame)
+	if n == 0 {
+		return
+	}
+	sum := 0.0
+	for _, v := range frame {
+		sum += float64(v)
+	}
+	mean := sum / float64(n)
+	if math.Abs(mean) < 1e-12 {
+		return
+	}
+	for i := range frame {
+		frame[i] -= Smp(mean)
+	}
+}
+
 func newWavetableFromFrames(baseFrames []WTFrame) (*Wavetable, error) {
 	if len(baseFrames) == 0 {
 		return nil, fmt.Errorf("wavetable: no frames")
@@ -36,6 +55,7 @@ func newWavetableFromFrames(baseFrames []WTFrame) (*Wavetable, error) {
 		if len(f) != baseFrameSize {
 			return nil, fmt.Errorf("wavetable: frame %d has size %d, expected %d", i, len(f), baseFrameSize)
 		}
+		removeDCInPlace(f)
 	}
 	wt := &Wavetable{}
 	wt.mips = make([][]WTFrame, 0, MaxMipLevel)
@@ -119,6 +139,7 @@ func (wt *Wavetable) ensureLevel(l int) {
 	next := make([]WTFrame, len(prev))
 	for i, frame := range prev {
 		nextFrame := buildFFTLowpass(frame)
+		removeDCInPlace(nextFrame)
 		next[i] = nextFrame
 	}
 	wt.mips[l] = next
@@ -152,6 +173,7 @@ func buildFFTLowpass(frame WTFrame) WTFrame {
 		// fft.IFFT divides by N; xt[2*i] has that scaling already.
 		out[i] = Smp(real(xt[2*i]))
 	}
+	removeDCInPlace(out)
 	return out
 }
 
@@ -264,6 +286,7 @@ func wtSin() (*Wavetable, error) {
 	for i := range size {
 		baseFrame[i] = math.Sin(2 * math.Pi * float64(i) / float64(size))
 	}
+	removeDCInPlace(baseFrame)
 	return newWavetableFromFrame(baseFrame)
 }
 
@@ -276,6 +299,7 @@ func wtTanh() (*Wavetable, error) {
 	for i := range baseFrame {
 		baseFrame[i] = math.Tanh(baseFrame[i])
 	}
+	removeDCInPlace(baseFrame)
 	return wt, nil
 }
 
@@ -290,6 +314,7 @@ func wtTriangle() (*Wavetable, error) {
 		baseFrame[i+2*quarter] = t - 1
 		baseFrame[i+3*quarter] = t
 	}
+	removeDCInPlace(baseFrame)
 	return newWavetableFromFrame(baseFrame)
 }
 
@@ -303,6 +328,7 @@ func wtSquare() (*Wavetable, error) {
 		baseFrame[i+2*quarter] = -1
 		baseFrame[i+3*quarter] = 1
 	}
+	removeDCInPlace(baseFrame)
 	return newWavetableFromFrame(baseFrame)
 }
 
@@ -323,6 +349,7 @@ func wtPulse(pw float64) (*Wavetable, error) {
 			baseFrame[i] = -1
 		}
 	}
+	removeDCInPlace(baseFrame)
 	return newWavetableFromFrame(baseFrame)
 }
 
@@ -335,6 +362,7 @@ func wtSaw() (*Wavetable, error) {
 		baseFrame[(i+size/4)%size] = t - 1
 		baseFrame[(i+half+size/4)%size] = t
 	}
+	removeDCInPlace(baseFrame)
 	return newWavetableFromFrame(baseFrame)
 }
 
