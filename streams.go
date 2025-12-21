@@ -96,12 +96,15 @@ func ModOp() SmpBinOp {
 	return func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) }
 }
 
-func Phasor(freq Stream, op SmpUnOp) Stream {
+func Phasor(freq Stream, phase float64, op SmpUnOp) Stream {
 	return makeStream(1, func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		fnext, fstop := iter.Pull(freq.Mono().seq)
 		defer fstop()
-		phase := Smp(0)
+		if phase < 0.0 || phase >= 1.0 {
+			phase = 0.0
+		}
+		phase := Smp(phase)
 		sr := Smp(SampleRate())
 		for {
 			out[0] = op(phase)
@@ -284,7 +287,11 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(Phasor(freq, SinOp()))
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
+		vm.Push(Phasor(freq, phase, SinOp()))
 		return nil
 	})
 
@@ -293,7 +300,11 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(Phasor(freq, SawOp()))
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
+		vm.Push(Phasor(freq, phase, SawOp()))
 		return nil
 	})
 
@@ -302,7 +313,11 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(Phasor(freq, TriangleOp()))
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
+		vm.Push(Phasor(freq, phase, TriangleOp()))
 		return nil
 	})
 
@@ -311,11 +326,15 @@ func init() {
 		if err != nil {
 			return err
 		}
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
 		pw, err := vm.GetFloat(":pw")
 		if err != nil {
 			return err
 		}
-		vm.Push(Phasor(freq, PulseOp(pw)))
+		vm.Push(Phasor(freq, phase, PulseOp(pw)))
 		return nil
 	})
 
