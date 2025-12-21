@@ -38,6 +38,14 @@ func makeFiniteStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	}
 }
 
+func makeTransformStream(s Stream, seq iter.Seq[Frame]) Stream {
+	return Stream{
+		nchannels: s.nchannels,
+		nframes:   s.nframes,
+		seq:       seq,
+	}
+}
+
 func streamFromVal(v Val) (Stream, error) {
 	if v == nil {
 		return Num(0).Stream(), nil
@@ -154,9 +162,8 @@ func (s Stream) Take(nframes int) *Tape {
 }
 
 func (s Stream) Delay(nframes int) Stream {
-	nchannels := s.nchannels
-	return makeStream(nchannels, func(yield func(Frame) bool) {
-		out := make(Frame, nchannels)
+	return makeTransformStream(s, func(yield func(Frame) bool) {
+		out := make(Frame, s.nchannels)
 		for range nframes {
 			if !yield(out) {
 				return
@@ -214,13 +221,12 @@ func (s Stream) WithNChannels(nchannels int) Stream {
 // DCBlock applies a simple one-pole high-pass filter to remove DC offset.
 // alpha controls the cutoff; typical small value like 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
-	nchannels := s.nchannels
-	result := makeStream(nchannels, func(yield func(Frame) bool) {
-		out := make(Frame, nchannels)
-		prevIn := make([]Smp, nchannels)
-		prevOut := make([]Smp, nchannels)
+	return makeTransformStream(s, func(yield func(Frame) bool) {
+		out := make(Frame, s.nchannels)
+		prevIn := make([]Smp, s.nchannels)
+		prevOut := make([]Smp, s.nchannels)
 		for frame := range s.seq {
-			for c := range nchannels {
+			for c := range s.nchannels {
 				y := frame[c] - prevIn[c] + Smp(alpha)*prevOut[c]
 				prevIn[c] = frame[c]
 				prevOut[c] = y
@@ -231,8 +237,6 @@ func DCBlock(s Stream, alpha float64) Stream {
 			}
 		}
 	})
-	result.nframes = s.nframes
-	return result
 }
 
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
