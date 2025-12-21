@@ -30,11 +30,6 @@ func CreateTileMap(img image.Image, sizeInTiles Size) (*TileMap, error) {
 			int32(mapSize.X), int32(mapSize.Y),
 			0, gl.ALPHA, gl.UNSIGNED_BYTE,
 			gl.Ptr(img.Pix))
-	case *image.RGBA:
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
-			int32(mapSize.X), int32(mapSize.Y),
-			0, gl.RGBA, gl.UNSIGNED_BYTE,
-			gl.Ptr(img.Pix))
 	default:
 		return nil, fmt.Errorf("cannot create TileMap OpenGL texture from image of type %T", img)
 	}
@@ -61,41 +56,32 @@ func (tm *TileMap) Close() error {
 
 const (
 	tileVertexShader = `
-    precision highp float;
-    attribute vec2 a_position;
-    attribute vec2 a_texcoord;
-    attribute vec4 a_fgColor;
-    attribute vec4 a_bgColor;
-    uniform mat4 u_transform;
-    varying vec2 v_texcoord;
-    varying vec4 v_fgColor;
-    varying vec4 v_bgColor;
-    void main(void) {
-      gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
-      v_texcoord = a_texcoord;
-      v_fgColor = a_fgColor;
-      v_bgColor = a_bgColor;
-    };` + "\x00"
+		precision highp float;
+		attribute vec2 a_position;
+		attribute vec2 a_texcoord;
+		attribute vec3 a_fgColor;
+		attribute vec3 a_bgColor;
+		uniform mat4 u_transform;
+		varying vec2 v_texcoord;
+		varying vec3 v_fgColor;
+		varying vec3 v_bgColor;
+		void main(void) {
+			gl_Position = u_transform * vec4(a_position, 0.0, 1.0);
+			v_texcoord = a_texcoord;
+			v_fgColor = a_fgColor;
+			v_bgColor = a_bgColor;
+		};` + "\x00"
 	tileFragmentShaderA = `
-    precision highp float;
-    uniform sampler2D u_tex;
-    varying vec2 v_texcoord;
-    varying vec4 v_fgColor;
-    varying vec4 v_bgColor;
-    void main(void) {
-      float a = texture2D(u_tex, v_texcoord).a;
-      gl_FragColor = mix(v_bgColor, v_fgColor, a);
-    };` + "\x00"
-	tileFragmentShaderRGBA = `
-    precision highp float;
-    uniform sampler2D u_tex;
-    varying vec2 v_texcoord;
-    varying vec4 v_fgColor;
-    varying vec4 v_bgColor;
-    void main(void) {
-      vec4 t = texture2D(u_tex, v_texcoord);
-      gl_FragColor = mix(v_bgColor, v_fgColor * t, t.a);
-    };` + "\x00"
+		precision highp float;
+		uniform sampler2D u_tex;
+		varying vec2 v_texcoord;
+		varying vec3 v_fgColor;
+		varying vec3 v_bgColor;
+		void main(void) {
+			float a = texture2D(u_tex, v_texcoord).a;
+			vec3 rgb = mix(v_bgColor, v_fgColor, a);
+			gl_FragColor = vec4(rgb, 1.0);
+		};` + "\x00"
 )
 
 type TileVertex struct {
@@ -124,8 +110,6 @@ func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 		switch img := tm.img.(type) {
 		case *image.Alpha:
 			return CreateProgram(tileVertexShader, tileFragmentShaderA)
-		case *image.RGBA:
-			return CreateProgram(tileVertexShader, tileFragmentShaderRGBA)
 		default:
 			return Program{}, fmt.Errorf("cannot create TileMap from image of type %T", img)
 		}
@@ -300,11 +284,7 @@ func (ts *TileScreen) Render() {
 	mTranslate := mgl.Translate3D(tx, ty, 0)
 	mTransform := mTranslate.Mul4(mScale)
 	gl.UniformMatrix4fv(ts.u_transform, 1, false, &mTransform[0])
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
-	gl.BlendEquation(gl.FUNC_ADD)
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(ts.vertices)))
-	gl.Disable(gl.BLEND)
 	gl.DisableVertexAttribArray(uint32(ts.a_position))
 	gl.DisableVertexAttribArray(uint32(ts.a_texcoord))
 	gl.DisableVertexAttribArray(uint32(ts.a_fgColor))

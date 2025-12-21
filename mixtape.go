@@ -56,7 +56,7 @@ func (app *App) Init() error {
 		return err
 	}
 	app.font = font
-	face, err := font.GetFace(12, contentScale)
+	face, err := font.GetFace(14, contentScale)
 	if err != nil {
 		return err
 	}
