@@ -126,9 +126,6 @@ func (app *App) Init() error {
 			stream := streamable.Stream()
 			if stream.nframes > 0 {
 				tape := stream.Take(stream.nframes)
-				if app.tapePlayer != nil {
-					app.tapePlayer.Close()
-				}
 				player := otoContext.NewPlayer(MakeTapeReader(tape, 2))
 				player.Play()
 				app.tapePlayer = player
@@ -408,10 +405,7 @@ func (app *App) Update() error {
 }
 
 func (app *App) Reset() {
-	if app.tapePlayer != nil {
-		app.tapePlayer.Close()
-		app.tapePlayer = nil
-	}
+	app.tapePlayer = nil
 	app.editor.Reset()
 	app.kmm.Reset()
 }
