@@ -103,23 +103,23 @@ func frameFromTape(t *Tape) []Smp {
 	return frame
 }
 
-func wtSine(size int) []Smp {
+func wtSin(size int) *Wavetable {
 	frame := make([]Smp, size)
 	for i := range size {
 		frame[i] = math.Sin(2 * math.Pi * float64(i) / float64(size))
 	}
-	return frame
+	return &Wavetable{frames: [][]Smp{frame}, frameSize: size}
 }
 
-func wtTanh(size int) []Smp {
-	frame := wtSine(size)
-	for i := range frame {
-		frame[i] = math.Tanh(frame[i])
+func wtTanh(size int) *Wavetable {
+	wt := wtSin(size)
+	for i := range wt.frames[0] {
+		wt.frames[0][i] = math.Tanh(wt.frames[0][i])
 	}
-	return frame
+	return wt
 }
 
-func wtTriangle(size int) []Smp {
+func wtTriangle(size int) *Wavetable {
 	frame := make([]Smp, size)
 	quarter := size / 4
 	for i := range quarter {
@@ -129,10 +129,10 @@ func wtTriangle(size int) []Smp {
 		frame[i+2*quarter] = t - 1
 		frame[i+3*quarter] = t
 	}
-	return frame
+	return &Wavetable{frames: [][]Smp{frame}, frameSize: size}
 }
 
-func wtSquare(size int) []Smp {
+func wtSquare(size int) *Wavetable {
 	frame := make([]Smp, size)
 	quarter := size / 4
 	for i := range quarter {
@@ -141,10 +141,10 @@ func wtSquare(size int) []Smp {
 		frame[i+2*quarter] = -1
 		frame[i+3*quarter] = 1
 	}
-	return frame
+	return &Wavetable{frames: [][]Smp{frame}, frameSize: size}
 }
 
-func wtPulse(size int, pw float64) []Smp {
+func wtPulse(size int, pw float64) *Wavetable {
 	if pw < 0 {
 		pw = 0
 	}
@@ -153,17 +153,17 @@ func wtPulse(size int, pw float64) []Smp {
 	}
 	onSamples := int(math.Round(pw * float64(size)))
 	frame := make([]Smp, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if i < onSamples {
 			frame[i] = 1
 		} else {
 			frame[i] = -1
 		}
 	}
-	return frame
+	return &Wavetable{frames: [][]Smp{frame}, frameSize: size}
 }
 
-func wtSaw(size int) []Smp {
+func wtSaw(size int) *Wavetable {
 	frame := make([]Smp, size)
 	half := size / 2
 	for i := range half {
@@ -171,7 +171,7 @@ func wtSaw(size int) []Smp {
 		frame[(i+size/4)%size] = t - 1
 		frame[(i+half+size/4)%size] = t
 	}
-	return frame
+	return &Wavetable{frames: [][]Smp{frame}, frameSize: size}
 }
 
 func wavetableFromVal(v Val) (*Wavetable, error) {
@@ -270,7 +270,7 @@ func init() {
 	})
 
 	RegisterWord("wt/sin", func(vm *VM) error {
-		vm.Push(wtSine(DefaultWavetableSize))
+		vm.Push(wtSin(DefaultWavetableSize))
 		return nil
 	})
 
