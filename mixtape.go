@@ -106,9 +106,10 @@ func (app *App) Init() error {
 			app.evalResult = makeErr(err)
 		} else {
 			result := vm.Pop()
-			if s, ok := result.(Stream); ok {
-				if s.nframes > 0 {
-					result = s.Take(s.nframes)
+			if streamable, ok := result.(Streamable); ok {
+				stream := streamable.Stream()
+				if stream.nframes > 0 {
+					result = stream.Take(stream.nframes)
 				}
 			}
 			app.evalResult = result
