@@ -144,14 +144,20 @@ func wtSquare(size int) []Smp {
 	return frame
 }
 
-func wtPulse(size int) []Smp {
+func wtPulse(size int, pw float64) []Smp {
+	if pw < 0 {
+		pw = 0
+	}
+	if pw > 1 {
+		pw = 1
+	}
+	onSamples := int(math.Round(pw * float64(size)))
 	frame := make([]Smp, size)
-	sections := 4
-	pulseSize := size / sections
-	for i := range pulseSize {
-		frame[i+(sections-1)*pulseSize] = 1
-		for s := 0; s < sections-1; s++ {
-			frame[i+s*pulseSize] = -1
+	for i := 0; i < size; i++ {
+		if i < onSamples {
+			frame[i] = 1
+		} else {
+			frame[i] = -1
 		}
 	}
 	return frame
@@ -284,7 +290,15 @@ func init() {
 	})
 
 	RegisterWord("wt/pulse", func(vm *VM) error {
-		vm.Push(wtPulse(DefaultWavetableSize))
+		pw := 0.5
+		if pval := vm.GetVal(":pw"); pval != nil {
+			if pnum, ok := pval.(Num); ok {
+				pw = float64(pnum)
+			} else {
+				return fmt.Errorf("wt/pulse: :pw must be number")
+			}
+		}
+		vm.Push(wtPulse(DefaultWavetableSize, pw))
 		return nil
 	})
 
