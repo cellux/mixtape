@@ -578,9 +578,9 @@ const (
 		};` + "\x00"
 	pointFragmentShader = `
 		precision highp float;
-		uniform float u_alpha;
+		uniform vec4 u_color;
 		void main(void) {
-			gl_FragColor = vec4(1.0, 1.0, 1.0, u_alpha);
+			gl_FragColor = u_color;
 		};` + "\x00"
 )
 
@@ -595,7 +595,7 @@ type TapeDisplay struct {
 	program     Program
 	a_position  int32
 	u_transform int32
-	u_alpha     int32
+	u_color     int32
 }
 
 func CreateTapeDisplay() (*TapeDisplay, error) {
@@ -607,7 +607,7 @@ func CreateTapeDisplay() (*TapeDisplay, error) {
 		program:     program,
 		a_position:  program.GetAttribLocation("a_position\x00"),
 		u_transform: program.GetUniformLocation("u_transform\x00"),
-		u_alpha:     program.GetUniformLocation("u_alpha\x00"),
+		u_color:     program.GetUniformLocation("u_color\x00"),
 	}
 	return td, nil
 }
@@ -633,10 +633,14 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	incr := float64(windowSize) / float64(pixelWidth)
 	readIndex := float64(windowOffset)
 	playheadX := int(math.Round(float64(playheadFrame-windowOffset) / incr))
+	channelClipped := make([]bool, tape.nchannels)
 	for x := range pixelWidth {
 		channelTop := float32(0)
 		for ch := range tape.nchannels {
 			smp := tape.GetInterpolatedSampleAt(ch, readIndex)
+			if math.Abs(float64(smp)) > 1.0 {
+				channelClipped[ch] = true
+			}
 			td.vertices[ch][x].position[1] = channelTop + channelHeightHalf - float32(smp)*channelHeightHalf
 			channelTop += channelHeight
 		}
@@ -666,15 +670,43 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 
 		// subtle fill
 		gl.LineWidth(3.0)
-		gl.Uniform1f(td.u_alpha, 0.16)
+		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.16)
 		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
 		gl.DrawArrays(gl.LINE_STRIP, 0, count)
 
 		// crisp stroke
 		gl.LineWidth(1.0)
-		gl.Uniform1f(td.u_alpha, 0.9)
+		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.9)
 		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
 		gl.DrawArrays(gl.LINE_STRIP, 0, count)
+	}
+
+	// Zero lines and bounds per channel
+	lineVerts := [2]PointVertex{{position: [2]float32{0, 0}}, {position: [2]float32{float32(pixelWidth), 0}}}
+	for ch := range tape.nchannels {
+		channelTop := float32(ch) * channelHeight
+		// zero line
+		lineVerts[0].position[1] = channelTop + channelHeightHalf
+		lineVerts[1].position[1] = channelTop + channelHeightHalf
+		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.15)
+		gl.LineWidth(1.0)
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&lineVerts[0].position[0]))
+		gl.DrawArrays(gl.LINES, 0, 2)
+
+		// guard lines
+		guardColor := [4]float32{1.0, 1.0, 1.0, 0.12}
+		if channelClipped[ch] {
+			guardColor = [4]float32{1.0, 0.2, 0.2, 0.7}
+		}
+		gl.Uniform4f(td.u_color, guardColor[0], guardColor[1], guardColor[2], guardColor[3])
+		lineVerts[0].position[1] = channelTop
+		lineVerts[1].position[1] = channelTop
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&lineVerts[0].position[0]))
+		gl.DrawArrays(gl.LINES, 0, 2)
+		lineVerts[0].position[1] = channelTop + channelHeight
+		lineVerts[1].position[1] = channelTop + channelHeight
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&lineVerts[0].position[0]))
+		gl.DrawArrays(gl.LINES, 0, 2)
 	}
 
 	// Playhead indicator
@@ -682,7 +714,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		px := float32(playheadX) + 0.5
 		playheadVerts := [2]PointVertex{{position: [2]float32{px, 0}}, {position: [2]float32{px, float32(pixelHeight)}}}
 		gl.LineWidth(1.0)
-		gl.Uniform1f(td.u_alpha, 0.5)
+		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.5)
 		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&playheadVerts[0].position[0]))
 		gl.DrawArrays(gl.LINES, 0, 2)
 	}
