@@ -63,19 +63,36 @@ func (wt *Wavetable) String() string {
 }
 
 // sampleFrame returns a sample from a single frame at fractional phase [0,1).
+// Uses 4-point Lagrange (Catmull-Rom) interpolation when possible; falls back to linear for very short frames.
 func sampleFrame(frame WTFrame, phase Smp) Smp {
-	if len(frame) == 0 {
+	n := len(frame)
+	if n == 0 {
 		return 0
 	}
 	p := math.Mod(float64(phase), 1.0)
 	if p < 0 {
 		p += 1.0
 	}
-	pos := p * float64(len(frame))
-	i0 := int(pos)
+	pos := p * float64(n)
+	i0 := int(pos) % n
 	frac := pos - float64(i0)
-	i1 := (i0 + 1) % len(frame)
-	return frame[i0]*(1.0-frac) + frame[i1]*frac
+
+	// For tiny frames, just do linear.
+	if n < 4 {
+		i1 := (i0 + 1) % n
+		return frame[i0]*(1.0-frac) + frame[i1]*frac
+	}
+
+	// 4-point Catmull-Rom (equivalent to cubic Lagrange with uniform parameterization).
+	im1 := (i0 - 1 + n) % n
+	i1 := (i0 + 1) % n
+	i2 := (i0 + 2) % n
+	t := frac
+	a0 := -0.5*frame[im1] + 1.5*frame[i0] - 1.5*frame[i1] + 0.5*frame[i2]
+	a1 := frame[im1] - 2.5*frame[i0] + 2.0*frame[i1] - 0.5*frame[i2]
+	a2 := -0.5*frame[im1] + 0.5*frame[i1]
+	a3 := frame[i0]
+	return ((a0*t+a1)*t+a2)*t + a3
 }
 
 // ensureLevel builds mip level l if not present, ensuring l-1 exists first.
