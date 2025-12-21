@@ -65,3 +65,11 @@
     seq
   ] { join } reduce
 } >env
+
+# default waves
+{ 0 wave/sin } >sin
+{ 0 wave/tanh } >tanh
+{ 0 wave/triangle } >triangle
+{ 0 wave/square } >square
+{ 0 wave/pulse } >pulse
+{ 0 wave/saw } >saw
