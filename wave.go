@@ -23,6 +23,18 @@ func (wave Wave) String() string {
 	return fmt.Sprintf("Wave(size=%d)", len(wave))
 }
 
+func (wave Wave) Stream() Stream {
+	return makeFiniteStream(1, len(wave), func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		for _, smp := range wave {
+			out[0] = smp
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 // removeDCInPlace subtracts the mean from the wave to center it at 0.
 func (wave Wave) removeDCInPlace() {
 	n := len(wave)
@@ -199,4 +211,68 @@ func sawWave(size int) Wave {
 	}
 	wave.removeDCInPlace()
 	return wave
+}
+
+func init() {
+	RegisterWord("wave/sin", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(sinWave(int(size)))
+		return nil
+	})
+
+	RegisterWord("wave/tanh", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(tanhWave(int(size)))
+		return nil
+	})
+
+	RegisterWord("wave/triangle", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(triangleWave(int(size)))
+		return nil
+	})
+
+	RegisterWord("wave/square", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(squareWave(int(size)))
+		return nil
+	})
+
+	RegisterWord("wave/pulse", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pw := 0.5
+		if pwVal := vm.GetVal(":pw"); pwVal != nil {
+			if pwNum, ok := pwVal.(Num); ok {
+				pw = float64(pwNum)
+			} else {
+				return fmt.Errorf("wave/pulse: :pw must be number")
+			}
+		}
+		vm.Push(pulseWave(int(size), pw))
+		return nil
+	})
+
+	RegisterWord("wave/saw", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(sawWave(int(size)))
+		return nil
+	})
 }
