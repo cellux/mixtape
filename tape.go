@@ -380,9 +380,10 @@ func init() {
 }
 
 type TapeReader struct {
-	tape      *Tape
-	nchannels int
-	offset    int
+	tape          *Tape
+	tapeOffset    int
+	audioChannels int
+	audioOffset   int
 }
 
 func writeSampleAsFloat32bits(buf []byte, index int, smp Smp) {
@@ -393,10 +394,16 @@ func writeSampleAsFloat32bits(buf []byte, index int, smp Smp) {
 	buf[index+3] = byte(u32smp >> 24)
 }
 
+func (tr *TapeReader) GetCurrentFrame(bytesStillInAudioBuffer int) int {
+	samplesStillInAudioBuffer := bytesStillInAudioBuffer / 4
+	return (tr.audioOffset - samplesStillInAudioBuffer) / tr.audioChannels
+}
+
 func (tr *TapeReader) Read(buf []byte) (int, error) {
 	samples := tr.tape.samples
-	offset := tr.offset
-	samplesLeft := len(samples) - offset
+	tapeOffset := tr.tapeOffset
+	audioOffset := tr.audioOffset
+	samplesLeft := len(samples) - tapeOffset
 	if samplesLeft == 0 {
 		logger.Debug("playing finished")
 		return 0, io.EOF
@@ -404,7 +411,7 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 	bufLengthInSamples := len(buf) / 4
 	writeIndex := 0
 	srcChannels := tr.tape.nchannels
-	dstChannels := tr.nchannels
+	dstChannels := tr.audioChannels
 	switch srcChannels {
 	case 1:
 		switch dstChannels {
@@ -412,21 +419,24 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 			framesToWrite := min(bufLengthInSamples, samplesLeft)
 			bytesToWrite := framesToWrite * 4
 			for writeIndex < bytesToWrite {
-				smp := samples[offset]
-				offset++
+				smp := samples[tapeOffset]
+				tapeOffset++
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
+				audioOffset++
 			}
 		case 2:
 			framesToWrite := min(bufLengthInSamples/2, samplesLeft)
 			bytesToWrite := framesToWrite * 8
 			for writeIndex < bytesToWrite {
-				smp := samples[offset]
-				offset++
+				smp := samples[tapeOffset]
+				tapeOffset++
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
+				audioOffset++
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
+				audioOffset++
 			}
 		}
 	case 2:
@@ -435,35 +445,40 @@ func (tr *TapeReader) Read(buf []byte) (int, error) {
 			framesToWrite := min(bufLengthInSamples, samplesLeft/2)
 			bytesToWrite := framesToWrite * 4
 			for writeIndex < bytesToWrite {
-				smp := (samples[offset] + samples[offset+1]) / 2.0
-				offset += 2
+				smp := (samples[tapeOffset] + samples[tapeOffset+1]) / 2.0
+				tapeOffset += 2
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
+				audioOffset++
 			}
 		case 2:
 			framesToWrite := min(bufLengthInSamples/2, samplesLeft/2)
 			bytesToWrite := framesToWrite * 8
 			for writeIndex < bytesToWrite {
-				smp := samples[offset]
-				offset++
+				smp := samples[tapeOffset]
+				tapeOffset++
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
-				smp = samples[offset]
-				offset++
+				audioOffset++
+				smp = samples[tapeOffset]
+				tapeOffset++
 				writeSampleAsFloat32bits(buf, writeIndex, smp)
 				writeIndex += 4
+				audioOffset++
 			}
 		}
 	}
-	tr.offset = offset
+	tr.tapeOffset = tapeOffset
+	tr.audioOffset = audioOffset
 	return writeIndex, nil
 }
 
 func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 	return &TapeReader{
-		tape:      tape,
-		nchannels: nchannels,
-		offset:    0,
+		tape:          tape,
+		tapeOffset:    0,
+		audioChannels: nchannels,
+		audioOffset:   0,
 	}
 }
 
@@ -563,8 +578,9 @@ const (
 		};` + "\x00"
 	pointFragmentShader = `
 		precision highp float;
+		uniform float u_alpha;
 		void main(void) {
-			gl_FragColor = vec4(1.0);
+			gl_FragColor = vec4(1.0, 1.0, 1.0, u_alpha);
 		};` + "\x00"
 )
 
@@ -579,6 +595,7 @@ type TapeDisplay struct {
 	program     Program
 	a_position  int32
 	u_transform int32
+	u_alpha     int32
 }
 
 func CreateTapeDisplay() (*TapeDisplay, error) {
@@ -590,12 +607,16 @@ func CreateTapeDisplay() (*TapeDisplay, error) {
 		program:     program,
 		a_position:  program.GetAttribLocation("a_position\x00"),
 		u_transform: program.GetUniformLocation("u_transform\x00"),
+		u_alpha:     program.GetUniformLocation("u_alpha\x00"),
 	}
 	return td, nil
 }
 
-func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, windowOffset int) {
+func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, windowOffset int, playheadFrame int) {
 	pixelWidth, pixelHeight := pixelRect.Dx(), pixelRect.Dy()
+	if pixelWidth == 0 || pixelHeight == 0 {
+		return
+	}
 	if td.tape != tape || td.pixelRect != pixelRect {
 		td.tape = tape
 		td.pixelRect = pixelRect
@@ -611,6 +632,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	channelHeightHalf := channelHeight / 2.0
 	incr := float64(windowSize) / float64(pixelWidth)
 	readIndex := float64(windowOffset)
+	playheadX := int(math.Round(float64(playheadFrame-windowOffset) / incr))
 	for x := range pixelWidth {
 		channelTop := float32(0)
 		for ch := range tape.nchannels {
@@ -620,8 +642,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		}
 		readIndex += incr
 	}
-	td.program.Use()
-	gl.EnableVertexAttribArray(uint32(td.a_position))
+	// Build transform once (pixel space -> clip space)
 	ux := 2.0 / float32(fbSize.X)
 	uy := 2.0 / float32(fbSize.Y)
 	mScale := mgl.Scale3D(ux, -uy, 1)
@@ -629,13 +650,44 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	ty := 1.0 - uy*float32(pixelRect.Min.Y)
 	mTranslate := mgl.Translate3D(tx, ty, 0)
 	mTransform := mTranslate.Mul4(mScale)
+
+	td.program.Use()
 	gl.UniformMatrix4fv(td.u_transform, 1, false, &mTransform[0])
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.EnableVertexAttribArray(uint32(td.a_position))
+
+	stride := int32(unsafe.Sizeof(PointVertex{}))
+
+	// Draw faint waveform fill + stroke per channel for a more polished look.
 	for ch := range tape.nchannels {
-		gl.VertexAttribPointer(
-			uint32(td.a_position), 2, gl.FLOAT, false,
-			int32(unsafe.Sizeof(PointVertex{})),
-			gl.Ptr(&td.vertices[ch][0].position[0]))
-		gl.DrawArrays(gl.LINE_STRIP, 0, int32(len(td.vertices[ch])))
+		ptr := gl.Ptr(&td.vertices[ch][0].position[0])
+		count := int32(len(td.vertices[ch]))
+
+		// subtle fill
+		gl.LineWidth(3.0)
+		gl.Uniform1f(td.u_alpha, 0.16)
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
+		gl.DrawArrays(gl.LINE_STRIP, 0, count)
+
+		// crisp stroke
+		gl.LineWidth(1.0)
+		gl.Uniform1f(td.u_alpha, 0.9)
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
+		gl.DrawArrays(gl.LINE_STRIP, 0, count)
 	}
+
+	// Playhead indicator
+	if playheadX >= 0 && playheadX < pixelWidth {
+		px := float32(playheadX) + 0.5
+		playheadVerts := [2]PointVertex{{position: [2]float32{px, 0}}, {position: [2]float32{px, float32(pixelHeight)}}}
+		gl.LineWidth(1.0)
+		gl.Uniform1f(td.u_alpha, 0.5)
+		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&playheadVerts[0].position[0]))
+		gl.DrawArrays(gl.LINES, 0, 2)
+	}
+
+	gl.LineWidth(1.0)
+	gl.Disable(gl.BLEND)
 	gl.DisableVertexAttribArray(uint32(td.a_position))
 }

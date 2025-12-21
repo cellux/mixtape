@@ -41,6 +41,7 @@ type App struct {
 	evalResult   Val
 	tapeDisplay  *TapeDisplay
 	tapePlayer   *OtoPlayer
+	tapeReader   *TapeReader
 	kmm          *KeyMapManager
 	editorKeyMap KeyMap
 }
@@ -126,9 +127,11 @@ func (app *App) Init() error {
 			stream := streamable.Stream()
 			if stream.nframes > 0 {
 				tape := stream.Take(stream.nframes)
-				player := otoContext.NewPlayer(MakeTapeReader(tape, 2))
-				player.Play()
+				reader := MakeTapeReader(tape, 2)
+				player := otoContext.NewPlayer(reader)
+				app.tapeReader = reader
 				app.tapePlayer = player
+				player.Play()
 			}
 		}
 	})
@@ -390,7 +393,12 @@ func (app *App) Render() error {
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
 		app.editor.Render(editorPane)
-		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0)
+		playheadFrame := 0
+		if app.tapeReader != nil {
+			numBytesStillInOtoBuffer := app.tapePlayer.BufferedSize()
+			playheadFrame = app.tapeReader.GetCurrentFrame(numBytesStillInOtoBuffer)
+		}
+		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrame)
 	default:
 		editorPane, statusPane := screenPane.SplitY(-1)
 		app.editor.Render(editorPane)
@@ -406,6 +414,7 @@ func (app *App) Update() error {
 
 func (app *App) Reset() {
 	app.tapePlayer = nil
+	app.tapeReader = nil
 	app.editor.Reset()
 	app.kmm.Reset()
 }

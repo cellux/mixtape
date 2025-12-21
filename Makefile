@@ -4,3 +4,7 @@ mixtape: $(wildcard *.go) go.mod go.sum prelude.tape
 .PHONY: test
 test: mixtape
 	./mixtape -f test.tape
+
+.PHONY: clean
+clean:
+	rm -f mixtape
