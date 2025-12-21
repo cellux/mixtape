@@ -138,7 +138,6 @@ func tanhWave(size int) Wave {
 	for i := range wave {
 		wave[i] = math.Tanh(wave[i])
 	}
-	wave.removeDCInPlace()
 	return wave
 }
 
@@ -155,7 +154,6 @@ func triangleWave(size int) Wave {
 		wave[i+2*quarter] = t - 1
 		wave[i+3*quarter] = t
 	}
-	wave.removeDCInPlace()
 	return wave
 }
 
@@ -171,7 +169,6 @@ func squareWave(size int) Wave {
 		wave[i+2*quarter] = -1
 		wave[i+3*quarter] = 1
 	}
-	wave.removeDCInPlace()
 	return wave
 }
 
@@ -194,7 +191,6 @@ func pulseWave(size int, pw float64) Wave {
 			wave[i] = -1
 		}
 	}
-	wave.removeDCInPlace()
 	return wave
 }
 
@@ -209,7 +205,6 @@ func sawWave(size int) Wave {
 		wave[(i+size/4)%size] = t - 1
 		wave[(i+half+size/4)%size] = t
 	}
-	wave.removeDCInPlace()
 	return wave
 }
 
