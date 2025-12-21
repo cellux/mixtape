@@ -6,6 +6,8 @@ import (
 	"math"
 )
 
+const DefaultWavetableSize = 2048
+
 // Wavetable represents a collection of single-cycle frames with optional frame morphing.
 type Wavetable struct {
 	frames    [][]Smp
@@ -97,6 +99,71 @@ func frameFromTape(t *Tape) []Smp {
 	// take first channel
 	for i := 0; i < t.nframes; i++ {
 		frame[i] = t.samples[i*t.nchannels]
+	}
+	return frame
+}
+
+func wtSine(size int) []Smp {
+	frame := make([]Smp, size)
+	for i := range size {
+		frame[i] = math.Sin(2 * math.Pi * float64(i) / float64(size))
+	}
+	return frame
+}
+
+func wtTanh(size int) []Smp {
+	frame := wtSine(size)
+	for i := range frame {
+		frame[i] = math.Tanh(frame[i])
+	}
+	return frame
+}
+
+func wtTriangle(size int) []Smp {
+	frame := make([]Smp, size)
+	quarter := size / 4
+	for i := range quarter {
+		t := float64(i) / float64(quarter)
+		frame[i] = 1 - t
+		frame[i+quarter] = -t
+		frame[i+2*quarter] = t - 1
+		frame[i+3*quarter] = t
+	}
+	return frame
+}
+
+func wtSquare(size int) []Smp {
+	frame := make([]Smp, size)
+	quarter := size / 4
+	for i := range quarter {
+		frame[i] = 1
+		frame[i+quarter] = -1
+		frame[i+2*quarter] = -1
+		frame[i+3*quarter] = 1
+	}
+	return frame
+}
+
+func wtPulse(size int) []Smp {
+	frame := make([]Smp, size)
+	sections := 4
+	pulseSize := size / sections
+	for i := range pulseSize {
+		frame[i+(sections-1)*pulseSize] = 1
+		for s := 0; s < sections-1; s++ {
+			frame[i+s*pulseSize] = -1
+		}
+	}
+	return frame
+}
+
+func wtSaw(size int) []Smp {
+	frame := make([]Smp, size)
+	half := size / 2
+	for i := range half {
+		t := float64(i) / float64(half)
+		frame[(i+size/4)%size] = t - 1
+		frame[(i+half+size/4)%size] = t
 	}
 	return frame
 }
@@ -193,6 +260,36 @@ func init() {
 			return err
 		}
 		vm.Push(wt)
+		return nil
+	})
+
+	RegisterWord("wt/sin", func(vm *VM) error {
+		vm.Push(wtSine(DefaultWavetableSize))
+		return nil
+	})
+
+	RegisterWord("wt/tanh", func(vm *VM) error {
+		vm.Push(wtTanh(DefaultWavetableSize))
+		return nil
+	})
+
+	RegisterWord("wt/triangle", func(vm *VM) error {
+		vm.Push(wtTriangle(DefaultWavetableSize))
+		return nil
+	})
+
+	RegisterWord("wt/square", func(vm *VM) error {
+		vm.Push(wtSquare(DefaultWavetableSize))
+		return nil
+	})
+
+	RegisterWord("wt/pulse", func(vm *VM) error {
+		vm.Push(wtPulse(DefaultWavetableSize))
+		return nil
+	})
+
+	RegisterWord("wt/saw", func(vm *VM) error {
+		vm.Push(wtSaw(DefaultWavetableSize))
 		return nil
 	})
 
