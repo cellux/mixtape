@@ -4,115 +4,56 @@ import (
 	"fmt"
 	"iter"
 	"math"
-
-	"github.com/mjibson/go-dsp/fft"
 )
 
 const MaxMipLevel = 8
-const BaseFrameSize = 8192
 
-// WTFrame is a single-cycle waveform.
-//
-// Typically several such frames are kept at each mip level of a
-// wavetable and the oscillator morphs between them as it is
-// generating sound.
-type WTFrame = []Smp
+// Waveset is an array of waves at a given level of a wavetable
+type Waveset []Wave
 
-// Wavetable represents a collection of single-cycle frames with optional frame morphing.
-// Level 0 contains the base frames; additional mip levels are built lazily on demand.
+// Wavetable represents a collection of single-cycle waves with optional wave morphing.
+// Level 0 contains the base waves; additional mip levels are built lazily on demand.
 type Wavetable struct {
-	mips [][]WTFrame // mips[level][frame][sample]; level 0 is the base table
+	mips []Waveset // mips[level][wave][sample]; level 0 is the base table
 }
 
-// removeDCInPlace subtracts the mean from the frame to center it at 0.
-func removeDCInPlace(frame WTFrame) {
-	n := len(frame)
-	if n == 0 {
-		return
+func newWavetableFromWaveset(baseWaves Waveset) (*Wavetable, error) {
+	if len(baseWaves) == 0 {
+		return nil, fmt.Errorf("wavetable: no waves")
 	}
-	sum := 0.0
-	for _, v := range frame {
-		sum += float64(v)
+	baseWaveSize := len(baseWaves[0])
+	if baseWaveSize == 0 {
+		return nil, fmt.Errorf("wavetable: empty wave")
 	}
-	mean := sum / float64(n)
-	if math.Abs(mean) < 1e-12 {
-		return
-	}
-	for i := range frame {
-		frame[i] -= Smp(mean)
-	}
-}
-
-func newWavetableFromFrames(baseFrames []WTFrame) (*Wavetable, error) {
-	if len(baseFrames) == 0 {
-		return nil, fmt.Errorf("wavetable: no frames")
-	}
-	baseFrameSize := len(baseFrames[0])
-	if baseFrameSize == 0 {
-		return nil, fmt.Errorf("wavetable: empty frame")
-	}
-	for i, f := range baseFrames {
-		if len(f) != baseFrameSize {
-			return nil, fmt.Errorf("wavetable: frame %d has size %d, expected %d", i, len(f), baseFrameSize)
+	for i, w := range baseWaves {
+		if len(w) != baseWaveSize {
+			return nil, fmt.Errorf("wavetable: wave %d has size %d, expected %d", i, len(w), baseWaveSize)
 		}
-		removeDCInPlace(f)
+		w.removeDCInPlace()
 	}
 	wt := &Wavetable{}
-	wt.mips = make([][]WTFrame, 0, MaxMipLevel)
-	wt.mips = append(wt.mips, baseFrames)
+	wt.mips = make([]Waveset, 0, MaxMipLevel)
+	wt.mips = append(wt.mips, baseWaves)
 	return wt, nil
 }
 
-func newWavetableFromFrame(baseFrame WTFrame) (*Wavetable, error) {
-	return newWavetableFromFrames([]WTFrame{baseFrame})
+func newWavetableFromWave(baseWave Wave) (*Wavetable, error) {
+	return newWavetableFromWaveset(Waveset{baseWave})
 }
 
 func (wt *Wavetable) getVal() Val { return wt }
 
 func (wt *Wavetable) String() string {
 	levels := len(wt.mips)
-	frames := 0
+	waves := 0
 	size := 0
 	if levels > 0 {
-		frames = len(wt.mips[0])
-		if frames > 0 {
+		waves = len(wt.mips[0])
+		if waves > 0 {
 			size = len(wt.mips[0][0])
 		}
 	}
-	return fmt.Sprintf("Wavetable(frames=%d size=%d levels=%d)", frames, size, levels)
-}
-
-// sampleFrame returns a sample from a single frame at fractional phase [0,1).
-// Uses 4-point Lagrange (Catmull-Rom) interpolation when possible; falls back to linear for very short frames.
-func sampleFrame(frame WTFrame, phase Smp) Smp {
-	n := len(frame)
-	if n == 0 {
-		return 0
-	}
-	p := math.Mod(float64(phase), 1.0)
-	if p < 0 {
-		p += 1.0
-	}
-	pos := p * float64(n)
-	i0 := int(pos) % n
-	frac := pos - float64(i0)
-
-	// For tiny frames, just do linear.
-	if n < 4 {
-		i1 := (i0 + 1) % n
-		return frame[i0]*(1.0-frac) + frame[i1]*frac
-	}
-
-	// 4-point Catmull-Rom (equivalent to cubic Lagrange with uniform parameterization).
-	im1 := (i0 - 1 + n) % n
-	i1 := (i0 + 1) % n
-	i2 := (i0 + 2) % n
-	t := frac
-	a0 := -0.5*frame[im1] + 1.5*frame[i0] - 1.5*frame[i1] + 0.5*frame[i2]
-	a1 := frame[im1] - 2.5*frame[i0] + 2.0*frame[i1] - 0.5*frame[i2]
-	a2 := -0.5*frame[im1] + 0.5*frame[i1]
-	a3 := frame[i0]
-	return ((a0*t+a1)*t+a2)*t + a3
+	return fmt.Sprintf("Wavetable(waves=%d size=%d levels=%d)", waves, size, levels)
 }
 
 // ensureLevel builds mip level l if not present, ensuring l-1 exists first.
@@ -136,51 +77,19 @@ func (wt *Wavetable) ensureLevel(l int) {
 		return
 	}
 
-	next := make([]WTFrame, len(prev))
-	for i, frame := range prev {
-		nextFrame := buildFFTLowpass(frame)
-		removeDCInPlace(nextFrame)
-		next[i] = nextFrame
+	next := make([]Wave, len(prev))
+	for i, wave := range prev {
+		nextWave := wave.buildFFTLowpass()
+		nextWave.removeDCInPlace()
+		next[i] = nextWave
 	}
 	wt.mips[l] = next
 }
 
-// buildFFTLowpass takes a frame and returns a half-size, lowpassed version using FFT bin masking.
-// It zeros bins above half the Nyquist of the previous level and downsamples by 2.
-func buildFFTLowpass(frame WTFrame) WTFrame {
-	n := len(frame)
-	if n <= 1 {
-		return append(WTFrame(nil), frame...)
-	}
-	// FFT expects complex input.
-	x := make([]complex128, n)
-	for i, v := range frame {
-		x[i] = complex(float64(v), 0)
-	}
-	X := fft.FFT(x)
-
-	// Zero upper half of bins (simple brickwall at N/4 of original sample rate, since we will downsample by 2).
-	for k := n/4 + 1; k < n-(n/4); k++ {
-		X[k] = 0
-	}
-
-	// IFFT back.
-	xt := fft.IFFT(X)
-	// Downsample by 2 with implicit box filter from lowpass.
-	nextN := n / 2
-	out := make(WTFrame, nextN)
-	for i := range nextN {
-		// fft.IFFT divides by N; xt[2*i] has that scaling already.
-		out[i] = Smp(real(xt[2*i]))
-	}
-	removeDCInPlace(out)
-	return out
-}
-
-// selectLevel chooses a mip level based on instantaneous frequency.
+// selectMipLevel chooses a mip level based on instantaneous frequency.
 // sr: sample rate, freq: Hz, baseSize: samples of level 0.
-func selectLevel(freq, sr float64, baseFrameSize int) int {
-	if freq <= 0 || baseFrameSize <= 0 || sr <= 0 {
+func selectMipLevel(freq, sr float64, baseWaveSize int) int {
+	if freq <= 0 || baseWaveSize <= 0 || sr <= 0 {
 		return 0
 	}
 	// target max harmonic that fits under Nyquist.
@@ -189,19 +98,19 @@ func selectLevel(freq, sr float64, baseFrameSize int) int {
 		return 0
 	}
 	// level = log2(baseSize / H), clamped
-	return max(int(math.Log2(float64(baseFrameSize)/H)), 0)
+	return max(int(math.Log2(float64(baseWaveSize)/H)), 0)
 }
 
-// sampleFrameAtLevel samples from a specific mip level with morph.
+// sampleWaveAtLevel samples from a specific mip level with morph.
 //
 // The function assumes that mip level `level` already exists.
-func (wt *Wavetable) sampleFrameAtLevel(level int, phase, morph Smp) Smp {
-	frames := wt.mips[level]
-	if len(frames) == 0 {
+func (wt *Wavetable) sampleWaveAtLevel(level int, phase, morph Smp) Smp {
+	waves := wt.mips[level]
+	if len(waves) == 0 {
 		return 0
 	}
-	if len(frames) == 1 {
-		return sampleFrame(frames[0], phase)
+	if len(waves) == 1 {
+		return waves[0].sampleAt(phase)
 	}
 	m := float64(morph)
 	if m < 0 {
@@ -210,16 +119,16 @@ func (wt *Wavetable) sampleFrameAtLevel(level int, phase, morph Smp) Smp {
 	if m > 1 {
 		m = 1
 	}
-	idx := m * float64(len(frames)-1)
+	idx := m * float64(len(waves)-1)
 	i0 := int(idx)
 	frac := idx - float64(i0)
 	i1 := i0 + 1
-	if i1 >= len(frames) {
-		i1 = len(frames) - 1
+	if i1 >= len(waves) {
+		i1 = len(waves) - 1
 		frac = 0
 	}
-	s0 := sampleFrame(frames[i0], phase)
-	s1 := sampleFrame(frames[i1], phase)
+	s0 := waves[i0].sampleAt(phase)
+	s1 := waves[i1].sampleAt(phase)
 	return Smp(float64(s0)*(1.0-frac) + float64(s1)*frac)
 }
 
@@ -228,9 +137,9 @@ func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
 	if wt == nil || len(wt.mips) == 0 || len(wt.mips[0]) == 0 || len(wt.mips[0][0]) == 0 {
 		return 0
 	}
-	baseFrames := wt.mips[0]
-	baseFrameSize := len(baseFrames[0])
-	lvl := min(selectLevel(float64(freq), sr, baseFrameSize), MaxMipLevel)
+	baseWaves := wt.mips[0]
+	baseWaveSize := len(baseWaves[0])
+	lvl := min(selectMipLevel(float64(freq), sr, baseWaveSize), MaxMipLevel)
 	wt.ensureLevel(lvl)
 	// choose second level for crossfade if available
 	lvl2 := lvl
@@ -238,7 +147,7 @@ func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
 	// simple heuristic: if fractional log places us near next level, crossfade
 	// compute continuous level
 	H := (sr / 2.0) / float64(freq)
-	clvl := math.Log2(float64(baseFrameSize) / H)
+	clvl := math.Log2(float64(baseWaveSize) / H)
 	if clvl > float64(lvl) {
 		lvl2 = lvl + 1
 		fade = clvl - float64(lvl)
@@ -250,134 +159,81 @@ func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
 		lvl2 = MaxMipLevel
 	}
 	wt.ensureLevel(lvl2)
-	s0 := wt.sampleFrameAtLevel(lvl, phase, morph)
+	s0 := wt.sampleWaveAtLevel(lvl, phase, morph)
 	if lvl2 == lvl {
 		return s0
 	}
-	s1 := wt.sampleFrameAtLevel(lvl2, phase, morph)
+	s1 := wt.sampleWaveAtLevel(lvl2, phase, morph)
 	return Smp((1-fade)*float64(s0) + fade*float64(s1))
 }
 
 func wavetableFromVec(v Vec) (*Wavetable, error) {
-	// Treat a flat numeric vector as one frame.
-	frame := make(WTFrame, len(v))
+	// Treat a flat numeric vector as one wave.
+	wave := make(Wave, len(v))
 	for i, item := range v {
 		n, ok := item.(Num)
 		if !ok {
 			return nil, fmt.Errorf("wavetable: expected numeric vector, got %T at index %d", item, i)
 		}
-		frame[i] = Smp(n)
+		wave[i] = Smp(n)
 	}
-	return newWavetableFromFrames([]WTFrame{frame})
+	return newWavetableFromWave(wave)
 }
 
-func baseFrameFromTape(t *Tape) WTFrame {
-	baseFrame := make(WTFrame, t.nframes)
-	// take first channel
-	for i := 0; i < t.nframes; i++ {
-		baseFrame[i] = t.samples[i*t.nchannels]
+func waveFromTape(t *Tape) Wave {
+	wave := make(Wave, t.nframes)
+	srcIndex := 0
+	for dstIndex := range t.nframes {
+		sum := Smp(0)
+		for range t.nchannels {
+			sum += t.samples[srcIndex]
+			srcIndex++
+		}
+		wave[dstIndex] = sum / Smp(t.nchannels)
 	}
-	return baseFrame
+	return wave
 }
 
 func wtSin() (*Wavetable, error) {
-	size := BaseFrameSize
-	baseFrame := make(WTFrame, size)
-	for i := range size {
-		baseFrame[i] = math.Sin(2 * math.Pi * float64(i) / float64(size))
-	}
-	removeDCInPlace(baseFrame)
-	return newWavetableFromFrame(baseFrame)
+	return newWavetableFromWave(sinWave(0))
 }
 
 func wtTanh() (*Wavetable, error) {
-	wt, err := wtSin()
-	if err != nil {
-		return nil, err
-	}
-	baseFrame := wt.mips[0][0]
-	for i := range baseFrame {
-		baseFrame[i] = math.Tanh(baseFrame[i])
-	}
-	removeDCInPlace(baseFrame)
-	return wt, nil
+	return newWavetableFromWave(tanhWave(0))
 }
 
 func wtTriangle() (*Wavetable, error) {
-	size := BaseFrameSize
-	baseFrame := make(WTFrame, size)
-	quarter := size / 4
-	for i := range quarter {
-		t := float64(i) / float64(quarter)
-		baseFrame[i] = 1 - t
-		baseFrame[i+quarter] = -t
-		baseFrame[i+2*quarter] = t - 1
-		baseFrame[i+3*quarter] = t
-	}
-	removeDCInPlace(baseFrame)
-	return newWavetableFromFrame(baseFrame)
+	return newWavetableFromWave(triangleWave(0))
 }
 
 func wtSquare() (*Wavetable, error) {
-	size := BaseFrameSize
-	baseFrame := make(WTFrame, size)
-	quarter := size / 4
-	for i := range quarter {
-		baseFrame[i] = 1
-		baseFrame[i+quarter] = -1
-		baseFrame[i+2*quarter] = -1
-		baseFrame[i+3*quarter] = 1
-	}
-	removeDCInPlace(baseFrame)
-	return newWavetableFromFrame(baseFrame)
+	return newWavetableFromWave(squareWave(0))
 }
 
 func wtPulse(pw float64) (*Wavetable, error) {
-	if pw < 0 {
-		pw = 0
-	}
-	if pw > 1 {
-		pw = 1
-	}
-	size := BaseFrameSize
-	onSamples := int(math.Round(pw * float64(size)))
-	baseFrame := make(WTFrame, size)
-	for i := range size {
-		if i < onSamples {
-			baseFrame[i] = 1
-		} else {
-			baseFrame[i] = -1
-		}
-	}
-	removeDCInPlace(baseFrame)
-	return newWavetableFromFrame(baseFrame)
+	return newWavetableFromWave(pulseWave(0, pw))
 }
 
 func wtSaw() (*Wavetable, error) {
-	size := BaseFrameSize
-	baseFrame := make(WTFrame, size)
-	half := size / 2
-	for i := range half {
-		t := float64(i) / float64(half)
-		baseFrame[(i+size/4)%size] = t - 1
-		baseFrame[(i+half+size/4)%size] = t
-	}
-	removeDCInPlace(baseFrame)
-	return newWavetableFromFrame(baseFrame)
+	return newWavetableFromWave(sawWave(0))
 }
 
 func wavetableFromVal(v Val) (*Wavetable, error) {
 	switch x := v.(type) {
 	case *Wavetable:
 		return x, nil
+	case Wave:
+		return newWavetableFromWave(x)
+	case *Tape:
+		return newWavetableFromWave(waveFromTape(x))
 	case Vec:
 		if len(x) == 0 {
 			return nil, fmt.Errorf("wavetable: empty vector")
 		}
-		// If elements are vectors or tapes, treat as multi-frame. Otherwise single frame.
+		// If elements are vectors or tapes, treat as multi-wave. Otherwise single wave.
 		switch x[0].(type) {
 		case Vec, *Tape, *Wavetable:
-			frames := make([]WTFrame, 0, len(x))
+			waves := make(Waveset, 0, len(x))
 			for i, item := range x {
 				switch f := item.(type) {
 				case Vec:
@@ -385,39 +241,27 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 					if err != nil {
 						return nil, err
 					}
-					firstBaseFrame := wt.mips[0][0]
-					frames = append(frames, firstBaseFrame)
+					firstBaseWave := wt.mips[0][0]
+					waves = append(waves, firstBaseWave)
 				case *Tape:
-					frames = append(frames, baseFrameFromTape(f))
+					waves = append(waves, waveFromTape(f))
 				case *Wavetable:
 					if len(f.mips) == 0 || len(f.mips[0]) != 1 {
-						return nil, fmt.Errorf("wavetable: nested wavetable at frame %d must have exactly 1 frame at level 0", i)
+						return nil, fmt.Errorf("wavetable: nested wavetable at index %d must have exactly 1 wave at level 0", i)
 					}
-					firstBaseFrame := f.mips[0][0]
-					frames = append(frames, firstBaseFrame)
+					firstBaseWave := f.mips[0][0]
+					waves = append(waves, firstBaseWave)
 				default:
-					return nil, fmt.Errorf("wavetable: unsupported frame type %T at index %d", item, i)
+					return nil, fmt.Errorf("wavetable: unsupported wave type %T at index %d", item, i)
 				}
 			}
-			return newWavetableFromFrames(frames)
+			return newWavetableFromWaveset(waves)
 		default:
 			return wavetableFromVec(x)
 		}
-	case *Tape:
-		return newWavetableFromFrame(baseFrameFromTape(x))
 	default:
 		return nil, fmt.Errorf("wavetable: cannot coerce %T", v)
 	}
-}
-
-func streamFromVal(v Val) (Stream, error) {
-	if v == nil {
-		return Num(0).Stream(), nil
-	}
-	if s, ok := v.(Streamable); ok {
-		return s.Stream(), nil
-	}
-	return Stream{}, fmt.Errorf("expected streamable value, got %T", v)
 }
 
 // WavetableOsc produces a mono stream using freq and morph streams, with mip selection.

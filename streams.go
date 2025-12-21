@@ -38,6 +38,16 @@ func makeFiniteStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	}
 }
 
+func streamFromVal(v Val) (Stream, error) {
+	if v == nil {
+		return Num(0).Stream(), nil
+	}
+	if s, ok := v.(Streamable); ok {
+		return s.Stream(), nil
+	}
+	return Stream{}, fmt.Errorf("expected streamable value, got %T", v)
+}
+
 func SinOp() SmpUnOp {
 	return func(phase Smp) Smp {
 		return math.Sin(phase * 2 * math.Pi)
@@ -296,11 +306,11 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 
 func init() {
 	RegisterWord("~", func(vm *VM) error {
-		top, err := Pop[Streamable](vm)
+		stream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		vm.Push(top.Stream())
+		vm.Push(stream)
 		return nil
 	})
 
@@ -361,11 +371,10 @@ func init() {
 	})
 
 	RegisterWord("dcblock", func(vm *VM) error {
-		streamable, err := Pop[Streamable](vm)
+		stream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		stream := streamable.Stream()
 		alpha := 0.995
 		if aval := vm.GetVal(":alpha"); aval != nil {
 			if anum, ok := aval.(Num); ok {
@@ -383,25 +392,24 @@ func init() {
 		if err != nil {
 			return err
 		}
-		streamable, err := Pop[Streamable](vm)
+		stream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		stream := streamable.Stream()
 		vm.Push(stream.Take(int(nfNum)))
 		return nil
 	})
 
 	RegisterMethod[Streamable]("join", 2, func(vm *VM) error {
-		rhs, err := Pop[Streamable](vm)
+		rhsStream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		lhs, err := Pop[Streamable](vm)
+		lhsStream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		vm.Push(lhs.Stream().Join(rhs.Stream()))
+		vm.Push(lhsStream.Join(rhsStream))
 		return nil
 	})
 
@@ -410,11 +418,10 @@ func init() {
 		if err != nil {
 			return err
 		}
-		streamable, err := Pop[Streamable](vm)
+		stream, err := streamFromVal(vm.Pop())
 		if err != nil {
 			return err
 		}
-		stream := streamable.Stream()
 		vm.Push(stream.Delay(int(nfNum)))
 		return nil
 	})

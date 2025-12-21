@@ -345,11 +345,7 @@ func (vm *VM) GetInt(k any) (int, error) {
 }
 
 func (vm *VM) GetStream(k any) (Stream, error) {
-	streamable, err := Get[Streamable](vm, k)
-	if err != nil {
-		return Stream{}, err
-	}
-	return streamable.Stream(), nil
+	return streamFromVal(vm.GetVal(k))
 }
 
 type Token struct {
