@@ -19,6 +19,7 @@ require (
 require (
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-audio/riff v1.0.0 // indirect
+	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 )
