@@ -215,7 +215,7 @@ func (s Stream) WithNChannels(nchannels int) Stream {
 // alpha controls the cutoff; typical small value like 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
 	nchannels := s.nchannels
-	return makeStream(nchannels, func(yield func(Frame) bool) {
+	result := makeStream(nchannels, func(yield func(Frame) bool) {
 		out := make(Frame, nchannels)
 		prevIn := make([]Smp, nchannels)
 		prevOut := make([]Smp, nchannels)
@@ -231,6 +231,8 @@ func DCBlock(s Stream, alpha float64) Stream {
 			}
 		}
 	})
+	result.nframes = s.nframes
+	return result
 }
 
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
