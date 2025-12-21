@@ -226,6 +226,12 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 		return newWavetableFromWave(x)
 	case *Tape:
 		return newWavetableFromWave(waveFromTape(x))
+	case Streamable:
+		s := x.Stream()
+		if s.nframes == 0 {
+			return nil, fmt.Errorf("wavetable: input is non-finite stream")
+		}
+		return wavetableFromVal(s.Take(s.nframes))
 	case Vec:
 		if len(x) == 0 {
 			return nil, fmt.Errorf("wavetable: empty vector")
