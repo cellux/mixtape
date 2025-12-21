@@ -456,14 +456,22 @@ func runWithArgs(vm *VM, args []string) error {
 	openFiles := make(map[string]string)
 	currentFile := ""
 	if flags.EvalScript != "" {
-		return vm.ParseAndEval(strings.NewReader(flags.EvalScript), "<script>")
+		err := vm.ParseAndEval(strings.NewReader(flags.EvalScript), "<script>")
+		if top := vm.Top(); err == nil && top != nil {
+			fmt.Println(vm.Top())
+		}
+		return err
 	}
 	if flags.EvalFile != "" {
 		data, err := os.ReadFile(flags.EvalFile)
 		if err != nil {
 			return err
 		}
-		return vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
+		err = vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
+		if top := vm.Top(); err == nil && top != nil {
+			fmt.Println(vm.Top())
+		}
+		return err
 	}
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
