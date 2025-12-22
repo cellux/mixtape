@@ -126,6 +126,11 @@ stack len 0 = assert
 ## ratios
 { 1/4 0.25 = } assert
 
+## trigonometry
+
+{ pi sin 0.0000000000001 < } assert
+{ pi 2 / sin 1 = } assert
+
 # strings
 
 { "foo" "foo" = } assert

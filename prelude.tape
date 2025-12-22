@@ -82,12 +82,12 @@ false >:saturate
 } >env
 
 # default waves
-{ 0 wave/sin } >sin
-{ 0 wave/tanh } >tanh
-{ 0 wave/triangle } >triangle
-{ 0 wave/square } >square
-{ 0 wave/pulse } >pulse
-{ 0 wave/saw } >saw
+{ 0 wave/sin } >w/sin
+{ 0 wave/tanh } >w/tanh
+{ 0 wave/triangle } >w/triangle
+{ 0 wave/square } >w/square
+{ 0 wave/pulse } >w/pulse
+{ 0 wave/saw } >w/saw
 
 # wave phasors
 { sin phasor } >~sin

@@ -1,6 +1,6 @@
 # Choir pad: saw+sine blend, 6-voice unison, slow attack/release, 10s render
 (
-  { saw 0.6 * sin 0.4 * + ~wt }     # per-voice source: blended saw+sine wavetable osc
+  { w/saw 0.6 * w/sin 0.4 * + ~wt } # per-voice source: blended saw+sine wavetable osc
   110        >:freq                 # base A2
   6          >:voices               # unison voices
   14         >:detune               # cents spread

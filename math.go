@@ -51,6 +51,54 @@ func RoundOp() SmpUnOp {
 	return func(x Smp) Smp { return math.Round(x) }
 }
 
+func SinOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Sin(x) }
+}
+
+func CosOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Cos(x) }
+}
+
+func TanOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Tan(x) }
+}
+
+func AsinOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Asin(x) }
+}
+
+func AcosOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Acos(x) }
+}
+
+func AtanOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Atan(x) }
+}
+
+func SinhOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Sinh(x) }
+}
+
+func CoshOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Cosh(x) }
+}
+
+func TanhOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Tanh(x) }
+}
+
+func AsinhOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Asinh(x) }
+}
+
+func AcoshOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Acosh(x) }
+}
+
+func AtanhOp() SmpUnOp {
+	return func(x Smp) Smp { return math.Atanh(x) }
+}
+
 func AddOp() SmpBinOp {
 	return func(x, y Smp) Smp { return x + y }
 }
@@ -77,6 +125,14 @@ func RemOp() SmpBinOp {
 
 func PowOp() SmpBinOp {
 	return func(x, y Smp) Smp { return math.Pow(float64(x), float64(y)) }
+}
+
+func Atan2Op() SmpBinOp {
+	return func(y, x Smp) Smp { return math.Atan2(float64(y), float64(x)) }
+}
+
+func HypotOp() SmpBinOp {
+	return func(x, y Smp) Smp { return math.Hypot(float64(x), float64(y)) }
 }
 
 func MinOp() SmpBinOp {
@@ -135,6 +191,54 @@ func init() {
 		return applySmpUnOp(vm, RoundOp())
 	})
 
+	RegisterWord("sin", func(vm *VM) error {
+		return applySmpUnOp(vm, SinOp())
+	})
+
+	RegisterWord("cos", func(vm *VM) error {
+		return applySmpUnOp(vm, CosOp())
+	})
+
+	RegisterWord("tan", func(vm *VM) error {
+		return applySmpUnOp(vm, TanOp())
+	})
+
+	RegisterWord("asin", func(vm *VM) error {
+		return applySmpUnOp(vm, AsinOp())
+	})
+
+	RegisterWord("acos", func(vm *VM) error {
+		return applySmpUnOp(vm, AcosOp())
+	})
+
+	RegisterWord("atan", func(vm *VM) error {
+		return applySmpUnOp(vm, AtanOp())
+	})
+
+	RegisterWord("sinh", func(vm *VM) error {
+		return applySmpUnOp(vm, SinhOp())
+	})
+
+	RegisterWord("cosh", func(vm *VM) error {
+		return applySmpUnOp(vm, CoshOp())
+	})
+
+	RegisterWord("tanh", func(vm *VM) error {
+		return applySmpUnOp(vm, TanhOp())
+	})
+
+	RegisterWord("asinh", func(vm *VM) error {
+		return applySmpUnOp(vm, AsinhOp())
+	})
+
+	RegisterWord("acosh", func(vm *VM) error {
+		return applySmpUnOp(vm, AcoshOp())
+	})
+
+	RegisterWord("atanh", func(vm *VM) error {
+		return applySmpUnOp(vm, AtanhOp())
+	})
+
 	RegisterWord("+", func(vm *VM) error {
 		return applySmpBinOp(vm, AddOp())
 	})
@@ -161,6 +265,14 @@ func init() {
 
 	RegisterWord("pow", func(vm *VM) error {
 		return applySmpBinOp(vm, PowOp())
+	})
+
+	RegisterWord("atan2", func(vm *VM) error {
+		return applySmpBinOp(vm, Atan2Op())
+	})
+
+	RegisterWord("hypot", func(vm *VM) error {
+		return applySmpBinOp(vm, HypotOp())
 	})
 
 	RegisterWord("min", func(vm *VM) error {
