@@ -65,8 +65,11 @@ false >:saturate
 { beats :tpb / } >ticks
 { SRC_LINEAR swap resample } >stretch
 
-# MIDI note to frequency
+# MIDI note -> frequency
 { 69 - 12 / exp2 440 * } >mtof
+
+# semitone offset -> freq multiplier
+{ 12 / 2 swap pow } >st
 
 { 2 1 partition
   dup { 0 at } map >:start

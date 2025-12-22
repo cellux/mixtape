@@ -305,6 +305,10 @@ drop
 
 { 1s 1 seconds = } assert
 
+{ 1/4s 1 seconds 4 / = } assert
+{ 1/4b 1 beats 4 / = } assert
+{ 1/4p 1 periods 4 / = } assert
+
 # midi to hz
 { 69 mtof 440 = } assert
 { 57 mtof 220 = } assert
@@ -312,9 +316,10 @@ drop
 { 1b 1 beats = } assert
 { 1p 1 periods = } assert
 
-{ 1/4s 1 seconds 4 / = } assert
-{ 1/4b 1 beats 4 / = } assert
-{ 1/4p 1 periods 4 / = } assert
+# semitone offset -> freq multiplier
+{ 1 st 2 1/12 pow = } assert
+{ 5 st 2 5/12 pow = } assert
+{ -3 st 2 -3/12 pow = } assert
 
 # utilities
 
