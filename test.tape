@@ -1,10 +1,10 @@
-# stack is empty at start
+; stack is empty at start
 stack len 0 = assert
 
-# truth:
-#
-# non-zero = true
-# zero     = false
+; truth:
+;
+; non-zero = true
+; zero     = false
 
 { 1 } assert
 { -1 } assert
@@ -30,19 +30,19 @@ stack len 0 = assert
 { 7 2 5 3 > {+ 10 +} {*} if 19 = } assert
 { 7 2 5 3 < {+} {* 3 -} if 11 = } assert
 
-# nil
+; nil
 
 { nil nil = } assert
 { nil 0 != } assert
 { 0 nil != } assert
 
-# numbers (Num)
+; numbers (Num)
 
-## equality
+;; equality
 { 3 3 = } assert
 { 3 4 != } assert
 
-## comparisons
+;; comparisons
 { 3 3 > not } assert
 { 3 3 >= } assert
 { 3 3 < not } assert
@@ -52,25 +52,25 @@ stack len 0 = assert
 { 3 4 < } assert
 { 3 4 <= } assert
 
-## min/max
+;; min/max
 { 3 5 min 3 = } assert
 { 3 5 max 5 = } assert
 
-## arithmetic
+;; arithmetic
 { 3 4 + 7 = } assert
 { 4 3 - 1 = } assert
 { 4 3 * 12 = } assert
 { 12 3 / 4 = } assert
 
-## power
+;; power
 { 2 5 pow 32 = } assert
 
-## modulo
+;; modulo
 {  5  3 mod  2 = } assert
 { -5  3 mod -2 = } assert
 {  5 -3 mod  2 = } assert
 
-## remainder
+;; remainder
 {  5  3 rem -1 = } assert
 { -5  3 rem  1 = } assert
 {  5 -3 rem -1 = } assert
@@ -113,7 +113,7 @@ stack len 0 = assert
 { 5.5 round 6 = } assert
 { 5.7 round 6 = } assert
 
-## rand
+;; rand
 
 { rand 0.0 >= } assert
 { rand 1.0 < } assert
@@ -123,15 +123,15 @@ stack len 0 = assert
 
 { rand 0.9451961492941164 = } assert
 
-## ratios
+;; ratios
 { 1/4 0.25 = } assert
 
-## trigonometry
+;; trigonometry
 
 { pi sin 0.0000000000001 < } assert
 { pi 2 / sin 1 = } assert
 
-# strings
+; strings
 
 { "foo" "foo" = } assert
 
@@ -139,7 +139,7 @@ stack len 0 = assert
 
 { "hello, " "world" + "hello, world" = } assert
 
-# symbols
+; symbols
 
 { "foo" sym "foo" sym = } assert
 { "foo" sym "foo" != } assert
@@ -147,7 +147,7 @@ stack len 0 = assert
 ( { { foo } 0 at 5 set "foo" get 5 = } assert )
 ( { "foo" 5 set { foo } 0 at get 5 = } assert )
 
-# vectors
+; vectors
 
 { [] len 0 = } assert
 
@@ -200,7 +200,7 @@ drop
 { [[1 5 2] [4 7]] zip [[1 4] [5 7]] = } assert
 { [[1 5] [4 7 3]] zip [[1 4] [5 7]] = } assert
 
-# quoting
+; quoting
 
 { {[1 2 3]} len 5 = } assert
 { {[1 2 3]} eval [1 2 3] = } assert
@@ -229,7 +229,7 @@ drop
   drop
 )
 
-# throw/catch
+; throw/catch
 
 { { "no throw in here" } catch nil? } assert
 { { "foo" throw } catch "foo" = } assert
@@ -239,7 +239,7 @@ drop
 { [ 1 2 { 3 4 throw } catch 4 = assert ] [1 2] = } assert
 { ( 5 >:test {( 8 >:test nil throw )} catch nil? assert :test 5 = ) } assert
 
-# loop/break
+; loop/break
 
 ( 0 >:sum
   { [ 1 7 9 4 3 ] iter
@@ -247,7 +247,7 @@ drop
     drop
     :sum 17 = } assert )
 
-# seq
+; seq
 
 ( [ 3 8 2 ] >:lo
   [ 7 9 5 ] >:hi
@@ -260,12 +260,12 @@ drop
   } assert
 )
 
-# parsing
+; parsing
 
 { "1234 4321.5 *" parse {1234 4321.5 *} = } assert
 { "42 24" parse1 42 = } assert
 
-# defaults
+; defaults
 
 { sr 48000 = } assert
 
@@ -275,7 +275,7 @@ drop
 { :phase 0 = } assert
 { :pw 0.5 = } assert
 
-# environments
+; environments
 
 ( { 100 >:bpm :bpm 100 = } assert
   ( { 90 >:bpm :bpm 90 = } assert )
@@ -283,14 +283,14 @@ drop
 )
 { :bpm 120 = } assert
 
-# set/get
+; set/get
 
 ( { "foo" 100 set "foo" get 100 = } assert )
 ( { "foo" 100 set foo 100 = } assert )
 ( { 100 >foo "foo" get 100 = } assert )
 ( { 100 >foo @foo 100 = } assert )
 
-# seconds and beats
+; seconds and beats
 
 { 1 seconds 48000 = } assert
 { 2 seconds 96000 = } assert
@@ -309,25 +309,25 @@ drop
 { 1/4b 1 beats 4 / = } assert
 { 1/4p 1 periods 4 / = } assert
 
-# semitone offset -> freq multiplier
+; semitone offset -> freq multiplier
 { 1 st 2 1/12 pow = } assert
 { 5 st 2 5/12 pow = } assert
 { -3 st 2 -3/12 pow = } assert
 
-# midi to hz
+; midi to hz
 { 69 mtof 440 = } assert
 { 57 mtof 220 = } assert
 { 60 mtof 261.6255653005986 = } assert
 { 1b 1 beats = } assert
 { 1p 1 periods = } assert
 
-# cents -> freq multiplier
+; cents -> freq multiplier
 { 0 cents 1 = } assert
 { 1200 cents 2 = } assert
 { -1200 cents 0.5 = } assert
 { 100 cents 1/12 exp2 = } assert
 
-# utilities
+; utilities
 
 { 3 4 5 drop + 7 = } assert
 { 5 dup * 25 = } assert
@@ -335,5 +335,5 @@ drop
 { 2 9 over - 7 = assert 2 = } assert
 { 2 9 7 nip * 14 = } assert
 
-# stack is empty at end
+; stack is empty at end
 stack len 0 = assert

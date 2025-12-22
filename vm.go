@@ -396,7 +396,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 			if ch == '"' {
 				return false
 			}
-			if ch == '#' {
+			if ch == ';' {
 				return false
 			}
 		}
@@ -417,7 +417,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 		case scanner.Char, scanner.String, scanner.RawString:
 			text := s.TokenText()
 			appendTokens(text, Str(text[1:len(text)-1]))
-		case '#':
+		case ';':
 			for {
 				ch := s.Next()
 				if ch == '\n' || ch == scanner.EOF {

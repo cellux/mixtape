@@ -27,8 +27,8 @@
    :seq/syms { get iter } map >:seq/symiters
    {
      [:seq/syms :seq/symiters] zip {
-       dup 1 at # symiter
-       swap 0 at # sym
+       dup 1 at ; symiter
+       swap 0 at ; sym
        swap
        eval dup nil? { break } if set
      } each
@@ -36,23 +36,23 @@
    } loop
 )} >seq
 
-# oscillator defaults
+; oscillator defaults
 440 >:freq
 0.0 >:phase
 0.5 >:pw
 
-# filter defaults
+; filter defaults
 1200  >:cutoff
 0.7   >:q
 1.0   >:drive
 0.0   >:blend
 false >:saturate
 
-# FM defaults
+; FM defaults
 0.0 >:mod
 1.0 >:index
 
-# RNG defaults
+; RNG defaults
 0 >:seed
 
 0 >:start
@@ -66,13 +66,13 @@ false >:saturate
 { beats :tpb / } >ticks
 { SRC_LINEAR swap resample } >stretch
 
-# semitone offset -> freq multiplier
+; semitone offset -> freq multiplier
 { 12 / exp2 } >st
 
-# MIDI note -> frequency
+; MIDI note -> frequency
 { 69 - st 440 * } >mtof
 
-# cents -> freq multiplier
+; cents -> freq multiplier
 { 1200 / exp2 } >cents
 
 { 2 1 partition
@@ -91,7 +91,7 @@ false >:saturate
   ] { join } reduce
 } >env
 
-# default waves
+; default waves
 { 0 wave/sin } >w/sin
 { 0 wave/tanh } >w/tanh
 { 0 wave/triangle } >w/triangle
@@ -99,10 +99,10 @@ false >:saturate
 { 0 wave/pulse } >w/pulse
 { 0 wave/saw } >w/saw
 
-# wave phasors
-{ sin phasor } >~sin
-{ tanh phasor } >~tanh
-{ triangle phasor } >~triangle
-{ square phasor } >~square
-{ pulse phasor } >~pulse
-{ saw phasor } >~saw
+; wave phasors
+{ w/sin phasor } >~sin
+{ w/tanh phasor } >~tanh
+{ w/triangle phasor } >~triangle
+{ w/square phasor } >~square
+{ w/pulse phasor } >~pulse
+{ w/saw phasor } >~saw
