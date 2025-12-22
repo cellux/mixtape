@@ -239,6 +239,13 @@ func DCBlock(s Stream, alpha float64) Stream {
 	})
 }
 
+// DCFilter implements Vital's dc_filter: y[n] = (x[n]-x[n-1]) + a*y[n-1]
+// with a = 1 - (1 / sampleRate). It's a very low cutoff (~0.16 Hz @ 48kHz).
+func DCFilter(s Stream) Stream {
+	coeff := 1.0 - 1.0/float64(SampleRate())
+	return DCBlock(s, coeff)
+}
+
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
 	result := makeStream(nchannels, func(yield func(Frame) bool) {
@@ -390,6 +397,15 @@ func init() {
 			}
 		}
 		vm.Push(DCBlock(stream, alpha))
+		return nil
+	})
+
+	RegisterWord("dcfilter", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(DCFilter(stream))
 		return nil
 	})
 
