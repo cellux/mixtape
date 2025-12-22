@@ -32,6 +32,11 @@ type Editor struct {
 	height      int
 }
 
+func (e *Editor) setYankedRunes(rs []rune) {
+	e.yankedRunes = rs
+	_ = clipboard.WriteAll(string(rs))
+}
+
 func CreateEditor() *Editor {
 	return &Editor{}
 }
@@ -253,6 +258,7 @@ func (e *Editor) KillBetween(start, end EditorPoint) (result []rune) {
 	}
 	e.ForgetMark()
 	slices.Reverse(result)
+	e.setYankedRunes(result)
 	return result
 }
 
@@ -291,19 +297,18 @@ func (e *Editor) YankRegion() {
 			yankedRunes = append(yankedRunes, '\n')
 		}
 	}
-	e.yankedRunes = yankedRunes
+	e.setYankedRunes(yankedRunes)
 	e.ForgetMark()
 }
 
 func (e *Editor) Paste() {
+	clipboardContents, err := clipboard.ReadAll()
+	if err == nil && clipboardContents != "" {
+		e.yankedRunes = []rune(clipboardContents)
+	}
 	sourceRunes := e.yankedRunes
 	if sourceRunes == nil {
-		clipboardContents, err := clipboard.ReadAll()
-		if err == nil {
-			sourceRunes = []rune(clipboardContents)
-		} else {
-			return
-		}
+		return
 	}
 	e.InsertRunes(sourceRunes)
 }
