@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"iter"
-	"math"
 )
 
 type Stream struct {
@@ -65,26 +64,6 @@ func streamFromVal(v Val) (Stream, error) {
 		return s.Stream(), nil
 	}
 	return Stream{}, fmt.Errorf("expected streamable value, got %T", v)
-}
-
-func AddOp() SmpBinOp {
-	return func(x, y Smp) Smp { return x + y }
-}
-
-func SubOp() SmpBinOp {
-	return func(x, y Smp) Smp { return x - y }
-}
-
-func MulOp() SmpBinOp {
-	return func(x, y Smp) Smp { return x * y }
-}
-
-func DivOp() SmpBinOp {
-	return func(x, y Smp) Smp { return x / y }
-}
-
-func ModOp() SmpBinOp {
-	return func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) }
 }
 
 func (s Stream) Stream() Stream {
@@ -193,6 +172,31 @@ func (s Stream) Join(other Stream) Stream {
 	})
 }
 
+func applySmpUnOp(vm *VM, op SmpUnOp) error {
+	input, err := Pop[Streamable](vm)
+	if err != nil {
+		return err
+	}
+	if n, ok := input.(Num); ok {
+		vm.Push(op(Smp(n)))
+		return nil
+	}
+	s := input.Stream()
+	result := makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+		out := make(Frame, s.nchannels)
+		for frame := range s.seq {
+			for ch := range s.nchannels {
+				out[ch] = op(frame[ch])
+			}
+		}
+		if !yield(out) {
+			return
+		}
+	})
+	vm.Push(result)
+	return nil
+}
+
 func applySmpBinOp(vm *VM, op SmpBinOp) error {
 	rhs, err := Pop[Streamable](vm)
 	if err != nil {
@@ -267,23 +271,4 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("+", func(vm *VM) error {
-		return applySmpBinOp(vm, AddOp())
-	})
-
-	RegisterWord("-", func(vm *VM) error {
-		return applySmpBinOp(vm, SubOp())
-	})
-
-	RegisterWord("*", func(vm *VM) error {
-		return applySmpBinOp(vm, MulOp())
-	})
-
-	RegisterWord("/", func(vm *VM) error {
-		return applySmpBinOp(vm, DivOp())
-	})
-
-	RegisterWord("%", func(vm *VM) error {
-		return applySmpBinOp(vm, ModOp())
-	})
 }

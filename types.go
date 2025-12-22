@@ -10,6 +10,7 @@ type Rect = image.Rectangle
 
 type Smp = float64
 
+type SmpUnOp = func(x Smp) Smp
 type SmpBinOp = func(x, y Smp) Smp
 
 type Frame = []Smp
