@@ -619,7 +619,7 @@ func CreateTapeDisplay() (*TapeDisplay, error) {
 	return td, nil
 }
 
-func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, windowOffset int, playheadFrame int) {
+func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, windowOffset int, playheadFrames []int) {
 	pixelWidth, pixelHeight := pixelRect.Dx(), pixelRect.Dy()
 	if pixelWidth == 0 || pixelHeight == 0 {
 		return
@@ -639,7 +639,6 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	channelHeightHalf := channelHeight / 2.0
 	incr := float64(windowSize) / float64(pixelWidth)
 	readIndex := float64(windowOffset)
-	playheadX := int(math.Round(float64(playheadFrame-windowOffset) / incr))
 	channelClipped := make([]bool, tape.nchannels)
 	for x := range pixelWidth {
 		channelTop := float32(0)
@@ -716,14 +715,17 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		gl.DrawArrays(gl.LINES, 0, 2)
 	}
 
-	// Playhead indicator
-	if playheadX >= 0 && playheadX < pixelWidth {
-		px := float32(playheadX) + 0.5
-		playheadVerts := [2]PointVertex{{position: [2]float32{px, 0}}, {position: [2]float32{px, float32(pixelHeight)}}}
-		gl.LineWidth(1.0)
-		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.5)
-		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&playheadVerts[0].position[0]))
-		gl.DrawArrays(gl.LINES, 0, 2)
+	// Playhead indicators
+	for _, playheadFrame := range playheadFrames {
+		playheadX := int(math.Round(float64(playheadFrame-windowOffset) / incr))
+		if playheadX >= 0 && playheadX < pixelWidth {
+			px := float32(playheadX) + 0.5
+			playheadVerts := [2]PointVertex{{position: [2]float32{px, 0}}, {position: [2]float32{px, float32(gl.SAMPLE_LOCATION_PIXEL_GRID_HEIGHT_NV)}}}
+			gl.LineWidth(1.0)
+			gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.5)
+			gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, gl.Ptr(&playheadVerts[0].position[0]))
+			gl.DrawArrays(gl.LINES, 0, 2)
+		}
 	}
 
 	gl.LineWidth(1.0)

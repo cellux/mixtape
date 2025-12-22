@@ -358,7 +358,7 @@ func (e *Editor) SplitLine() {
 	p.column = 0
 }
 
-func (e *Editor) Render(tp TilePane) {
+func (e *Editor) Render(tp TilePane, currentToken *Token) {
 	p := e.point
 	e.height = tp.Height()
 	if p.line < e.top {
@@ -379,6 +379,14 @@ func (e *Editor) Render(tp TilePane) {
 	if e.left < 0 {
 		e.left = 0
 	}
+	var highlightLine int
+	var highlightStart int
+	var highlightEnd int
+	if currentToken != nil {
+		highlightLine = currentToken.pos.Line - 1
+		highlightStart = currentToken.pos.Column - 1
+		highlightEnd = highlightStart + currentToken.length
+	}
 	for y := 0; y < tp.Height(); y++ {
 		lineIndex := e.top + y
 		if lineIndex >= len(e.lines) {
@@ -387,9 +395,14 @@ func (e *Editor) Render(tp TilePane) {
 		line := e.lines[lineIndex]
 		for x := 0; x < tp.Width(); x++ {
 			runeIndex := e.left + x
+			insideCurrent := currentToken != nil && lineIndex == highlightLine && runeIndex >= highlightStart && runeIndex < highlightEnd
 			if runeIndex < len(line) {
 				r := line[runeIndex]
-				if lineIndex == p.line && runeIndex == p.column {
+				if insideCurrent {
+					tp.WithBg(ColorCurrentToken, func() {
+						tp.DrawRune(x, y, r)
+					})
+				} else if lineIndex == p.line && runeIndex == p.column {
 					tp.WithBg(ColorHighlight, func() {
 						tp.DrawRune(x, y, r)
 					})

@@ -28,6 +28,9 @@ func SampleRate() int {
 	return flags.SampleRate
 }
 
+// Event is the type of callback functions sent to the app's events channel
+type Event func()
+
 type App struct {
 	vm           *VM
 	openFiles    map[string]string
@@ -39,19 +42,37 @@ type App struct {
 	editor       *Editor
 	lastScript   []byte
 	evalResult   Val
+	oto          *OtoState
 	tapeDisplay  *TapeDisplay
-	tapePlayer   *OtoPlayer
-	tapeReader   *TapeReader
 	kmm          *KeyMapManager
 	editorKeyMap KeyMap
+	currentToken *Token
+	evaluating   bool
+	events       chan Event
+}
+
+func (app *App) postEvent(ev Event, dropIfFull bool) {
+	if dropIfFull {
+		select {
+		case app.events <- ev:
+		default:
+		}
+	} else {
+		app.events <- ev
+	}
 }
 
 func (app *App) Init() error {
 	logger.Debug("Init")
-	err := InitOtoContext(SampleRate())
+	// Event queue used by background evaluation to post updates to the main thread.
+	if app.events == nil {
+		app.events = make(chan Event, 1024)
+	}
+	oto, err := NewOtoState(SampleRate())
 	if err != nil {
 		return err
 	}
+	app.oto = oto
 	font, err := LoadFontFromFile("/usr/share/fonts/droid/DroidSansMono.ttf")
 	if err != nil {
 		return err
@@ -87,34 +108,17 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
-	evalEditorScriptIfChanged := func() {
-		editorScript := app.editor.GetBytes()
-		if slices.Compare(editorScript, app.lastScript) == 0 {
-			return
-		}
-		vm := app.vm
-		vm.Reset()
-		vm.DoPushEnv()
-		tapePath := "<temp-tape>"
-		if app.currentFile != "" {
-			tapePath = app.currentFile
-		}
-		app.lastScript = app.editor.GetBytes()
-		err := vm.ParseAndEval(bytes.NewReader(app.lastScript), tapePath)
-		if err != nil {
-			logger.Error("parse error", "err", err)
-			app.evalResult = makeErr(err)
-		} else {
-			result := vm.Pop()
-			if streamable, ok := result.(Streamable); ok {
-				stream := streamable.Stream()
-				if stream.nframes > 0 {
-					result = stream.Take(stream.nframes)
-				}
-			}
-			app.evalResult = result
-		}
+
+	app.vm.tokenCallback = func(token *Token) {
+		// Copy token so the pointer stays valid when handled on the main thread.
+		tokCopy := *token
+		// Token updates can be very frequent; drop if the queue is full to avoid
+		// stalling the evaluator.
+		app.postEvent(func() {
+			app.currentToken = &tokCopy
+		}, true)
 	}
+
 	globalKeyMap := CreateKeyMap(nil)
 	globalKeyMap.Bind("C-g", app.Reset)
 	globalKeyMap.Bind("Escape", app.Reset)
@@ -123,19 +127,9 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-S--", UndoLastAction)
 	globalKeyMap.Bind("C-q", app.Quit)
 	globalKeyMap.Bind("C-p", func() {
-		evalEditorScriptIfChanged()
-		if streamable, ok := app.evalResult.(Streamable); ok {
-			stream := streamable.Stream()
-			if stream.nframes > 0 {
-				tape := stream.Take(stream.nframes)
-				reader := MakeTapeReader(tape, 2)
-				player := otoContext.NewPlayer(reader)
-				app.tapeReader = reader
-				app.tapePlayer = player
-				player.Play()
-			}
-		}
+		app.evalEditorScriptIfChanged(true)
 	})
+
 	editorKeyMap := CreateKeyMap(globalKeyMap)
 	editorKeyMap.Bind("Enter", func() {
 		DispatchAction(func() UndoFunc {
@@ -197,7 +191,7 @@ func (app *App) Init() error {
 	editorKeyMap.Bind("End", app.editor.MoveToEOL)
 	editorKeyMap.Bind("Tab", app.editor.InsertSpacesUntilNextTabStop)
 	editorKeyMap.Bind("C-Enter", func() {
-		evalEditorScriptIfChanged()
+		app.evalEditorScriptIfChanged(false)
 	})
 	editorKeyMap.Bind("C-Left", app.editor.WordLeft)
 	editorKeyMap.Bind("C-Right", app.editor.WordRight)
@@ -387,37 +381,101 @@ func (app *App) Render() error {
 	switch result := app.evalResult.(type) {
 	case error:
 		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane)
+		app.editor.Render(editorPane, app.currentToken)
 		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
 			statusPane.DrawString(0, 0, result.Error())
 		})
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
-		app.editor.Render(editorPane)
-		playheadFrame := 0
-		if app.tapeReader != nil {
-			numBytesStillInOtoBuffer := app.tapePlayer.BufferedSize()
-			playheadFrame = app.tapeReader.GetCurrentFrame(numBytesStillInOtoBuffer)
+		app.editor.Render(editorPane, app.currentToken)
+		var playheadFrames []int
+		for _, tp := range app.oto.GetTapePlayers() {
+			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
 		}
-		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrame)
+		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
 	default:
 		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane)
+		app.editor.Render(editorPane, app.currentToken)
 		statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
 	}
 	ts.Render()
 	return nil
 }
 
+func (app *App) drainEvents() {
+	for {
+		select {
+		case ev := <-app.events:
+			ev()
+		default:
+			return // nothing queued right now
+		}
+	}
+}
+
 func (app *App) Update() error {
+	app.drainEvents()
 	return nil
 }
 
+func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
+	editorScript := app.editor.GetBytes()
+	if app.evaluating {
+		app.Reset()
+	}
+	if slices.Compare(editorScript, app.lastScript) == 0 {
+		if wantPlay {
+			app.postEvent(app.playEvalResult, false)
+		}
+		return
+	}
+	app.evaluating = true
+	app.lastScript = editorScript
+	app.currentToken = nil
+	tapePath := "<temp-tape>"
+	if app.currentFile != "" {
+		tapePath = app.currentFile
+	}
+	go func(script []byte, tapePath string, wantPlay bool) {
+		vm := app.vm
+		vm.Reset()
+		vm.DoPushEnv()
+		var result Val
+		err := vm.ParseAndEval(bytes.NewReader(script), tapePath)
+		if err != nil {
+			logger.Error("parse error", "err", err)
+			result = makeErr(err)
+		} else {
+			result = vm.Pop()
+			if streamable, ok := result.(Streamable); ok {
+				stream := streamable.Stream()
+				if stream.nframes > 0 {
+					result = stream.Take(stream.nframes)
+				}
+			}
+		}
+		app.postEvent(func() {
+			app.evalResult = result
+			app.currentToken = nil
+			app.evaluating = false
+			if wantPlay {
+				app.playEvalResult()
+			}
+		}, false)
+	}(editorScript, tapePath, wantPlay)
+}
+
+func (app *App) playEvalResult() {
+	app.oto.PlayTape(app.evalResult)
+}
+
 func (app *App) Reset() {
-	app.tapePlayer = nil
-	app.tapeReader = nil
+	app.drainEvents()
+	app.oto.StopAllPlayers()
 	app.editor.Reset()
 	app.kmm.Reset()
+	app.currentToken = nil
+	app.evaluating = false
 }
 
 func (app *App) Close() error {

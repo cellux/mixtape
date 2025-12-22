@@ -86,6 +86,8 @@ type VM struct {
 	quoteBuffer Vec   // quoted code
 	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
 	currentPos  scanner.Position
+	// tokenCallback is invoked before the VM evaluates a token
+	tokenCallback func(*Token)
 }
 
 func CreateVM() (*VM, error) {
@@ -349,8 +351,9 @@ func (vm *VM) GetStream(k any) (Stream, error) {
 }
 
 type Token struct {
-	v   Val
-	pos scanner.Position
+	v      Val
+	pos    scanner.Position
+	length int
 }
 
 func (t Token) getVal() Val {
@@ -359,6 +362,9 @@ func (t Token) getVal() Val {
 
 func (t Token) Eval(vm *VM) error {
 	vm.currentPos = t.pos
+	if vm.tokenCallback != nil {
+		vm.tokenCallback(&t)
+	}
 	return vm.Eval(t.getVal())
 }
 
@@ -398,10 +404,11 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 	}
 	s.Filename = filename
 	var code = make(Vec, 0, 16384)
-	appendTokens := func(vs ...Val) {
+	appendTokens := func(text string, vs ...Val) {
 		pos := s.Position
+		length := len(text)
 		for _, v := range vs {
-			code = append(code, Token{v, pos})
+			code = append(code, Token{v: v, pos: pos, length: length})
 		}
 	}
 	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
@@ -409,7 +416,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 		switch tok {
 		case scanner.Char, scanner.String, scanner.RawString:
 			text := s.TokenText()
-			appendTokens(Str(text[1 : len(text)-1]))
+			appendTokens(text, Str(text[1:len(text)-1]))
 		case '#':
 			for {
 				ch := s.Next()
@@ -418,39 +425,39 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				}
 			}
 		case '(', ')', '{', '}', '[', ']':
-			appendTokens(Sym(string(tok)))
+			appendTokens(string(tok), Sym(string(tok)))
 		case scanner.Ident:
 			text := s.TokenText()
 			f, err := scanFloat(text)
 			if err == nil {
 				switch text[len(text)-1] {
 				case 'b':
-					appendTokens(Num(f), Sym("beats"))
+					appendTokens(text, Num(f), Sym("beats"))
 				case 'p':
-					appendTokens(Num(f), Sym("periods"))
+					appendTokens(text, Num(f), Sym("periods"))
 				case 's':
-					appendTokens(Num(f), Sym("seconds"))
+					appendTokens(text, Num(f), Sym("seconds"))
 				case 't':
-					appendTokens(Num(f), Sym("ticks"))
+					appendTokens(text, Num(f), Sym("ticks"))
 				default:
-					appendTokens(Num(f))
+					appendTokens(text, Num(f))
 				}
 			} else {
 				if len(text) > 1 {
 					switch text[0] {
 					case '@':
-						appendTokens(Str(text[1:]), Sym("get"))
+						appendTokens(text, Str(text[1:]), Sym("get"))
 					case '>':
 						if text == ">=" {
-							appendTokens(Sym(text))
+							appendTokens(text, Sym(text))
 						} else {
-							appendTokens(Str(text[1:]), Sym("swap"), Sym("set"))
+							appendTokens(text, Str(text[1:]), Sym("swap"), Sym("set"))
 						}
 					default:
-						appendTokens(Sym(text))
+						appendTokens(text, Sym(text))
 					}
 				} else {
-					appendTokens(Sym(text))
+					appendTokens(text, Sym(text))
 				}
 			}
 		default:
