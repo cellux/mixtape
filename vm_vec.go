@@ -65,6 +65,17 @@ func (v Vec) Partition(size, step int) Vec {
 	return out
 }
 
+// Treat a flat numeric vector as one wave.
+func (v Vec) Wave() Wave {
+	wave := make(Wave, len(v))
+	for i, item := range v {
+		if n, ok := item.(Num); ok {
+			wave[i] = Smp(n)
+		}
+	}
+	return wave
+}
+
 func init() {
 	RegisterMethod[Vec]("len", 1, func(vm *VM) error {
 		v, err := Pop[Vec](vm)

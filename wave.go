@@ -23,6 +23,13 @@ func (wave Wave) String() string {
 	return fmt.Sprintf("Wave(size=%d)", len(wave))
 }
 
+// WaveProvider is able to render itself as a Wave
+type WaveProvider interface {
+	Wave() Wave
+}
+
+func (wave Wave) Wave() Wave { return wave }
+
 func (wave Wave) Stream() Stream {
 	return makeFiniteStream(1, len(wave), func(yield func(Frame) bool) {
 		out := make(Frame, 1)

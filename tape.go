@@ -41,6 +41,13 @@ func (t *Tape) Stream() Stream {
 	})
 }
 
+func (t *Tape) Wave() Wave {
+	wave := make(Wave, t.nframes)
+	tapeMix := t.Stream().Mono().Take(t.nframes)
+	copy(wave, tapeMix.samples)
+	return wave
+}
+
 func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
 	frameIndexLo := math.Floor(frame)
 	sampleIndexLo := channel + int(frameIndexLo)*t.nchannels

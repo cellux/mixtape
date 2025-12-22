@@ -56,6 +56,17 @@ func (wt *Wavetable) String() string {
 	return fmt.Sprintf("Wavetable(waves=%d size=%d levels=%d)", waves, size, levels)
 }
 
+func (wt *Wavetable) Wave() Wave {
+	if len(wt.mips) == 0 {
+		return nil
+	}
+	baseWaveset := wt.mips[0]
+	if len(baseWaveset) == 0 {
+		return nil
+	}
+	return baseWaveset[0]
+}
+
 // ensureLevel builds mip level l if not present, ensuring l-1 exists first.
 func (wt *Wavetable) ensureLevel(l int) {
 	if l <= 0 {
@@ -167,33 +178,6 @@ func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
 	return Smp((1-fade)*float64(s0) + fade*float64(s1))
 }
 
-func wavetableFromVec(v Vec) (*Wavetable, error) {
-	// Treat a flat numeric vector as one wave.
-	wave := make(Wave, len(v))
-	for i, item := range v {
-		n, ok := item.(Num)
-		if !ok {
-			return nil, fmt.Errorf("wavetable: expected numeric vector, got %T at index %d", item, i)
-		}
-		wave[i] = Smp(n)
-	}
-	return newWavetableFromWave(wave)
-}
-
-func waveFromTape(t *Tape) Wave {
-	wave := make(Wave, t.nframes)
-	srcIndex := 0
-	for dstIndex := range t.nframes {
-		sum := Smp(0)
-		for range t.nchannels {
-			sum += t.samples[srcIndex]
-			srcIndex++
-		}
-		wave[dstIndex] = sum / Smp(t.nchannels)
-	}
-	return wave
-}
-
 func wtSin() (*Wavetable, error) {
 	return newWavetableFromWave(sinWave(0))
 }
@@ -222,51 +206,37 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 	switch x := v.(type) {
 	case *Wavetable:
 		return x, nil
-	case Wave:
-		return newWavetableFromWave(x)
-	case *Tape:
-		return newWavetableFromWave(waveFromTape(x))
+	case Vec:
+		if len(x) == 0 {
+			return nil, fmt.Errorf("wavetable: empty vector")
+		}
+		// If elements can provide waves, build wavetable from waveset, otherwise single wave.
+		switch x[0].(type) {
+		case WaveProvider:
+			waves := make(Waveset, 0, len(x))
+			for i, item := range x {
+				if wp, ok := x[i].(WaveProvider); ok {
+					waves = append(waves, wp.Wave())
+				} else {
+					return nil, fmt.Errorf("wavetable: unsupported wave type %T at index %d", item, i)
+				}
+			}
+			return newWavetableFromWaveset(waves)
+		case Num:
+			return newWavetableFromWave(x.Wave())
+		default:
+			return nil, fmt.Errorf("wavetable: cannot create wave from Vec of %T", x[0])
+		}
+	case WaveProvider:
+		return newWavetableFromWave(x.Wave())
 	case Streamable:
 		s := x.Stream()
 		if s.nframes == 0 {
 			return nil, fmt.Errorf("wavetable: input is non-finite stream")
 		}
 		return wavetableFromVal(s.Take(s.nframes))
-	case Vec:
-		if len(x) == 0 {
-			return nil, fmt.Errorf("wavetable: empty vector")
-		}
-		// If elements are vectors or tapes, treat as multi-wave. Otherwise single wave.
-		switch x[0].(type) {
-		case Vec, *Tape, *Wavetable:
-			waves := make(Waveset, 0, len(x))
-			for i, item := range x {
-				switch f := item.(type) {
-				case Vec:
-					wt, err := wavetableFromVec(f)
-					if err != nil {
-						return nil, err
-					}
-					firstBaseWave := wt.mips[0][0]
-					waves = append(waves, firstBaseWave)
-				case *Tape:
-					waves = append(waves, waveFromTape(f))
-				case *Wavetable:
-					if len(f.mips) == 0 || len(f.mips[0]) != 1 {
-						return nil, fmt.Errorf("wavetable: nested wavetable at index %d must have exactly 1 wave at level 0", i)
-					}
-					firstBaseWave := f.mips[0][0]
-					waves = append(waves, firstBaseWave)
-				default:
-					return nil, fmt.Errorf("wavetable: unsupported wave type %T at index %d", item, i)
-				}
-			}
-			return newWavetableFromWaveset(waves)
-		default:
-			return wavetableFromVec(x)
-		}
 	default:
-		return nil, fmt.Errorf("wavetable: cannot coerce %T", v)
+		return nil, fmt.Errorf("wavetable: cannot create wavetable from %T", v)
 	}
 }
 
