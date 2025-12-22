@@ -6,19 +6,6 @@ import (
 	"math"
 )
 
-// equalPowerPan returns gains for left/right given pan in [-1,1].
-func equalPowerPan(p float64) (float64, float64) {
-	if p < -1 {
-		p = -1
-	}
-	if p > 1 {
-		p = 1
-	}
-	// map p=-1..1 -> theta in [0..pi/2]
-	theta := (p + 1) * math.Pi / 4
-	return math.Cos(theta), math.Sin(theta)
-}
-
 // computeDetuneRatios builds symmetric detune ratios around 1.0 using a spread in cents.
 func computeDetuneRatios(voices int, cents float64) []float64 {
 	if voices <= 1 {
