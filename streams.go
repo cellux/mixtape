@@ -87,35 +87,6 @@ func ModOp() SmpBinOp {
 	return func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) }
 }
 
-func Phasor(freq Stream, phase float64, wt *Wavetable) Stream {
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		fnext, fstop := iter.Pull(freq.Mono().seq)
-		defer fstop()
-		if phase < 0.0 || phase >= 1.0 {
-			phase = 0.0
-		}
-		p := Smp(phase)
-		sr := Smp(SampleRate())
-		for {
-			out[0] = wt.SampleMip(p, 0, 1, float64(sr))
-			if !yield(out) {
-				return
-			}
-			f, ok := fnext()
-			if !ok {
-				return
-			}
-			periodSamples := sr / f[0]
-			if periodSamples == 0 {
-				return
-			}
-			incr := 1.0 / periodSamples
-			p = math.Mod(p+incr, 1.0)
-		}
-	})
-}
-
 func (s Stream) Stream() Stream {
 	return s
 }
@@ -249,78 +220,6 @@ func init() {
 			return err
 		}
 		vm.Push(stream)
-		return nil
-	})
-
-	RegisterWord("~sin", func(vm *VM) error {
-		freq, err := vm.GetStream(":freq")
-		if err != nil {
-			return err
-		}
-		phase, err := vm.GetFloat(":phase")
-		if err != nil {
-			return err
-		}
-		wt, err := wtSin()
-		if err != nil {
-			return err
-		}
-		vm.Push(Phasor(freq, phase, wt))
-		return nil
-	})
-
-	RegisterWord("~saw", func(vm *VM) error {
-		freq, err := vm.GetStream(":freq")
-		if err != nil {
-			return err
-		}
-		phase, err := vm.GetFloat(":phase")
-		if err != nil {
-			return err
-		}
-		wt, err := wtSaw()
-		if err != nil {
-			return err
-		}
-		vm.Push(Phasor(freq, phase, wt))
-		return nil
-	})
-
-	RegisterWord("~triangle", func(vm *VM) error {
-		freq, err := vm.GetStream(":freq")
-		if err != nil {
-			return err
-		}
-		phase, err := vm.GetFloat(":phase")
-		if err != nil {
-			return err
-		}
-		wt, err := wtTriangle()
-		if err != nil {
-			return err
-		}
-		vm.Push(Phasor(freq, phase, wt))
-		return nil
-	})
-
-	RegisterWord("~pulse", func(vm *VM) error {
-		freq, err := vm.GetStream(":freq")
-		if err != nil {
-			return err
-		}
-		phase, err := vm.GetFloat(":phase")
-		if err != nil {
-			return err
-		}
-		pw, err := vm.GetFloat(":pw")
-		if err != nil {
-			return err
-		}
-		wt, err := wtPulse(pw)
-		if err != nil {
-			return err
-		}
-		vm.Push(Phasor(freq, phase, wt))
 		return nil
 	})
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"iter"
 	"math"
 
 	"github.com/mjibson/go-dsp/fft"
@@ -25,6 +26,7 @@ func (wave Wave) String() string {
 
 // WaveProvider is able to render itself as a Wave
 type WaveProvider interface {
+	Val
 	Wave() Wave
 }
 
@@ -92,6 +94,35 @@ func (wave Wave) sampleAt(phase Smp) Smp {
 	a2 := -0.5*wave[im1] + 0.5*wave[i1]
 	a3 := wave[i0]
 	return ((a0*t+a1)*t+a2)*t + a3
+}
+
+func (wave Wave) Phasor(freq Stream, phase float64) Stream {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		fnext, fstop := iter.Pull(freq.Mono().seq)
+		defer fstop()
+		if phase < 0.0 || phase >= 1.0 {
+			phase = 0.0
+		}
+		p := Smp(phase)
+		sr := Smp(SampleRate())
+		for {
+			out[0] = wave.sampleAt(p)
+			if !yield(out) {
+				return
+			}
+			f, ok := fnext()
+			if !ok {
+				return
+			}
+			periodSamples := sr / f[0]
+			if periodSamples == 0 {
+				return
+			}
+			incr := 1.0 / periodSamples
+			p = math.Mod(p+incr, 1.0)
+		}
+	})
 }
 
 // buildFFTLowpass takes a wave and returns a half-size, lowpassed version using FFT bin masking.
@@ -275,6 +306,24 @@ func init() {
 			return err
 		}
 		vm.Push(sawWave(int(size)))
+		return nil
+	})
+
+	RegisterWord("phasor", func(vm *VM) error {
+		wp, err := Pop[WaveProvider](vm)
+		if err != nil {
+			return err
+		}
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
+		wave := wp.Wave()
+		vm.Push(wave.Phasor(freq, phase))
 		return nil
 	})
 }

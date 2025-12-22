@@ -73,3 +73,11 @@
 { 0 wave/square } >square
 { 0 wave/pulse } >pulse
 { 0 wave/saw } >saw
+
+# wave phasors
+{ sin phasor } >~sin
+{ tanh phasor } >~tanh
+{ triangle phasor } >~triangle
+{ square phasor } >~square
+{ pulse phasor } >~pulse
+{ saw phasor } >~saw
