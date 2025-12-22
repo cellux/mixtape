@@ -629,9 +629,12 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		td.pixelRect = pixelRect
 		td.vertices = make([][]PointVertex, tape.nchannels)
 		for ch := range tape.nchannels {
-			td.vertices[ch] = make([]PointVertex, pixelWidth)
+			td.vertices[ch] = make([]PointVertex, pixelWidth*2)
 			for x := range pixelWidth {
-				td.vertices[ch][x].position[0] = float32(x) + 0.5
+				px := float32(x) + 0.5
+				idx := x * 2
+				td.vertices[ch][idx].position[0] = px
+				td.vertices[ch][idx+1].position[0] = px
 			}
 		}
 	}
@@ -641,13 +644,39 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 	readIndex := float64(windowOffset)
 	channelClipped := make([]bool, tape.nchannels)
 	for x := range pixelWidth {
+		i0 := int(math.Floor(readIndex))
+		i1 := int(math.Ceil(readIndex + incr))
+		if i1 <= i0 {
+			i1 = i0 + 1
+		}
+		if i0 < 0 {
+			i0 = 0
+		}
+		if i1 > tape.nframes {
+			i1 = tape.nframes
+		}
 		channelTop := float32(0)
 		for ch := range tape.nchannels {
-			smp := tape.GetInterpolatedSampleAt(ch, readIndex)
-			if math.Abs(float64(smp)) > 1.0 {
+			minVal := math.Inf(1)
+			maxVal := math.Inf(-1)
+			base := ch
+			for i := i0; i < i1; i++ {
+				smp := tape.samples[base+i*tape.nchannels]
+				if smp < minVal {
+					minVal = smp
+				}
+				if smp > maxVal {
+					maxVal = smp
+				}
+			}
+			if math.Abs(minVal) > 1.0 || math.Abs(maxVal) > 1.0 {
 				channelClipped[ch] = true
 			}
-			td.vertices[ch][x].position[1] = channelTop + channelHeightHalf - float32(smp)*channelHeightHalf
+			yMin := channelTop + channelHeightHalf - float32(minVal)*channelHeightHalf
+			yMax := channelTop + channelHeightHalf - float32(maxVal)*channelHeightHalf
+			idx := x * 2
+			td.vertices[ch][idx].position[1] = yMin
+			td.vertices[ch][idx+1].position[1] = yMax
 			channelTop += channelHeight
 		}
 		readIndex += incr
@@ -678,13 +707,13 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 		gl.LineWidth(3.0)
 		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.16)
 		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
-		gl.DrawArrays(gl.LINE_STRIP, 0, count)
+		gl.DrawArrays(gl.LINES, 0, count)
 
 		// crisp stroke
 		gl.LineWidth(1.0)
 		gl.Uniform4f(td.u_color, 1.0, 1.0, 1.0, 0.9)
 		gl.VertexAttribPointer(uint32(td.a_position), 2, gl.FLOAT, false, stride, ptr)
-		gl.DrawArrays(gl.LINE_STRIP, 0, count)
+		gl.DrawArrays(gl.LINES, 0, count)
 	}
 
 	// Zero lines and bounds per channel
