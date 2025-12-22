@@ -170,6 +170,50 @@ func equalPowerPan(p float64) (float64, float64) {
 	return math.Cos(theta), math.Sin(theta)
 }
 
+// SampleHold implements sample & hold: latches input on each rate wrap.
+func SampleHold(input Stream, rate Stream) Stream {
+	nchannels := input.nchannels
+	sr := Smp(SampleRate())
+
+	return makeTransformStream([]Stream{input, rate}, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		held := make(Frame, nchannels)
+		hasHeld := false
+		p := Smp(0)
+
+		rnext, rstop := iter.Pull(rate.Mono().seq)
+		defer rstop()
+
+		for frame := range input.seq {
+			rframe, ok := rnext()
+			if !ok {
+				return
+			}
+
+			inc := rframe[0] / sr
+			if inc < 0 {
+				inc = 0
+			}
+
+			if !hasHeld {
+				copy(held, frame)
+				hasHeld = true
+			}
+
+			p += inc
+			if p >= 1 {
+				p = Smp(math.Mod(float64(p), 1.0))
+				copy(held, frame)
+			}
+
+			copy(out, held)
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 // Pan applies equal-power panning to a mono stream, returning stereo.
 // Pan value can be a Num or Streamable providing values in [-1..1].
 func Pan(s Stream, pan Stream) Stream {
@@ -229,6 +273,20 @@ func init() {
 		}
 		alpha := float64(alphaNum)
 		vm.Push(DCBlock(stream, alpha))
+		return nil
+	})
+
+	RegisterWord("sh", func(vm *VM) error {
+		// input rate -- output
+		rate, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(SampleHold(input, rate))
 		return nil
 	})
 
