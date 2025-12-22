@@ -304,6 +304,11 @@ drop
 { ( 413 f :freq ) 413 = } assert
 
 { 1s 1 seconds = } assert
+
+# midi to hz
+{ 69 mtof 440 = } assert
+{ 57 mtof 220 = } assert
+{ 60 mtof 261.6255653005986 = } assert
 { 1b 1 beats = } assert
 { 1p 1 periods = } assert
 

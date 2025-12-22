@@ -65,6 +65,9 @@ false >:saturate
 { beats :tpb / } >ticks
 { SRC_LINEAR swap resample } >stretch
 
+# MIDI note to frequency
+{ 69 - 12 / exp2 440 * } >mtof
+
 { 2 1 partition
   dup { 0 at } map >:start
   dup { 1 at } map >:end
