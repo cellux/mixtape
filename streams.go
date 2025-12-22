@@ -172,22 +172,6 @@ func (s Stream) Take(nframes int) *Tape {
 	return t
 }
 
-func (s Stream) Delay(nframes int) Stream {
-	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
-		out := make(Frame, s.nchannels)
-		for range nframes {
-			if !yield(out) {
-				return
-			}
-		}
-		for frame := range s.seq {
-			if !yield(frame) {
-				return
-			}
-		}
-	})
-}
-
 func (s Stream) Mono() Stream {
 	if s.nchannels == 1 {
 		return s
@@ -382,19 +366,6 @@ func init() {
 			return err
 		}
 		vm.Push(lhsStream.Join(rhsStream))
-		return nil
-	})
-
-	RegisterWord("delay", func(vm *VM) error {
-		nfNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
-		stream, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(stream.Delay(int(nfNum)))
 		return nil
 	})
 
