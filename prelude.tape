@@ -37,8 +37,14 @@
 )} >seq
 
 440 >:freq
-0 >:phase
+0.0 >:phase
 0.5 >:pw
+
+1200  >:cutoff
+0.7   >:q
+1.0   >:drive
+0.0   >:blend
+false >:saturate
 
 0 >:start
 1 >:end
