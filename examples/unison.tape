@@ -5,6 +5,7 @@
   6          >:voices               # unison voices
   14         >:detune               # cents spread
   0.9        >:spread               # stereo width
+  0.8        >:phaseRand            # randomization of initial phase for individual voices
   unison                            # build stacked osc -> stereo stream
 
   # gentle lowpass to soften highs (optional)

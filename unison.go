@@ -72,6 +72,16 @@ func computePans(voices int, spread float64) []float64 {
 	return pans
 }
 
+// deterministicRand returns a deterministic pseudo-random value in [0,1) from an int seed.
+func deterministicRand(seed int) float64 {
+	// xorshift32
+	x := uint32(seed + 1)
+	x ^= x << 13
+	x ^= x >> 17
+	x ^= x << 5
+	return float64(x) / float64(^uint32(0))
+}
+
 func init() {
 	RegisterWord("unison", func(vm *VM) error {
 		body := vm.Pop()
@@ -107,6 +117,21 @@ func init() {
 				detuneCents = float64(n)
 			} else {
 				return fmt.Errorf("unison: :detune must be number (cents)")
+			}
+		}
+
+		phaseRand := 0.0
+		if v := vm.GetVal(":phaseRand"); v != nil {
+			if n, ok := v.(Num); ok {
+				phaseRand = float64(n)
+				if phaseRand < 0 {
+					phaseRand = 0
+				}
+				if phaseRand > 1 {
+					phaseRand = 1
+				}
+			} else {
+				return fmt.Errorf("unison: :phaseRand must be number (0..1)")
 			}
 		}
 
@@ -150,7 +175,22 @@ func init() {
 			if err != nil {
 				return fmt.Errorf("unison: voice %d did not yield a stream: %w", i, err)
 			}
-			voiceStreams = append(voiceStreams, vs.WithNChannels(1))
+			voiceStream := vs.WithNChannels(1)
+			// Apply deterministic random initial phase via delay when base freq is numeric.
+			if phaseRand > 0 {
+				if baseFreqNum, ok := baseFreqVal.(Num); ok {
+					freq := float64(baseFreqNum) * ratios[i]
+					if freq > 0 {
+						periodSamples := float64(SampleRate()) / freq
+						phaseOffset := deterministicRand(i) * phaseRand // fraction of cycle
+						delayFrames := int(phaseOffset * periodSamples)
+						if delayFrames > 0 {
+							voiceStream = voiceStream.Delay(delayFrames)
+						}
+					}
+				}
+			}
+			voiceStreams = append(voiceStreams, voiceStream)
 		}
 
 		// Mix voices into stereo
