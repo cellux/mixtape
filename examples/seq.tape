@@ -5,5 +5,5 @@
   { :waveform :freq }
   { :waveform eval .1 * 1/3b take }
   seq
-] {join} reduce
+] cat
 )

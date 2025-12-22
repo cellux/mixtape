@@ -39,4 +39,4 @@
   vital/svf
   8b take 0.26 *
 )
-] {join} reduce
+] cat

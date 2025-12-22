@@ -49,4 +49,4 @@
   2b take 0.25 *
 )
 
-] {join} reduce
+] cat

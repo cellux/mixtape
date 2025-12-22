@@ -83,12 +83,14 @@ false >:saturate
 
 {( over {+} reduce / >:unit { :unit * } map )} >distribute
 
+{ {join} reduce } >cat
+
 { >:envseg >:nf start:end
   [
     { :start :end :nf :envseg }
     { :envseg eval }
     seq
-  ] { join } reduce
+  ] cat
 } >env
 
 ; default waves

@@ -6,4 +6,4 @@ env >:env
 [ :env ( 220 >:freq ~sin ) *
   :env ( 440 >:freq ~triangle ) *
   :env ( 110 >:freq ~sin ) *
-] {join} reduce
+] cat

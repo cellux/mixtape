@@ -181,7 +181,7 @@
     174.614  pad/chord/maj   ; F
     130.813  pad/chord/maj   ; C
     195.998  pad/chord/maj   ; G
-  ] {join} reduce 16b take >:pad
+  ] cat 16b take >:pad
 
   ; Bass: root each beat (16 notes)
   [
@@ -189,7 +189,7 @@
     87.307 87.307 87.307 87.307
     65.406 65.406 65.406 65.406
     97.999 97.999 97.999 97.999
-  ] { bass/note } map {join} reduce 16b take >:bass
+  ] { bass/note } map cat 16b take >:bass
 
   ; Lead: 4 notes per chord (16 notes)
   [
@@ -197,7 +197,7 @@
     523.251 440    349.228 440
     391.995 329.628 261.626 329.628
     391.995 493.883 587.330 493.883
-  ] { lead/note } map {join} reduce 16b take >:lead
+  ] { lead/note } map cat 16b take >:lead
 
   ; --- Mixdown ---
   16b tape2 >:mix
