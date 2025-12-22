@@ -46,6 +46,8 @@
 0.0   >:blend
 false >:saturate
 
+0 >:seed # used by RNGs
+
 0 >:start
 1 >:end
 
