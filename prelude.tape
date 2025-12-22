@@ -36,17 +36,24 @@
    } loop
 )} >seq
 
+# oscillator defaults
 440 >:freq
 0.0 >:phase
 0.5 >:pw
 
+# filter defaults
 1200  >:cutoff
 0.7   >:q
 1.0   >:drive
 0.0   >:blend
 false >:saturate
 
-0 >:seed # used by RNGs
+# FM defaults
+0.0 >:mod
+1.0 >:index
+
+# RNG defaults
+0 >:seed
 
 0 >:start
 1 >:end

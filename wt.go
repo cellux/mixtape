@@ -272,6 +272,51 @@ func WavetableOsc(freq Stream, phase float64, wt *Wavetable, morph Stream) Strea
 	})
 }
 
+// FMOsc implements phase modulation (FM) using a wavetable.
+// The mod stream is in cycles, not Hz. Index is a multiplier on the mod signal.
+func FMOsc(wt *Wavetable, freq Stream, mod Stream, index Stream, phase float64) Stream {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		fnext, fstop := iter.Pull(freq.Mono().seq)
+		defer fstop()
+		mnext, mstop := iter.Pull(mod.Mono().seq)
+		defer mstop()
+		inext, istop := iter.Pull(index.Mono().seq)
+		defer istop()
+
+		if phase < 0.0 || phase >= 1.0 {
+			phase = 0.0
+		}
+		ph := Smp(phase)
+		sr := Smp(SampleRate())
+
+		for {
+			mframe, mok := mnext()
+			if !mok {
+				return
+			}
+			iframe, iok := inext()
+			if !iok {
+				return
+			}
+			fframe, fok := fnext()
+			if !fok {
+				return
+			}
+
+			pmPhase := ph + iframe[0]*mframe[0]
+			out[0] = wt.SampleMip(pmPhase, 0, fframe[0], float64(sr))
+
+			if !yield(out) {
+				return
+			}
+
+			inc := fframe[0] / sr
+			ph = math.Mod(ph+inc, 1.0)
+		}
+	})
+}
+
 func init() {
 	RegisterWord("wt", func(vm *VM) error {
 		v := vm.Pop()
@@ -368,6 +413,45 @@ func init() {
 			morphStream = Num(0).Stream()
 		}
 		vm.Push(WavetableOsc(freq, phase, wt, morphStream))
+		return nil
+	})
+
+	RegisterWord("~fm", func(vm *VM) error {
+		wtVal := vm.Pop()
+		wt, err := wavetableFromVal(wtVal)
+		if err != nil {
+			return err
+		}
+
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
+
+		mod, err := vm.GetStream(":mod")
+		if err != nil {
+			return err
+		}
+
+		index := Num(1).Stream()
+		if v := vm.GetVal(":index"); v != nil {
+			idxStream, err := streamFromVal(v)
+			if err != nil {
+				return err
+			}
+			index = idxStream
+		}
+
+		phase := 0.0
+		if pval := vm.GetVal(":phase"); pval != nil {
+			if pnum, ok := pval.(Num); ok {
+				phase = float64(pnum)
+			} else {
+				return fmt.Errorf("fm: :phase must be number")
+			}
+		}
+
+		vm.Push(FMOsc(wt, freq, mod, index, phase))
 		return nil
 	})
 }
