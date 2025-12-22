@@ -31,7 +31,7 @@ type WaveProvider interface {
 func (wave Wave) Wave() Wave { return wave }
 
 func (wave Wave) Stream() Stream {
-	return makeFiniteStream(1, len(wave), func(yield func(Frame) bool) {
+	return makeStream(1, len(wave), func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		for _, smp := range wave {
 			out[0] = smp

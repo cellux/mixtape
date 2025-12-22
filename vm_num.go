@@ -135,7 +135,7 @@ func (n Num) String() string {
 }
 
 func (n Num) Stream() Stream {
-	return makeStream(1, func(yield func(Frame) bool) {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		out[0] = Smp(n)
 		for {

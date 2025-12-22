@@ -23,14 +23,7 @@ type Streamable interface {
 	Stream() Stream
 }
 
-func makeStream(nchannels int, seq iter.Seq[Frame]) Stream {
-	return Stream{
-		nchannels: nchannels,
-		seq:       seq,
-	}
-}
-
-func makeFiniteStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
+func makeStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	return Stream{
 		nchannels: nchannels,
 		nframes:   nframes,
@@ -38,12 +31,30 @@ func makeFiniteStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 	}
 }
 
-func makeTransformStream(s Stream, seq iter.Seq[Frame]) Stream {
-	return Stream{
-		nchannels: s.nchannels,
-		nframes:   s.nframes,
-		seq:       seq,
+// makeTransformStream creates a stream which transforms N input streams into a single output stream.
+// The output stream:
+//   - has the same number of channels as the first input
+//   - has nframes = 0 if all inputs are infinite
+//     has nframes = length of the shortest input otherwise
+func makeTransformStream(inputs []Stream, seq iter.Seq[Frame]) Stream {
+	nchannels := inputs[0].nchannels
+	nframesMin := inputs[0].nframes
+	nframesMax := inputs[0].nframes
+	for _, s := range inputs {
+		if s.nframes > 0 && s.nframes < nframesMin {
+			nframesMin = s.nframes
+		}
+		if s.nframes > nframesMax {
+			nframesMax = s.nframes
+		}
 	}
+	var nframes int
+	if nframesMax == 0 {
+		nframes = 0
+	} else {
+		nframes = nframesMin
+	}
+	return makeStream(nchannels, nframes, seq)
 }
 
 func streamFromVal(v Val) (Stream, error) {
@@ -115,7 +126,7 @@ func ModOp() SmpBinOp {
 }
 
 func Phasor(freq Stream, phase float64, op SmpUnOp) Stream {
-	return makeStream(1, func(yield func(Frame) bool) {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		fnext, fstop := iter.Pull(freq.Mono().seq)
 		defer fstop()
@@ -162,7 +173,7 @@ func (s Stream) Take(nframes int) *Tape {
 }
 
 func (s Stream) Delay(nframes int) Stream {
-	return makeTransformStream(s, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
 		out := make(Frame, s.nchannels)
 		for range nframes {
 			if !yield(out) {
@@ -181,10 +192,14 @@ func (s Stream) Mono() Stream {
 	if s.nchannels == 1 {
 		return s
 	}
-	return makeStream(1, func(yield func(Frame) bool) {
+	return makeStream(1, s.nframes, func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		for frame := range s.seq {
-			out[0] = (frame[0] + frame[1]) / 2.0
+			var sum Smp
+			for ch := range s.nchannels {
+				sum += frame[ch]
+			}
+			out[0] = sum / Smp(len(frame))
 			if !yield(out) {
 				return
 			}
@@ -196,7 +211,7 @@ func (s Stream) Stereo() Stream {
 	if s.nchannels == 2 {
 		return s
 	}
-	return makeStream(2, func(yield func(Frame) bool) {
+	return makeStream(2, s.nframes, func(yield func(Frame) bool) {
 		out := make(Frame, 2)
 		for frame := range s.seq {
 			out[0] = frame[0]
@@ -221,7 +236,7 @@ func (s Stream) WithNChannels(nchannels int) Stream {
 // DCBlock applies a simple one-pole high-pass filter to remove DC offset.
 // alpha controls the cutoff; typical small value like 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
-	return makeTransformStream(s, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
 		out := make(Frame, s.nchannels)
 		prevIn := make([]Smp, s.nchannels)
 		prevOut := make([]Smp, s.nchannels)
@@ -242,13 +257,13 @@ func DCBlock(s Stream, alpha float64) Stream {
 // DCFilter implements Vital's dc_filter: y[n] = (x[n]-x[n-1]) + a*y[n-1]
 // with a = 1 - (1 / sampleRate). It's a very low cutoff (~0.16 Hz @ 48kHz).
 func DCFilter(s Stream) Stream {
-	coeff := 1.0 - 1.0/float64(SampleRate())
-	return DCBlock(s, coeff)
+	alpha := 1.0 - 1.0/float64(SampleRate())
+	return DCBlock(s, alpha)
 }
 
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
-	result := makeStream(nchannels, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s, other}, func(yield func(Frame) bool) {
 		out := make(Frame, nchannels)
 		onext, ostop := iter.Pull(other.WithNChannels(nchannels).seq)
 		defer ostop()
@@ -265,21 +280,14 @@ func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 			}
 		}
 	})
-	if s.nframes > 0 || other.nframes > 0 {
-		if s.nframes == 0 {
-			result.nframes = other.nframes
-		} else if other.nframes == 0 {
-			result.nframes = s.nframes
-		} else {
-			result.nframes = min(s.nframes, other.nframes)
-		}
-	}
-	return result
 }
 
 func (s Stream) Join(other Stream) Stream {
-	nchannels := s.nchannels
-	result := makeStream(nchannels, func(yield func(Frame) bool) {
+	var nframes int
+	if s.nframes > 0 && other.nframes > 0 {
+		nframes = s.nframes + other.nframes
+	}
+	return makeStream(s.nchannels, nframes, func(yield func(Frame) bool) {
 		for frame := range s.seq {
 			if !yield(frame) {
 				return
@@ -291,10 +299,6 @@ func (s Stream) Join(other Stream) Stream {
 			}
 		}
 	})
-	if s.nframes > 0 && other.nframes > 0 {
-		result.nframes = s.nframes + other.nframes
-	}
-	return result
 }
 
 func applySmpBinOp(vm *VM, op SmpBinOp) error {

@@ -30,7 +30,7 @@ func (t *Tape) String() string {
 }
 
 func (t *Tape) Stream() Stream {
-	return makeFiniteStream(t.nchannels, t.nframes, func(yield func(Frame) bool) {
+	return makeStream(t.nchannels, t.nframes, func(yield func(Frame) bool) {
 		index := 0
 		for range t.nframes {
 			if !yield(t.samples[index : index+t.nchannels]) {

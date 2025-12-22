@@ -194,7 +194,7 @@ func init() {
 		}
 
 		// Mix voices into stereo
-		mix := makeStream(2, func(yield func(Frame) bool) {
+		mix := makeStream(2, 0, func(yield func(Frame) bool) {
 			out := make(Frame, 2)
 			nexts := make([]func() (Frame, bool), len(voiceStreams))
 			stops := make([]func(), len(voiceStreams))

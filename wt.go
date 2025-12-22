@@ -242,7 +242,7 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 
 // WavetableOsc produces a mono stream using freq and morph streams, with mip selection.
 func WavetableOsc(freq Stream, phase float64, wt *Wavetable, morph Stream) Stream {
-	return makeStream(1, func(yield func(Frame) bool) {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
 		out := make(Frame, 1)
 		fnext, fstop := iter.Pull(freq.Mono().seq)
 		defer fstop()
