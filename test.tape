@@ -327,6 +327,13 @@ drop
 { -1200 cents 0.5 = } assert
 { 100 cents 1/12 exp2 = } assert
 
+; parsing MIDI notes
+{ c-4 48 = } assert
+{ C-4 48 = } assert
+{ c#4 49 = } assert
+{ c-0 0 = } assert
+{ b-9 119 = } assert
+
 ; utilities
 
 { 3 4 5 drop + 7 = } assert

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
+	"strings"
 	"text/scanner"
 	"unicode"
 )
@@ -404,6 +406,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 	}
 	s.Filename = filename
 	var code = make(Vec, 0, 16384)
+	noteRegex := regexp.MustCompile(`(?i)^[cdefgab][#-][0-9]$`)
 	appendTokens := func(text string, vs ...Val) {
 		pos := s.Position
 		length := len(text)
@@ -442,6 +445,24 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 				default:
 					appendTokens(text, Num(f))
 				}
+			} else if noteRegex.MatchString(text) {
+				note := strings.ToLower(text)
+				base := map[byte]int{
+					'c': 0,
+					'd': 2,
+					'e': 4,
+					'f': 5,
+					'g': 7,
+					'a': 9,
+					'b': 11,
+				}[note[0]]
+				acc := 0
+				if note[1] == '#' {
+					acc = 1
+				}
+				octave := int(note[2] - '0')
+				midi := octave*12 + base + acc
+				appendTokens(text, Num(midi))
 			} else {
 				if len(text) > 1 {
 					switch text[0] {
