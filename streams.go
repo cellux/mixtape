@@ -236,6 +236,24 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("mono", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(stream.Mono())
+		return nil
+	})
+
+	RegisterWord("stereo", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(stream.Stereo())
+		return nil
+	})
+
 	RegisterMethod[Streamable]("join", 2, func(vm *VM) error {
 		rhsStream, err := streamFromVal(vm.Pop())
 		if err != nil {
