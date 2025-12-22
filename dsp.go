@@ -1,0 +1,291 @@
+package main
+
+import (
+	"fmt"
+	"iter"
+	"math"
+)
+
+// impulseStream produces a mono infinite stream of impulses (value 1) at the
+// provided frequency. Output is 0 elsewhere. Phase is in [0,1).
+func impulseStream(freq Stream, phase float64) Stream {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		fnext, fstop := iter.Pull(freq.Mono().seq)
+		defer fstop()
+
+		if phase < 0.0 || phase >= 1.0 {
+			phase = 0.0
+		}
+		p := Smp(phase)
+		sr := Smp(SampleRate())
+
+		for {
+			f, ok := fnext()
+			if !ok {
+				return
+			}
+
+			inc := f[0] / sr
+			if inc <= 0 {
+				out[0] = 0
+			} else {
+				p += inc
+				if p >= 1 {
+					p = Smp(math.Mod(float64(p), 1.0))
+					out[0] = 1
+				} else {
+					out[0] = 0
+				}
+			}
+
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
+// DCBlock applies a simple one-pole high-pass filter to remove DC offset.
+// alpha controls the cutoff; typical small value like 0.995.
+func DCBlock(s Stream, alpha float64) Stream {
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+		out := make(Frame, s.nchannels)
+		prevIn := make([]Smp, s.nchannels)
+		prevOut := make([]Smp, s.nchannels)
+		for frame := range s.seq {
+			for c := range s.nchannels {
+				y := frame[c] - prevIn[c] + Smp(alpha)*prevOut[c]
+				prevIn[c] = frame[c]
+				prevOut[c] = y
+				out[c] = y
+			}
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
+// DCFilter implements Vital's dc_filter: y[n] = (x[n]-x[n-1]) + a*y[n-1]
+// with a = 1 - (1 / sampleRate). It's a very low cutoff (~0.16 Hz @ 48kHz).
+func DCFilter(s Stream) Stream {
+	alpha := 1.0 - 1.0/float64(SampleRate())
+	return DCBlock(s, alpha)
+}
+
+// CombFilter applies a simple feedback comb filter to the input stream.
+// delayFrames is a (potentially varying) stream specifying the delay in samples.
+// feedback controls the amount of fed-back signal (-1..1 is stable).
+// The output has the same channel count as the input.
+func CombFilter(input Stream, delayFrames Stream, feedback float64) Stream {
+	// Clamp feedback to a stable range.
+	if feedback > 0.999 {
+		feedback = 0.999
+	} else if feedback < -0.999 {
+		feedback = -0.999
+	}
+
+	nchannels := input.nchannels
+	// Big enough for a couple seconds of delay.
+	bufSize := max(SampleRate()*4, 1)
+
+	return makeTransformStream([]Stream{input, delayFrames}, func(yield func(Frame) bool) {
+		bufs := make([][]Smp, nchannels)
+		for c := range bufs {
+			bufs[c] = make([]Smp, bufSize)
+		}
+		writeIdx := 0
+
+		dnext, dstop := iter.Pull(delayFrames.Mono().seq)
+		defer dstop()
+
+		out := make(Frame, nchannels)
+		for frame := range input.seq {
+			dframe, ok := dnext()
+			if !ok {
+				return
+			}
+			// Delay in samples (can be fractional).
+			d := float64(dframe[0])
+			if d < 1 {
+				d = 1
+			}
+			if d > float64(bufSize-2) {
+				d = float64(bufSize - 2)
+			}
+
+			di := int(math.Floor(d))
+			frac := d - float64(di)
+			for c := range nchannels {
+				buf := bufs[c]
+				// Read with simple linear interpolation.
+				r0 := (writeIdx - di + bufSize) % bufSize
+				r1 := (r0 + 1) % bufSize
+				delayed := buf[r0] + Smp(frac)*(buf[r1]-buf[r0])
+
+				y := frame[c] + Smp(feedback)*delayed
+				out[c] = y
+				buf[writeIdx] = y
+			}
+
+			writeIdx++
+			if writeIdx == bufSize {
+				writeIdx = 0
+			}
+
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
+func (s Stream) Delay(nframes int) Stream {
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+		out := make(Frame, s.nchannels)
+		for range nframes {
+			if !yield(out) {
+				return
+			}
+		}
+		for frame := range s.seq {
+			if !yield(frame) {
+				return
+			}
+		}
+	})
+}
+
+// equalPowerPan returns gains for left/right given pan in [-1,1].
+func equalPowerPan(p float64) (float64, float64) {
+	if p < -1 {
+		p = -1
+	}
+	if p > 1 {
+		p = 1
+	}
+	// map p=-1..1 -> theta in [0..pi/2]
+	theta := (p + 1) * math.Pi / 4
+	return math.Cos(theta), math.Sin(theta)
+}
+
+// Pan applies equal-power panning to a mono stream, returning stereo.
+// Pan value can be a Num or Streamable providing values in [-1..1].
+func Pan(s Stream, pan Stream) Stream {
+	return makeStream(2, s.nframes, func(yield func(Frame) bool) {
+		out := make(Frame, 2)
+		snext, sstop := iter.Pull(s.Mono().seq)
+		pnext, pstop := iter.Pull(pan.Mono().seq)
+		defer sstop()
+		defer pstop()
+		for {
+			sframe, ok := snext()
+			if !ok {
+				return
+			}
+			pframe, ok := pnext()
+			if !ok {
+				return
+			}
+			l, r := equalPowerPan(float64(pframe[0]))
+			out[0] = sframe[0] * Smp(l)
+			out[1] = sframe[0] * Smp(r)
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
+func init() {
+	RegisterWord("~impulse", func(vm *VM) error {
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
+
+		phase := 0.0
+		if pval := vm.GetVal(":phase"); pval != nil {
+			if pnum, ok := pval.(Num); ok {
+				phase = float64(pnum)
+			} else {
+				return fmt.Errorf("impulse: :phase must be number")
+			}
+		}
+
+		vm.Push(impulseStream(freq, phase))
+		return nil
+	})
+
+	RegisterWord("dc*", func(vm *VM) error {
+		alphaNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		alpha := float64(alphaNum)
+		vm.Push(DCBlock(stream, alpha))
+		return nil
+	})
+
+	RegisterWord("dc", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(DCFilter(stream))
+		return nil
+	})
+
+	RegisterWord("comb", func(vm *VM) error {
+		fb, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+
+		delayVal := vm.Pop()
+		delayStream, err := streamFromVal(delayVal)
+		if err != nil {
+			return err
+		}
+
+		inputStream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+
+		vm.Push(CombFilter(inputStream, delayStream, float64(fb)))
+		return nil
+	})
+
+	RegisterWord("delay", func(vm *VM) error {
+		nfNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(stream.Delay(int(nfNum)))
+		return nil
+	})
+
+	RegisterWord("pan", func(vm *VM) error {
+		// input pan -- output
+		pan, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(Pan(input, pan))
+		return nil
+	})
+}
