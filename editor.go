@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"github.com/atotto/clipboard"
 	"slices"
 	"strings"
@@ -420,6 +421,16 @@ func (e *Editor) Render(tp TilePane, currentToken *Token) {
 			}
 		}
 	}
+}
+
+func (e *Editor) RenderStatusLine(tp TilePane, currentFile string) {
+	text := fmt.Sprintf("%s  Ln %d, Col %d", currentFile, e.point.line+1, e.point.column+1)
+	tp.WithFgBg(ColorWhite, ColorBlue, func() {
+		for x := 0; x < tp.Width(); x++ {
+			tp.DrawRune(x, 0, ' ')
+		}
+		tp.DrawString(0, 0, text)
+	})
 }
 
 func (e *Editor) GetBytes() []byte {

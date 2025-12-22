@@ -378,16 +378,28 @@ func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	screenPane := ts.GetPane()
+
+	var statusFile string
+	if app.currentFile == "" {
+		statusFile = "<no file>"
+	} else {
+		statusFile = app.currentFile
+	}
+
 	switch result := app.evalResult.(type) {
 	case error:
 		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane, app.currentToken)
+		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
+		app.editor.Render(editorBufferPane, app.currentToken)
+		app.editor.RenderStatusLine(editorStatusPane, statusFile)
 		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
 			statusPane.DrawString(0, 0, result.Error())
 		})
 	case *Tape:
 		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
-		app.editor.Render(editorPane, app.currentToken)
+		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
+		app.editor.Render(editorBufferPane, app.currentToken)
+		app.editor.RenderStatusLine(editorStatusPane, statusFile)
 		var playheadFrames []int
 		for _, tp := range app.oto.GetTapePlayers() {
 			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
@@ -395,9 +407,12 @@ func (app *App) Render() error {
 		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
 	default:
 		editorPane, statusPane := screenPane.SplitY(-1)
-		app.editor.Render(editorPane, app.currentToken)
+		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
+		app.editor.Render(editorBufferPane, app.currentToken)
+		app.editor.RenderStatusLine(editorStatusPane, statusFile)
 		statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
 	}
+
 	ts.Render()
 	return nil
 }
