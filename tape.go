@@ -478,6 +478,32 @@ func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 }
 
 func init() {
+	RegisterMethod[*Tape]("at", 3, func(vm *VM) error {
+		channelNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		frameNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		t, err := Pop[*Tape](vm)
+		if err != nil {
+			return err
+		}
+		channel := int(channelNum)
+		if channel < 0 || channel >= t.nchannels {
+			return vm.Errorf("tape/at: invalid channel: %d", channel)
+		}
+		frame := int(frameNum)
+		if frame < 0 || frame >= t.nframes {
+			return vm.Errorf("tape/at: invalid frame index: %d", frame)
+		}
+		sampleOffset := frame*t.nchannels + channel
+		vm.Push(Num(t.samples[sampleOffset]))
+		return nil
+	})
+
 	RegisterMethod[*Tape]("slice", 2, func(vm *VM) error {
 		endNum, err := Pop[Num](vm)
 		if err != nil {

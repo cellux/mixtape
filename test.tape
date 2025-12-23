@@ -345,6 +345,9 @@ drop
 { c-0 0 = } assert
 { b-9 119 = } assert
 
+; sample access
+{ 0.3 1s take 0 0 at 0.3 = } assert
+
 ; utilities
 
 { 3 4 5 drop + 7 = } assert
