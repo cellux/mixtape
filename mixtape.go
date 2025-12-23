@@ -423,8 +423,9 @@ func (app *App) Render() error {
 	}
 
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-	app.editor.Render(editorBufferPane, app.vm.currentToken.Get())
-	app.editor.RenderStatusLine(editorStatusPane, statusFile)
+	currentToken := app.vm.currentToken.Get()
+	app.editor.Render(editorBufferPane, currentToken)
+	app.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken)
 
 	ts.Render()
 	return nil

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -428,13 +429,26 @@ func (e *Editor) Render(tp TilePane, currentToken *Token) {
 	}
 }
 
-func (e *Editor) RenderStatusLine(tp TilePane, currentFile string) {
-	text := fmt.Sprintf("%s  Ln %d, Col %d", currentFile, e.point.line+1, e.point.column+1)
+func (e *Editor) RenderStatusLine(tp TilePane, currentFile string, currentToken *Token) {
+	leftText := fmt.Sprintf("%s  Ln %d, Col %d", currentFile, e.point.line+1, e.point.column+1)
+	var rightText string
+	if currentToken != nil {
+		rightText = currentToken.String()
+	}
+	paddedWidth := tp.Width() - 2
+	if paddedWidth <= 0 {
+		return
+	}
+	leftTextSize := utf8.RuneCountInString(leftText)
+	rightStart := max(paddedWidth-utf8.RuneCountInString(rightText), leftTextSize+1)
 	tp.WithFgBg(ColorWhite, ColorBlue, func() {
-		for x := 0; x < tp.Width(); x++ {
+		for x := range tp.Width() {
 			tp.DrawRune(x, 0, ' ')
 		}
-		tp.DrawString(0, 0, text)
+		tp.DrawString(1, 0, leftText)
+		if rightText != "" && 1+rightStart < paddedWidth {
+			tp.DrawString(1+rightStart, 0, rightText)
+		}
 	})
 }
 
