@@ -50,6 +50,22 @@ func (n Num) Equal(other Val) bool {
 	}
 }
 
+func (n Num) Iter() Fun {
+	i := Num(0)
+	end := Num(int(n))
+	return func(vm *VM) error {
+		var next Val
+		if i == end {
+			next = Nil
+		} else {
+			next = i
+			i++
+		}
+		vm.Push(next)
+		return nil
+	}
+}
+
 func init() {
 	RegisterMethod[Num]("if", 2, func(vm *VM) error {
 		block := vm.Pop()

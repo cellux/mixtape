@@ -160,6 +160,15 @@ stack len 0 = assert
 { [5 9 3] 1 at 9 = } assert
 { [5 9 3] 2 at 3 = } assert
 
+; iterators
+
+3 iter
+{ next 0 = } assert
+{ next 1 = } assert
+{ next 2 = } assert
+{ next nil? } assert
+drop
+
 [1 2 3] iter
 { next 1 = } assert
 { next 2 = } assert
