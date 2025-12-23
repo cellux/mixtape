@@ -157,7 +157,7 @@ Prelude provides:
 
 - Floating number (ratios are parsed to float).
 - Supports comparisons via methods: `< <= >= >`.
-- `+ - * / %` are **words** that do:
+- `+ - * / mod rem` are **words** that do:
   - `Num op Num -> Num`
   - otherwise, sample-wise combination of streams.
 
@@ -264,7 +264,7 @@ These are registered in Go code.
 ### Streams
 
 - `~` `take` `mono` `stereo`
-- arithmetic stream combinators: `+ - * / %`
+- arithmetic stream combinators: `+ - * / mod rem`
 
 ### DSP / utilities
 
@@ -550,7 +550,7 @@ If the prompt asks for a word whose stack effect is unclear:
 
 ### Streams
 
-`~ take mono stereo join  + - * / %`
+`~ take mono stereo join  + - * / mod rem`
 
 ### Osc / noise
 

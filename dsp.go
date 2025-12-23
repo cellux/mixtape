@@ -46,9 +46,45 @@ func impulseStream(freq Stream, phase float64) Stream {
 	})
 }
 
+// DCMeanCenter subtracts the per-channel mean for finite streams.
+func DCMeanCenter(s Stream) Stream {
+	t := s.Take(nil, s.nframes)
+
+	sums := make([]float64, t.nchannels)
+	readIndex := 0
+	for range t.nframes {
+		for ch := range t.nchannels {
+			sums[ch] += t.samples[readIndex]
+			readIndex++
+		}
+	}
+
+	means := make([]Smp, t.nchannels)
+	for ch := range t.nchannels {
+		mean := sums[ch] / float64(t.nframes)
+		if math.Abs(mean) < 1e-12 {
+			mean = 0
+		}
+		means[ch] = Smp(mean)
+	}
+
+	writeIndex := 0
+	for range t.nframes {
+		for ch := range t.nchannels {
+			t.samples[writeIndex] -= means[ch]
+			writeIndex++
+		}
+	}
+
+	return t.Stream()
+}
+
 // DCBlock applies a simple one-pole high-pass filter to remove DC offset.
 // alpha controls the cutoff; typical small value like 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
+	if s.nframes != 0 {
+		return DCMeanCenter(s)
+	}
 	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
 		out := make(Frame, s.nchannels)
 		prevIn := make([]Smp, s.nchannels)

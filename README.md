@@ -197,7 +197,7 @@ Rendering:
 
 - `streamable nframes take -> Tape`
 
-Arithmetic (`+ - * / %`) is overloaded:
+Arithmetic (`+ - * / mod rem`) is overloaded:
 
 - `Num op Num -> Num`
 - otherwise it combines streams sample-wise (auto mono/stereo adaptation)
