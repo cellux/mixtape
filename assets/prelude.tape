@@ -138,6 +138,14 @@ false >:saturate
    env
 )} >adsr
 
+; perc: (a r -- env)
+{( >:release >:attack
+   [0 1 0]
+   [:attack :release]
+   [{0.5 /pow} {-5 /exp}]
+   env
+)} >perc
+
 ; default waves
 { 0 wave/sin } >w/sin
 { 0 wave/tanh } >w/tanh
