@@ -453,9 +453,8 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 		return
 	}
 	app.Reset()
-	if _, ok := app.evalResult.(error); !ok {
-		app.prevResult = app.evalResult
-	}
+	app.lastScript = editorScript
+	app.prevResult = app.evalResult
 	app.evalResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {
@@ -473,7 +472,6 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 			logger.Error("parse error", "err", err)
 			result = makeErr(err)
 		} else {
-			app.lastScript = script
 			result = vm.evalResult
 			if streamable, ok := result.(Streamable); ok {
 				stream := streamable.Stream()
@@ -502,14 +500,14 @@ func (app *App) playEvalResult() {
 func (app *App) Reset() {
 	if app.vm.IsEvaluating() {
 		app.vm.CancelEvaluation()
+		if app.prevResult != nil {
+			app.evalResult = app.prevResult
+			app.prevResult = nil
+		}
 	}
 	app.rTape = nil
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
-	if app.prevResult != nil {
-		app.evalResult = app.prevResult
-		app.prevResult = nil
-	}
 	app.drainEvents()
 	app.oto.StopAllPlayers()
 	app.editor.Reset()

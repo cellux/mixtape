@@ -75,8 +75,8 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 	pct1 := end / 100
 	pct1 = pct1 - (pct1 % nchannels)
 	for frame := range s.seq {
-		for i := range nchannels {
-			t.samples[writeIndex] = frame[i]
+		for ch := range nchannels {
+			t.samples[writeIndex] = frame[ch]
 			writeIndex++
 		}
 		if writeIndex == end {
