@@ -197,9 +197,9 @@ func applySmpUnOp(vm *VM, op SmpUnOp) error {
 			for ch := range s.nchannels {
 				out[ch] = op(frame[ch])
 			}
-		}
-		if !yield(out) {
-			return
+			if !yield(out) {
+				return
+			}
 		}
 	})
 	vm.Push(result)

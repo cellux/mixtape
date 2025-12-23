@@ -142,6 +142,9 @@ false >:saturate
 ; gain: (stream db -- stream) apply gain in dB to a stream
 { db * } >gain
 
+; clip: (stream -- stream) constrain stream samples to [-1,1]
+{ -1 1 clamp } >clip
+
 ; distribute: (vals n -- vals') scale vals so their sum equals n
 ; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
 {( over {+} reduce / >:unit { :unit * } map )} >distribute

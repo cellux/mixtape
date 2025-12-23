@@ -140,6 +140,18 @@ func MaxOp() SmpBinOp {
 	return func(x, y Smp) Smp { return max(x, y) }
 }
 
+func ClampOp(min, max Smp) SmpUnOp {
+	return func(x Smp) Smp {
+		if x > max {
+			return max
+		}
+		if x < min {
+			return min
+		}
+		return x
+	}
+}
+
 func init() {
 
 	RegisterWord("e", func(vm *VM) error {
@@ -278,6 +290,21 @@ func init() {
 
 	RegisterWord("max", func(vm *VM) error {
 		return applySmpBinOp(vm, MaxOp())
+	})
+
+	RegisterWord("clamp", func(vm *VM) error {
+		maxNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		minNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		if minNum > maxNum {
+			return vm.Errorf("clamp: min (%v) > max (%v)", minNum, maxNum)
+		}
+		return applySmpUnOp(vm, ClampOp(Smp(minNum), Smp(maxNum)))
 	})
 
 	RegisterWord("rand", func(vm *VM) error {
