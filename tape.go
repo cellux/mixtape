@@ -688,6 +688,23 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 			}
 			yMin := channelTop + channelHeightHalf - float32(minVal)*channelHeightHalf
 			yMax := channelTop + channelHeightHalf - float32(maxVal)*channelHeightHalf
+
+			// When the signal is constant (min == max), our per-column vertical line
+			// collapses to a point. gles2 doesn't reliably rasterize zero-length lines,
+			// so we expand it to at least ~1 pixel so constant tapes are visible.
+			if yMin == yMax {
+				const halfPx = float32(0.5)
+				yMin -= halfPx
+				yMax += halfPx
+				// Clamp to the channel bounds.
+				if yMin < channelTop {
+					yMin = channelTop
+				}
+				if yMax > channelTop+channelHeight {
+					yMax = channelTop + channelHeight
+				}
+			}
+
 			idx := x * 2
 			td.vertices[ch][idx].position[1] = yMin
 			td.vertices[ch][idx+1].position[1] = yMax
