@@ -607,7 +607,8 @@ func (vm *VM) Eval(val Val) error {
 		}
 		return vm.Err(err)
 	}
-	return vm.Errorf("don't know how to evaluate value of type %T", val)
+	vm.Push(v)
+	return nil
 }
 
 func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {

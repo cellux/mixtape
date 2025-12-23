@@ -36,11 +36,6 @@ func scanFloat(text string) (float64, error) {
 	}
 }
 
-func (n Num) Eval(vm *VM) error {
-	vm.Push(n)
-	return nil
-}
-
 func (n Num) Equal(other Val) bool {
 	switch rhs := other.(type) {
 	case Num:

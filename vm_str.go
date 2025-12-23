@@ -14,11 +14,6 @@ func (s Str) String() string {
 	return string(s)
 }
 
-func (s Str) Eval(vm *VM) error {
-	vm.Push(s)
-	return nil
-}
-
 func (s Str) Equal(other Val) bool {
 	switch rhs := other.(type) {
 	case Str:
