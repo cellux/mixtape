@@ -160,6 +160,8 @@ stack len 0 = assert
 { [5 9 3] 1 at 9 = } assert
 { [5 9 3] 2 at 3 = } assert
 
+{ {foo bar} 3 vdup [{foo bar} {foo bar} {foo bar}] = } assert
+
 ; iterators
 
 3 iter

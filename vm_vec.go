@@ -230,4 +230,18 @@ func init() {
 		}
 		return nil
 	})
+	RegisterWord("vdup", func(vm *VM) error {
+		countNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		val := vm.Pop()
+		count := int(countNum)
+		v := make(Vec, count)
+		for i := range count {
+			v[i] = val
+		}
+		vm.Push(v)
+		return nil
+	})
 }

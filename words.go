@@ -156,4 +156,5 @@ func init() {
 	RegisterWord("next", func(vm *VM) error {
 		return vm.DoNext()
 	})
+
 }
