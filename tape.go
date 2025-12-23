@@ -48,18 +48,6 @@ func (t *Tape) Wave() Wave {
 	return wave
 }
 
-func (t *Tape) GetInterpolatedSampleAt(channel int, frame float64) Smp {
-	frameIndexLo := math.Floor(frame)
-	sampleIndexLo := channel + int(frameIndexLo)*t.nchannels
-	smpLo := t.samples[sampleIndexLo]
-	if int(frameIndexLo) == t.nframes-1 {
-		return smpLo
-	}
-	smpHi := t.samples[sampleIndexLo+1]
-	frameIndexDelta := frame - frameIndexLo
-	return smpLo + (smpHi-smpLo)*frameIndexDelta
-}
-
 func (t *Tape) Slice(start, end int) *Tape {
 	nframes := end - start
 	slicedTape := &Tape{
