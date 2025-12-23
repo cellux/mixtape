@@ -57,9 +57,6 @@ func makeTransformStream(inputs []Stream, seq iter.Seq[Frame]) Stream {
 }
 
 func streamFromVal(v Val) (Stream, error) {
-	if v == nil {
-		return Num(0).Stream(), nil
-	}
 	if s, ok := v.(Streamable); ok {
 		return s.Stream(), nil
 	}
