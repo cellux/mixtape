@@ -5,14 +5,11 @@ import (
 	"math/rand"
 )
 
-func getRNG(vm *VM) (*rand.Rand, error) {
-	seedNum, err := vm.GetNum(":seed")
-	if err != nil {
-		return nil, err
-	}
-	source := rand.NewSource(int64(seedNum))
-	rng := rand.New(source)
-	return rng, nil
+var rng *rand.Rand
+
+func init() {
+	source := rand.NewSource(0)
+	rng = rand.New(source)
 }
 
 func AbsOp() SmpUnOp {
@@ -284,12 +281,17 @@ func init() {
 	})
 
 	RegisterWord("rand", func(vm *VM) error {
-		rng, err := getRNG(vm)
+		// result is in range [0.0,1.0)
+		vm.Push(Num(rng.Float64()))
+		return nil
+	})
+
+	RegisterWord("rand/seed", func(vm *VM) error {
+		seedNum, err := Pop[Num](vm)
 		if err != nil {
 			return err
 		}
-		// result is in range [0.0,1.0)
-		vm.Push(Num(rng.Float64()))
+		rng.Seed(int64(seedNum))
 		return nil
 	})
 

@@ -118,10 +118,14 @@ stack len 0 = assert
 { rand 0.0 >= } assert
 { rand 1.0 < } assert
 
-{ (0 >:seed rand) 0.9451961492941164 = } assert
-{ (1 >:seed rand) 0.6046602879796196 = } assert
+{ (0 rand/seed rand) 0.9451961492941164 = } assert
+{ (1 rand/seed rand) 0.6046602879796196 = } assert
 
-{ rand 0.9451961492941164 = } assert
+; random seed is 1 now and we already consumed one random number
+
+{ rand 0.9405090880450124 = } assert
+{ rand 0.6645600532184904 = } assert
+{ rand 0.4377141871869802 = } assert
 
 ;; ratios
 { 1/4 0.25 = } assert
