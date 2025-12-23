@@ -168,11 +168,7 @@ func (vm *VM) CancelEvaluation() {
 	vm.evalMu.Unlock()
 
 	if cancelCh != nil {
-		// Closing a closed channel panics; guard with recover.
-		func() {
-			defer func() { _ = recover() }()
-			close(cancelCh)
-		}()
+		close(cancelCh)
 	}
 	if doneCh != nil {
 		<-doneCh
@@ -624,11 +620,7 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 		// Always mark evaluation complete and unblock any CancelEvaluation waiters.
 		vm.isEvaluating.Set(false)
 		vm.evalMu.Lock()
-		// close(doneCh) exactly once for this run
-		func() {
-			defer func() { _ = recover() }()
-			close(doneCh)
-		}()
+		close(doneCh)
 		// Clear channels so a later CancelEvaluation doesn't wait on an old run.
 		vm.cancelCh = nil
 		vm.doneCh = nil
