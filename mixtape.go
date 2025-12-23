@@ -44,6 +44,7 @@ type App struct {
 	lastScript  []byte
 	prevResult  Val
 	evalResult  Val
+	errResult   error
 	oto         *OtoState
 	tapeDisplay *TapeDisplay
 	// rTape points to the currently rendered tape
@@ -396,13 +397,16 @@ func (app *App) Render() error {
 	var editorPane TilePane
 	var tapeDisplayPane TilePane
 	var statusPane TilePane
+	var errorPane TilePane
+
+	if app.errResult != nil {
+		screenPane, errorPane = screenPane.SplitY(-1)
+		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
+			errorPane.DrawString(0, 0, app.errResult.Error())
+		})
+	}
 
 	switch result := app.evalResult.(type) {
-	case error:
-		editorPane, statusPane = screenPane.SplitY(-1)
-		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
-			statusPane.DrawString(0, 0, result.Error())
-		})
 	case *Tape:
 		editorPane, tapeDisplayPane = screenPane.SplitY(-8)
 		var playheadFrames []int
@@ -456,6 +460,7 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 	app.lastScript = editorScript
 	app.prevResult = app.evalResult
 	app.evalResult = nil
+	app.errResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {
 		tapePath = app.currentFile
@@ -481,12 +486,18 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 			}
 		}
 		app.postEvent(func() {
-			app.evalResult = result
+			app.evalResult = nil
+			app.errResult = nil
 			app.prevResult = nil
 			app.rTape = nil
 			app.rTotalFrames = 0
 			app.rDoneFrames = 0
-			if wantPlay {
+			if err != nil {
+				app.errResult = err
+			} else {
+				app.evalResult = result
+			}
+			if wantPlay && app.errResult == nil {
 				app.playEvalResult()
 			}
 		}, false)
@@ -505,6 +516,7 @@ func (app *App) Reset() {
 			app.prevResult = nil
 		}
 	}
+	app.errResult = nil
 	app.rTape = nil
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
@@ -555,6 +567,9 @@ func runWithArgs(vm *VM, args []string) error {
 		if vm.evalResult != nil {
 			fmt.Println(vm.evalResult)
 		}
+		if vm.errResult != nil {
+			fmt.Fprintln(os.Stderr, vm.errResult)
+		}
 		return err
 	}
 	if flags.EvalFile != "" {
@@ -565,6 +580,9 @@ func runWithArgs(vm *VM, args []string) error {
 		err = vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
 		if vm.evalResult != nil {
 			fmt.Println(vm.evalResult)
+		}
+		if vm.errResult != nil {
+			fmt.Fprintln(os.Stderr, vm.errResult)
 		}
 		return err
 	}

@@ -102,6 +102,7 @@ type VM struct {
 	doneCh       chan struct{}
 
 	evalResult           Val         // top of stack after a successful evaluation
+	errResult            error       // last evaluation error
 	currentToken         Box[*Token] // currently executing token of the script
 	tapeProgressCallback func(t *Tape, nftotal, nfdone int)
 }
@@ -616,6 +617,10 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 	doneCh := vm.doneCh
 	vm.evalMu.Unlock()
 
+	// Reset previous results at the start of a run.
+	vm.evalResult = nil
+	vm.errResult = nil
+
 	defer func() {
 		// Always mark evaluation complete and unblock any CancelEvaluation waiters.
 		vm.isEvaluating.Set(false)
@@ -631,11 +636,16 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 
 	code, parseErr := vm.Parse(r, filename)
 	if parseErr != nil {
+		vm.errResult = parseErr
 		return parseErr
 	}
 	err = vm.Eval(code)
+	if err != nil {
+		vm.errResult = err
+		return err
+	}
 	vm.evalResult = vm.Top()
-	return err
+	return nil
 }
 
 func (vm *VM) ReportTapeProgress(t *Tape, nftotal, nfdone int) {
