@@ -552,8 +552,8 @@ func runWithArgs(vm *VM, args []string) error {
 	currentFile := ""
 	if flags.EvalScript != "" {
 		err := vm.ParseAndEval(strings.NewReader(flags.EvalScript), "<script>")
-		if top := vm.Top(); err == nil && top != nil {
-			fmt.Println(vm.Top())
+		if vm.evalResult != nil {
+			fmt.Println(vm.evalResult)
 		}
 		return err
 	}
@@ -563,8 +563,8 @@ func runWithArgs(vm *VM, args []string) error {
 			return err
 		}
 		err = vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
-		if top := vm.Top(); err == nil && top != nil {
-			fmt.Println(vm.Top())
+		if vm.evalResult != nil {
+			fmt.Println(vm.evalResult)
 		}
 		return err
 	}
