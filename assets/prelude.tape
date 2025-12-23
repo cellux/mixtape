@@ -136,6 +136,12 @@ false >:saturate
 ; cents: (cents -- ratio)
 { 1200 / exp2 } >cents
 
+; db: (db -- amp) convert decibels to linear amplitude multiplier
+{ 20 / 10 swap pow } >db
+
+; gain: (stream db -- stream) apply gain in dB to a stream
+{ db * } >gain
+
 ; distribute: (vals n -- vals') scale vals so their sum equals n
 ; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
 {( over {+} reduce / >:unit { :unit * } map )} >distribute

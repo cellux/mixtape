@@ -39,10 +39,12 @@ stack len 0 = assert
 ; numbers (Num)
 
 ;; equality
+
 { 3 3 = } assert
 { 3 4 != } assert
 
 ;; comparisons
+
 { 3 3 > not } assert
 { 3 3 >= } assert
 { 3 3 < not } assert
@@ -53,24 +55,29 @@ stack len 0 = assert
 { 3 4 <= } assert
 
 ;; min/max
+
 { 3 5 min 3 = } assert
 { 3 5 max 5 = } assert
 
 ;; arithmetic
+
 { 3 4 + 7 = } assert
 { 4 3 - 1 = } assert
 { 4 3 * 12 = } assert
 { 12 3 / 4 = } assert
 
 ;; power
+
 { 2 5 pow 32 = } assert
 
 ;; modulo
+
 {  5  3 mod  2 = } assert
 { -5  3 mod -2 = } assert
 {  5 -3 mod  2 = } assert
 
 ;; remainder
+
 {  5  3 rem -1 = } assert
 { -5  3 rem  1 = } assert
 {  5 -3 rem -1 = } assert
@@ -128,6 +135,7 @@ stack len 0 = assert
 { rand 0.4377141871869802 = } assert
 
 ;; ratios
+
 { 1/4 0.25 = } assert
 
 ;; trigonometry
@@ -327,11 +335,13 @@ drop
 { 1/4p 1 periods 4 / = } assert
 
 ; semitone offset -> freq multiplier
+
 { 1 st 2 1/12 pow = } assert
 { 5 st 2 5/12 pow = } assert
 { -3 st 2 -3/12 pow = } assert
 
 ; midi to hz
+
 { 69 mtof 440 = } assert
 { 57 mtof 220 = } assert
 { 60 mtof 261.6255653005986 = } assert
@@ -339,12 +349,14 @@ drop
 { 1p 1 periods = } assert
 
 ; cents -> freq multiplier
+
 { 0 cents 1 = } assert
 { 1200 cents 2 = } assert
 { -1200 cents 0.5 = } assert
 { 100 cents 1/12 exp2 = } assert
 
 ; parsing MIDI notes
+
 { c-4 48 = } assert
 { C-4 48 = } assert
 { c#4 49 = } assert
@@ -353,6 +365,14 @@ drop
 
 ; sample access
 { 0.3 1s take 0 0 at 0.3 = } assert
+
+; decibels
+
+{ 0 db 1 = } assert
+{ 20 db 10 = } assert
+{ -20 db 0.1 = } assert
+
+{ 1 -20 gain 1s take 0 0 at 0.1 = } assert
 
 ; utilities
 
