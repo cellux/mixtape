@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -32,22 +33,25 @@ func SampleRate() int {
 type Event func()
 
 type App struct {
-	vm           *VM
-	openFiles    map[string]string
-	currentFile  string
-	shouldExit   bool
-	font         *Font
-	tm           *TileMap
-	ts           *TileScreen
-	editor       *Editor
-	lastScript   []byte
-	evalResult   Val
-	oto          *OtoState
-	tapeDisplay  *TapeDisplay
+	vm          *VM
+	openFiles   map[string]string
+	currentFile string
+	shouldExit  bool
+	font        *Font
+	tm          *TileMap
+	ts          *TileScreen
+	editor      *Editor
+	lastScript  []byte
+	prevResult  Val
+	evalResult  Val
+	oto         *OtoState
+	tapeDisplay *TapeDisplay
+	// rTape points to the currently rendered tape
+	rTape *Tape
+	// rFrames is the number of frames already rendered for rTape
+	rFrames      int
 	kmm          *KeyMapManager
 	editorKeyMap KeyMap
-	currentToken *Token
-	evaluating   bool
 	events       chan Event
 }
 
@@ -108,14 +112,10 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
-
-	app.vm.tokenCallback = func(token *Token) {
-		// Copy token so the pointer stays valid when handled on the main thread.
-		tokCopy := *token
-		// Token updates can be very frequent; drop if the queue is full to avoid
-		// stalling the evaluator.
+	app.vm.tapeProgressCallback = func(t *Tape, nframes int) {
 		app.postEvent(func() {
-			app.currentToken = &tokCopy
+			app.rTape = t
+			app.rFrames = nframes
 		}, true)
 	}
 
@@ -386,32 +386,41 @@ func (app *App) Render() error {
 		statusFile = app.currentFile
 	}
 
+	var editorPane TilePane
+	var tapeDisplayPane TilePane
+	var statusPane TilePane
+
 	switch result := app.evalResult.(type) {
 	case error:
-		editorPane, statusPane := screenPane.SplitY(-1)
-		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-		app.editor.Render(editorBufferPane, app.currentToken)
-		app.editor.RenderStatusLine(editorStatusPane, statusFile)
+		editorPane, statusPane = screenPane.SplitY(-1)
 		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
 			statusPane.DrawString(0, 0, result.Error())
 		})
 	case *Tape:
-		editorPane, tapeDisplayPane := screenPane.SplitY(-8)
-		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-		app.editor.Render(editorBufferPane, app.currentToken)
-		app.editor.RenderStatusLine(editorStatusPane, statusFile)
+		editorPane, tapeDisplayPane = screenPane.SplitY(-8)
 		var playheadFrames []int
 		for _, tp := range app.oto.GetTapePlayers() {
 			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
 		}
 		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
 	default:
-		editorPane, statusPane := screenPane.SplitY(-1)
-		editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-		app.editor.Render(editorBufferPane, app.currentToken)
-		app.editor.RenderStatusLine(editorStatusPane, statusFile)
-		statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
+		if result == nil {
+			if app.rTape != nil {
+				// currently rendered tape
+				editorPane, tapeDisplayPane = screenPane.SplitY(-8)
+				app.tapeDisplay.Render(app.rTape, tapeDisplayPane.GetPixelRect(), app.rFrames, 0, nil)
+			} else {
+				editorPane = screenPane
+			}
+		} else {
+			editorPane, statusPane = screenPane.SplitY(-1)
+			statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
+		}
 	}
+
+	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
+	app.editor.Render(editorBufferPane, app.vm.currentToken.Get())
+	app.editor.RenderStatusLine(editorStatusPane, statusFile)
 
 	ts.Render()
 	return nil
@@ -435,44 +444,45 @@ func (app *App) Update() error {
 
 func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 	editorScript := app.editor.GetBytes()
-	if app.evaluating {
-		app.Reset()
-	}
 	if slices.Compare(editorScript, app.lastScript) == 0 {
 		if wantPlay {
 			app.postEvent(app.playEvalResult, false)
 		}
 		return
 	}
-	app.evaluating = true
-	app.lastScript = editorScript
-	app.currentToken = nil
+	app.Reset()
+	app.prevResult = app.evalResult
+	app.evalResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {
 		tapePath = app.currentFile
 	}
 	go func(script []byte, tapePath string, wantPlay bool) {
 		vm := app.vm
-		vm.Reset()
 		vm.DoPushEnv()
 		var result Val
 		err := vm.ParseAndEval(bytes.NewReader(script), tapePath)
 		if err != nil {
+			if errors.Is(err, ErrEvalCancelled) {
+				return
+			}
 			logger.Error("parse error", "err", err)
 			result = makeErr(err)
 		} else {
-			result = vm.Pop()
+			app.lastScript = script
+			result = vm.evalResult
 			if streamable, ok := result.(Streamable); ok {
 				stream := streamable.Stream()
 				if stream.nframes > 0 {
-					result = stream.Take(stream.nframes)
+					result = stream.Take(nil, stream.nframes)
 				}
 			}
 		}
 		app.postEvent(func() {
 			app.evalResult = result
-			app.currentToken = nil
-			app.evaluating = false
+			app.prevResult = nil
+			app.rTape = nil
+			app.rFrames = 0
 			if wantPlay {
 				app.playEvalResult()
 			}
@@ -485,12 +495,20 @@ func (app *App) playEvalResult() {
 }
 
 func (app *App) Reset() {
+	if app.vm.IsEvaluating() {
+		app.vm.CancelEvaluation()
+	}
+	app.rTape = nil
+	app.rFrames = 0
+	app.lastScript = nil
+	if app.prevResult != nil {
+		app.evalResult = app.prevResult
+		app.prevResult = nil
+	}
 	app.drainEvents()
 	app.oto.StopAllPlayers()
 	app.editor.Reset()
 	app.kmm.Reset()
-	app.currentToken = nil
-	app.evaluating = false
 }
 
 func (app *App) Close() error {

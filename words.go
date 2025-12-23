@@ -21,7 +21,7 @@ func init() {
 
 	RegisterWord("throw", func(vm *VM) error {
 		v := vm.Pop()
-		return Err{Pos: vm.currentPos, Err: ThrowValue{v}}
+		return vm.Err(ThrowValue{v})
 	})
 
 	RegisterWord("catch", func(vm *VM) error {

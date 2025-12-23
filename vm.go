@@ -82,23 +82,24 @@ func RegisterWord(name string, fun Fun) {
 // VM
 
 type VM struct {
-	valStack    Vec   // values
-	envStack    []Map // environments
-	markerStack []int // [ indices in valStack
-	quoteBuffer Vec   // quoted code
-	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
-	currentPos  scanner.Position
-	// tokenCallback is invoked before the VM evaluates a token
-	tokenCallback func(*Token)
+	valStack             Vec   // values
+	envStack             []Map // environments
+	markerStack          []int // [ indices in valStack
+	quoteBuffer          Vec   // quoted code
+	quoteDepth           int   // nesting level {... {.. {..} ..} ...}
+	isEvaluating         Box[bool]
+	evalResult           Val                        // top of stack after a successful evaluation
+	evalCancelled        chan struct{}              // triggered when eval cancellation succeeded
+	currentToken         Box[*Token]                // currently executing token of the script
+	tapeProgressCallback func(t *Tape, nframes int) // invoked by long-running rendering operations
 }
 
 func CreateVM() (*VM, error) {
 	vm := &VM{
-		valStack:    make(Vec, 0, 4096),
-		envStack:    []Map{rootEnv},
-		markerStack: make([]int, 0, 16),
-		quoteBuffer: nil,
-		quoteDepth:  0,
+		valStack:      make(Vec, 0, 4096),
+		envStack:      []Map{rootEnv},
+		markerStack:   make([]int, 0, 16),
+		evalCancelled: make(chan struct{}),
 	}
 	return vm, nil
 }
@@ -135,6 +136,17 @@ func (vm *VM) Reset() {
 	vm.markerStack = vm.markerStack[:0]
 	vm.quoteBuffer = nil
 	vm.quoteDepth = 0
+	vm.isEvaluating.Set(false)
+	vm.currentToken.Set(nil)
+}
+
+func (vm *VM) IsEvaluating() bool {
+	return vm.isEvaluating.Get()
+}
+
+func (vm *VM) CancelEvaluation() {
+	vm.isEvaluating.Set(false)
+	<-vm.evalCancelled
 }
 
 func (vm *VM) IsQuoting() bool {
@@ -173,7 +185,7 @@ func Pop[T Val](vm *VM) (T, error) {
 		return value, nil
 	} else {
 		var zeroT T
-		return zeroT, fmt.Errorf("top of value stack has type %T, expected %T", val, zeroT)
+		return zeroT, vm.Errorf("top of value stack has type %T, expected %T", val, zeroT)
 	}
 }
 
@@ -183,14 +195,14 @@ func Top[T Val](vm *VM) (T, error) {
 		return value, nil
 	} else {
 		var zeroT T
-		return zeroT, fmt.Errorf("top of value stack has type %T, expected %T", top, zeroT)
+		return zeroT, vm.Errorf("top of value stack has type %T, expected %T", top, zeroT)
 	}
 }
 
 func (vm *VM) DoDrop() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
-		return fmt.Errorf("drop: stack underflow")
+		return vm.Errorf("drop: stack underflow")
 	}
 	vm.Pop()
 	return nil
@@ -199,7 +211,7 @@ func (vm *VM) DoDrop() error {
 func (vm *VM) DoNip() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
-		return fmt.Errorf("nip: stack underflow")
+		return vm.Errorf("nip: stack underflow")
 	}
 	vm.valStack[stackSize-2] = vm.valStack[stackSize-1]
 	vm.valStack = vm.valStack[:stackSize-1]
@@ -209,7 +221,7 @@ func (vm *VM) DoNip() error {
 func (vm *VM) DoDup() error {
 	stackSize := len(vm.valStack)
 	if stackSize == 0 {
-		return fmt.Errorf("dup: stack underflow")
+		return vm.Errorf("dup: stack underflow")
 	}
 	vm.Push(vm.Top())
 	return nil
@@ -218,7 +230,7 @@ func (vm *VM) DoDup() error {
 func (vm *VM) DoSwap() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
-		return fmt.Errorf("swap: stack underflow")
+		return vm.Errorf("swap: stack underflow")
 	}
 	top := vm.valStack[stackSize-1]
 	vm.valStack[stackSize-1] = vm.valStack[stackSize-2]
@@ -229,7 +241,7 @@ func (vm *VM) DoSwap() error {
 func (vm *VM) DoOver() error {
 	stackSize := len(vm.valStack)
 	if stackSize < 2 {
-		return fmt.Errorf("over: stack underflow")
+		return vm.Errorf("over: stack underflow")
 	}
 	vm.Push(vm.valStack[stackSize-2])
 	return nil
@@ -242,7 +254,7 @@ func (vm *VM) DoMark() error {
 
 func (vm *VM) DoCollect() error {
 	if len(vm.markerStack) == 0 {
-		return fmt.Errorf("collect: no active marker")
+		return vm.Errorf("collect: no active marker")
 	}
 	markerIndex := vm.markerStack[len(vm.markerStack)-1]
 	vm.markerStack = vm.markerStack[:len(vm.markerStack)-1]
@@ -260,7 +272,7 @@ func (vm *VM) DoCollect() error {
 
 func (vm *VM) DoQuote() error {
 	if vm.quoteDepth != 0 {
-		return fmt.Errorf("attempt to evaluate { when quoteDepth=%d", vm.quoteDepth)
+		return vm.Errorf("attempt to evaluate { when quoteDepth=%d", vm.quoteDepth)
 	}
 	vm.quoteBuffer = make(Vec, 0, 64)
 	vm.quoteDepth++
@@ -298,7 +310,7 @@ func (vm *VM) DoPushEnv() error {
 func (vm *VM) DoPopEnv() error {
 	stacksize := len(vm.envStack)
 	if stacksize == 1 {
-		return fmt.Errorf("attempt to pop root env")
+		return vm.Errorf("attempt to pop root env")
 	}
 	vm.envStack = vm.envStack[:stacksize-1]
 	return nil
@@ -325,13 +337,13 @@ func Get[T Val](vm *VM, k any) (T, error) {
 	val := vm.GetVal(k)
 	if val == nil {
 		var zeroT T
-		return zeroT, fmt.Errorf("key not found: %v", k)
+		return zeroT, vm.Errorf("key not found: %v", k)
 	}
 	if value, ok := val.(T); ok {
 		return value, nil
 	}
 	var zeroT T
-	return zeroT, fmt.Errorf("value at key %v is of type %T, expected %T", k, val, zeroT)
+	return zeroT, vm.Errorf("value at key %v is of type %T, expected %T", k, val, zeroT)
 }
 
 func (vm *VM) GetNum(k any) (Num, error) {
@@ -358,23 +370,20 @@ type Token struct {
 	length int
 }
 
-func (t Token) getVal() Val {
+func (t *Token) getVal() Val {
 	return t.v
 }
 
-func (t Token) Eval(vm *VM) error {
-	vm.currentPos = t.pos
-	if vm.tokenCallback != nil {
-		vm.tokenCallback(&t)
-	}
+func (t *Token) Eval(vm *VM) error {
+	vm.currentToken.Set(t)
 	return vm.Eval(t.getVal())
 }
 
-func (t Token) String() string {
+func (t *Token) String() string {
 	return t.getVal().String()
 }
 
-func (t Token) Equal(other Val) bool {
+func (t *Token) Equal(other Val) bool {
 	return Equal(t.getVal(), other.getVal())
 }
 
@@ -411,11 +420,10 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 		pos := s.Position
 		length := len(text)
 		for _, v := range vs {
-			code = append(code, Token{v: v, pos: pos, length: length})
+			code = append(code, &Token{v: v, pos: pos, length: length})
 		}
 	}
 	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
-		vm.currentPos = s.Position
 		switch tok {
 		case scanner.Char, scanner.String, scanner.RawString:
 			text := s.TokenText()
@@ -503,7 +511,34 @@ func (vm *VM) FindMethod(name string) Fun {
 	return nil
 }
 
+func (vm *VM) Err(err error) error {
+	var maybeErr Err
+	if errors.As(err, &maybeErr) {
+		return maybeErr
+	}
+	var maybeThrowValue ThrowValue
+	if errors.As(err, &maybeThrowValue) {
+		return maybeThrowValue
+	}
+	if currentToken := vm.currentToken.Get(); currentToken != nil {
+		return Err{Pos: currentToken.pos, Err: err}
+	} else {
+		return Err{Err: err}
+	}
+}
+
+func (vm *VM) Errorf(format string, a ...any) error {
+	return vm.Err(fmt.Errorf(format, a...))
+}
+
+var ErrEvalCancelled = errors.New("VM evaluation cancelled")
+
 func (vm *VM) Eval(val Val) error {
+	if !vm.isEvaluating.Get() {
+		// someone called vm.CancelEvaluation()
+		vm.evalCancelled <- struct{}{}
+		return ErrEvalCancelled
+	}
 	v := val.getVal()
 	if vm.IsQuoting() {
 		if v == Sym("{") {
@@ -511,7 +546,7 @@ func (vm *VM) Eval(val Val) error {
 			vm.quoteBuffer = append(vm.quoteBuffer, val)
 		} else if v == Sym("}") {
 			if vm.quoteDepth == 0 {
-				return Err{Pos: vm.currentPos, Err: fmt.Errorf("attempt to unquote when quoteDepth == 0")}
+				return vm.Errorf("attempt to unquote when quoteDepth == 0")
 			}
 			vm.quoteDepth--
 			if vm.quoteDepth > 0 {
@@ -530,23 +565,25 @@ func (vm *VM) Eval(val Val) error {
 		if err == nil {
 			return nil
 		}
-		var pe Err
-		if errors.As(err, &pe) {
-			return err
-		}
-		var tv ThrowValue
-		if errors.As(err, &tv) {
-			return err
-		}
-		return Err{Pos: vm.currentPos, Err: err}
+		return vm.Err(err)
 	}
-	return Err{Pos: vm.currentPos, Err: fmt.Errorf("don't know how to evaluate value of type %T", val)}
+	return vm.Errorf("don't know how to evaluate value of type %T", val)
 }
 
 func (vm *VM) ParseAndEval(r io.Reader, filename string) error {
+	vm.isEvaluating.Set(true)
+	defer vm.Reset()
 	code, err := vm.Parse(r, filename)
 	if err != nil {
 		return err
 	}
-	return vm.Eval(code)
+	result := vm.Eval(code)
+	vm.evalResult = vm.Top()
+	return result
+}
+
+func (vm *VM) ReportTapeProgress(t *Tape, nframes int) {
+	if vm.tapeProgressCallback != nil && vm.IsEvaluating() {
+		vm.tapeProgressCallback(t, nframes)
+	}
 }

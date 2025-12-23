@@ -234,7 +234,7 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 		if s.nframes == 0 {
 			return nil, fmt.Errorf("wavetable: input is non-finite stream")
 		}
-		return wavetableFromVal(s.Take(s.nframes))
+		return wavetableFromVal(s.Take(nil, s.nframes))
 	default:
 		return nil, fmt.Errorf("wavetable: cannot create wavetable from %T", v)
 	}

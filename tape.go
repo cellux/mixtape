@@ -43,7 +43,7 @@ func (t *Tape) Stream() Stream {
 
 func (t *Tape) Wave() Wave {
 	wave := make(Wave, t.nframes)
-	tapeMix := t.Stream().Mono().Take(t.nframes)
+	tapeMix := t.Stream().Mono().Take(nil, t.nframes)
 	copy(wave, tapeMix.samples)
 	return wave
 }

@@ -50,7 +50,7 @@ func (os *OtoState) PlayTape(x any) {
 	if streamable, ok := x.(Streamable); ok {
 		stream := streamable.Stream()
 		if stream.nframes > 0 {
-			tape := stream.Take(stream.nframes)
+			tape := stream.Take(nil, stream.nframes)
 			reader := MakeTapeReader(tape, 2)
 			player := os.ctx.NewPlayer(reader)
 			tapePlayer := &TapePlayer{
