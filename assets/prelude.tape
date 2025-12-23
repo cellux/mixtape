@@ -97,25 +97,46 @@ false >:saturate
 ; cents -> freq multiplier
 { 1200 / exp2 } >cents
 
-{ 2 1 partition
-  dup { 0 at } map >:start
-  dup { 1 at } map >:end
-  drop
-} >start:end
-
 {( over {+} reduce / >:unit { :unit * } map )} >distribute
 
 { {join} reduce } >cat
 { vdup cat } >repeat
 { dup len swap {~} map {+} reduce swap / } >mix
 
-{ >:envseg >:nf start:end
-  [
-    { :start :end :nf :envseg }
-    { :envseg eval }
-    seq
-  ] cat
-} >env
+{ 2 1 partition
+  dup { 0 at } map >:start
+  dup { 1 at } map >:end
+  drop
+} >start:end
+
+; env generates an envelope
+;
+; ys: values at envelope points
+; ds: durations between envelope points (in frames)
+; envsegs: closures which generate the envelope segments
+;
+; len(envsegs) = len(ds) = len(ys) - 1
+
+; env: (ys ds segs -- env)
+{( >:envseg >:nf start:end
+   [
+     { :start :end :nf :envseg }
+     { :envseg eval }
+     seq
+   ] cat
+)} >env
+
+{ {+} reduce } >sum
+
+; adsr: (a d s r dur -- env)
+{( >:dur >:release >:sustain/level >:decay >:attack
+   :dur [:attack :decay :release] sum - >:sustain/dur
+   [0 1 :sustain/level :sustain/level 0]
+   [:attack :decay :sustain/dur :release]
+   ;[{8 /log} {-6 /exp} {/line} {-6 /exp}]
+   {/cos} 4 vdup
+   env
+)} >adsr
 
 ; default waves
 { 0 wave/sin } >w/sin

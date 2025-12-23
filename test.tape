@@ -162,6 +162,8 @@ stack len 0 = assert
 
 { {foo bar} 3 vdup [{foo bar} {foo bar} {foo bar}] = } assert
 
+{ [1 2 3] sum 6 = } assert
+
 ; iterators
 
 3 iter
