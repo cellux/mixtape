@@ -456,10 +456,10 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 		}
 		return
 	}
+	prevResult := app.evalResult
 	app.Reset()
 	app.lastScript = editorScript
-	app.prevResult = app.evalResult
-	app.evalResult = nil
+	app.prevResult = prevResult
 	app.errResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {
@@ -486,15 +486,16 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 			}
 		}
 		app.postEvent(func() {
-			app.evalResult = nil
 			app.errResult = nil
-			app.prevResult = nil
 			app.rTape = nil
 			app.rTotalFrames = 0
 			app.rDoneFrames = 0
 			if err != nil {
 				app.errResult = err
+				// Keep displaying the previous successful result alongside the error.
+				app.evalResult = app.prevResult
 			} else {
+				app.prevResult = app.evalResult
 				app.evalResult = result
 			}
 			if wantPlay && app.errResult == nil {
@@ -521,6 +522,7 @@ func (app *App) Reset() {
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
 	app.drainEvents()
+	app.prevResult = nil
 	app.oto.StopAllPlayers()
 	app.editor.Reset()
 	app.kmm.Reset()
