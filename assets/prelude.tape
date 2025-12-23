@@ -84,6 +84,7 @@ false >:saturate
 {( over {+} reduce / >:unit { :unit * } map )} >distribute
 
 { {join} reduce } >cat
+{ vdup cat } >repeat
 
 { >:envseg >:nf start:end
   [
