@@ -453,7 +453,9 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 		return
 	}
 	app.Reset()
-	app.prevResult = app.evalResult
+	if _, ok := app.evalResult.(error); !ok {
+		app.prevResult = app.evalResult
+	}
 	app.evalResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {

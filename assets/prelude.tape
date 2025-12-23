@@ -85,6 +85,7 @@ false >:saturate
 
 { {join} reduce } >cat
 { vdup cat } >repeat
+{ dup len swap {~} map {+} reduce swap / } >mix
 
 { >:envseg >:nf start:end
   [
