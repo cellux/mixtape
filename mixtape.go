@@ -47,9 +47,9 @@ type App struct {
 	oto         *OtoState
 	tapeDisplay *TapeDisplay
 	// rTape points to the currently rendered tape
-	rTape *Tape
-	// rFrames is the number of frames already rendered for rTape
-	rFrames      int
+	rTape        *Tape
+	rTotalFrames int
+	rDoneFrames  int
 	kmm          *KeyMapManager
 	editorKeyMap KeyMap
 	events       chan Event
@@ -116,10 +116,13 @@ func (app *App) Init() error {
 		return err
 	}
 	app.tapeDisplay = tapeDisplay
-	app.vm.tapeProgressCallback = func(t *Tape, nframes int) {
+	app.vm.tapeProgressCallback = func(t *Tape, nftotal, nfdone int) {
 		app.postEvent(func() {
-			app.rTape = t
-			app.rFrames = nframes
+			if app.vm.IsEvaluating() {
+				app.rTape = t
+				app.rTotalFrames = nftotal
+				app.rDoneFrames = nfdone
+			}
 		}, true)
 	}
 
@@ -409,13 +412,7 @@ func (app *App) Render() error {
 		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
 	default:
 		if result == nil {
-			if app.rTape != nil {
-				// currently rendered tape
-				editorPane, tapeDisplayPane = screenPane.SplitY(-8)
-				app.tapeDisplay.Render(app.rTape, tapeDisplayPane.GetPixelRect(), app.rFrames, 0, nil)
-			} else {
-				editorPane = screenPane
-			}
+			editorPane = screenPane
 		} else {
 			editorPane, statusPane = screenPane.SplitY(-1)
 			statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
@@ -425,7 +422,7 @@ func (app *App) Render() error {
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
 	currentToken := app.vm.currentToken.Get()
 	app.editor.Render(editorBufferPane, currentToken)
-	app.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken)
+	app.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
 
 	ts.Render()
 	return nil
@@ -487,7 +484,8 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 			app.evalResult = result
 			app.prevResult = nil
 			app.rTape = nil
-			app.rFrames = 0
+			app.rTotalFrames = 0
+			app.rDoneFrames = 0
 			if wantPlay {
 				app.playEvalResult()
 			}
@@ -504,8 +502,8 @@ func (app *App) Reset() {
 		app.vm.CancelEvaluation()
 	}
 	app.rTape = nil
-	app.rFrames = 0
-	app.lastScript = nil
+	app.rTotalFrames = 0
+	app.rDoneFrames = 0
 	if app.prevResult != nil {
 		app.evalResult = app.prevResult
 		app.prevResult = nil

@@ -429,11 +429,14 @@ func (e *Editor) Render(tp TilePane, currentToken *Token) {
 	}
 }
 
-func (e *Editor) RenderStatusLine(tp TilePane, currentFile string, currentToken *Token) {
+func (e *Editor) RenderStatusLine(tp TilePane, currentFile string, currentToken *Token, nftotal, nfdone int) {
 	leftText := fmt.Sprintf("%s  Ln %d, Col %d", currentFile, e.point.line+1, e.point.column+1)
 	var rightText string
 	if currentToken != nil {
 		rightText = currentToken.String()
+	}
+	if nftotal != 0 {
+		rightText += fmt.Sprintf(" %d%%", nfdone*100/nftotal)
 	}
 	paddedWidth := tp.Width() - 2
 	if paddedWidth <= 0 {

@@ -77,7 +77,6 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 	end := nframes * nchannels
 	pct1 := end / 100
 	pct1 = pct1 - (pct1 % nchannels)
-	reportingThreshold := SampleRate()
 	for frame := range s.seq {
 		for i := range nchannels {
 			t.samples[writeIndex] = frame[i]
@@ -86,11 +85,11 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 		if writeIndex == end {
 			break
 		}
-		if vm != nil && nframes > reportingThreshold && writeIndex%pct1 == 0 {
+		if vm != nil && pct1 > 0 && writeIndex%pct1 == 0 {
 			if !vm.IsEvaluating() {
 				break
 			}
-			vm.ReportTapeProgress(t, writeIndex/nchannels)
+			vm.ReportTapeProgress(t, end/nchannels, writeIndex/nchannels)
 		}
 	}
 	return t

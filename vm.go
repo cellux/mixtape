@@ -88,10 +88,10 @@ type VM struct {
 	quoteBuffer          Vec   // quoted code
 	quoteDepth           int   // nesting level {... {.. {..} ..} ...}
 	isEvaluating         Box[bool]
-	evalResult           Val                        // top of stack after a successful evaluation
-	evalCancelled        chan struct{}              // triggered when eval cancellation succeeded
-	currentToken         Box[*Token]                // currently executing token of the script
-	tapeProgressCallback func(t *Tape, nframes int) // invoked by long-running rendering operations
+	evalResult           Val           // top of stack after a successful evaluation
+	evalCancelled        chan struct{} // triggered when eval cancellation succeeded
+	currentToken         Box[*Token]   // currently executing token of the script
+	tapeProgressCallback func(t *Tape, nftotal, nfdone int)
 }
 
 func CreateVM() (*VM, error) {
@@ -582,8 +582,8 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) error {
 	return result
 }
 
-func (vm *VM) ReportTapeProgress(t *Tape, nframes int) {
+func (vm *VM) ReportTapeProgress(t *Tape, nftotal, nfdone int) {
 	if vm.tapeProgressCallback != nil && vm.IsEvaluating() {
-		vm.tapeProgressCallback(t, nframes)
+		vm.tapeProgressCallback(t, nftotal, nfdone)
 	}
 }
