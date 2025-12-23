@@ -85,11 +85,15 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 		if writeIndex == end {
 			break
 		}
-		if vm != nil && pct1 > 0 && writeIndex%pct1 == 0 {
+		if vm != nil {
+			// Check cancellation frequently enough to make C-g feel responsive,
+			// but only report progress occasionally.
 			if !vm.IsEvaluating() {
 				break
 			}
-			vm.ReportTapeProgress(t, end/nchannels, writeIndex/nchannels)
+			if pct1 > 0 && writeIndex%pct1 == 0 {
+				vm.ReportTapeProgress(t, end/nchannels, writeIndex/nchannels)
+			}
 		}
 	}
 	return t
