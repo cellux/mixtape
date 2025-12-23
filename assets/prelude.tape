@@ -1,19 +1,34 @@
+; true: ( -- true)
 -1 >true
+
+; false: ( -- false)
 0 >false
 
+; false?: (x -- bool)
 { 0 = } >false?
+
+; not: (x -- bool)
 { 0 = } >not
+
+; !=: (a b -- bool)
 { = false? } >!=
+
+; true?: (x -- bool)
 { 0 != } >true?
+
+; nil?: (x -- bool)
 { nil = } >nil?
 
+; assert: (pred --) checks pred and throws error if false
 { dup >:assert/value
   eval
   false? { "assertion failed: " :assert/value str + throw } if
 } >assert
 
+; break: ( -- bottom) exits current loop
 { nil throw } >break
 
+; zip: ([xs...] -- [[zs...]]): pull in lockstep until any iterator yields nil
 {( { iter } map >:zip/iters
    [] >:zip/result
    {
@@ -59,50 +74,86 @@
 )} >seq
 
 ; oscillator defaults
+
+; :freq: ( -- n) frequency
 440 >:freq
+; :phase: ( -- n) phase
 0.0 >:phase
+; :pw: ( -- n) pulse width
 0.5 >:pw
 
 ; filter defaults
+
+; :cutoff: ( -- n) cutoff
 1200  >:cutoff
+; :q: ( -- n) resonance
 0.7   >:q
+; :drive: ( -- n) drive
 1.0   >:drive
+; :blend: ( -- n) blend
 0.0   >:blend
+; :saturate: ( -- bool) saturation toggle
 false >:saturate
 
 ; FM defaults
+
+; :mod: ( -- n) FM phase offset (in cycles)
 0.0 >:mod
+; :index: ( -- n) FM index
 1.0 >:index
 
-; RNG defaults
+; noise RNG defaults
+
+; :seed: ( -- n) seed used by noise generators
 0 >:seed
 
+; start: ( -- n)
 0 >:start
+; end: ( -- n)
 1 >:end
 
+; f: (freq --) set default :freq
 { ":freq" swap set } >f
+
+; seconds: (dur -- frames)
 { sr * } >seconds
+
+; beats: (beats -- frames)
 { sr :bpm 60 / / * } >beats
+
+; periods: (cycles -- frames)
 { sr :freq / * } >periods
 
+; ticks: (ticks -- frames)
 { beats :tpb / } >ticks
-{ SRC_LINEAR swap resample } >stretch
 
-; semitone offset -> freq multiplier
+; st: (semitones -- ratio)
 { 12 / exp2 } >st
 
-; MIDI note -> frequency
+; mtof: (midi-note -- freq)
 { 69 - st 440 * } >mtof
 
-; cents -> freq multiplier
+; cents: (cents -- ratio)
 { 1200 / exp2 } >cents
 
+; distribute: (vals n -- vals') scale vals so their sum equals n
+; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
 {( over {+} reduce / >:unit { :unit * } map )} >distribute
 
+; cat: ([...chunks...] -- chunk) concatenate streams
 { {join} reduce } >cat
+
+; repeat: (chunk n -- chunk) repeat and concat
 { vdup cat } >repeat
+
+; mix: ([streams] -- stream) average a list of streams
 { dup len swap {~} map {+} reduce swap / } >mix
 
+; stretch: (stream factor -- stream)
+{ SRC_LINEAR swap resample } >stretch
+
+; start:end: ([xs] -- ) sets :start to starts and :end to ends
+; (e.g., after [0 2 5 6] start:end, :start = [0 2 5], :end = [2 5 6])
 { 2 1 partition
   dup { 0 at } map >:start
   dup { 1 at } map >:end
@@ -126,6 +177,7 @@ false >:saturate
    ] cat
 )} >env
 
+; sum: ([nums] -- n)
 { {+} reduce } >sum
 
 ; adsr: (a d s r dur -- env)
@@ -147,19 +199,43 @@ false >:saturate
 )} >perc
 
 ; default waves
+
+; w/sin: ( -- wave)
 { 0 wave/sin } >w/sin
+
+; w/tanh: ( -- wave)
 { 0 wave/tanh } >w/tanh
+
+; w/triangle: ( -- wave)
 { 0 wave/triangle } >w/triangle
+
+; w/square: ( -- wave)
 { 0 wave/square } >w/square
+
+; w/pulse: ( -- wave)
 { 0 wave/pulse } >w/pulse
+
+; w/saw: ( -- wave)
 { 0 wave/saw } >w/saw
 
 ; wave phasors
+
+; ~sin: (freq -- stream)
 { w/sin phasor } >~sin
+
+; ~tanh: (freq -- stream)
 { w/tanh phasor } >~tanh
+
+; ~triangle: (freq -- stream)
 { w/triangle phasor } >~triangle
+
+; ~square: (freq -- stream)
 { w/square phasor } >~square
+
+; ~pulse: (pw freq -- stream)
 { w/pulse phasor } >~pulse
+
+; ~saw: (freq -- stream)
 { w/saw phasor } >~saw
 
 ; lfo
@@ -183,5 +259,9 @@ false >:saturate
 {( >:freq ~saw 0.76p skip )} >~lfo/saw
 
 ; unipolar <-> bipolar conversions
+
+; uni: (bipolar -- unipolar)
 { 1 + 2 / } >uni
+
+; bi: (unipolar -- bipolar)
 { 2 * 1 - } >bi
