@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,8 +13,8 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
-//go:embed prelude.tape
-var prelude string
+//go:embed assets/*
+var assets embed.FS
 
 var flags struct {
 	LogLevel   string
@@ -77,7 +77,11 @@ func (app *App) Init() error {
 		return err
 	}
 	app.oto = oto
-	font, err := LoadFontFromFile("/usr/share/fonts/droid/DroidSansMono.ttf")
+	fontBytes, err := assets.ReadFile("assets/DroidSansMono.ttf")
+	if err != nil {
+		return err
+	}
+	font, err := LoadFontFromBytes(fontBytes)
 	if err != nil {
 		return err
 	}
@@ -596,7 +600,12 @@ func main() {
 		os.Exit(1)
 	}
 	setDefaults(vm)
-	err = vm.ParseAndEval(strings.NewReader(prelude), "<prelude>")
+	prelude, err := assets.ReadFile("assets/prelude.tape")
+	if err != nil {
+		logger.Error("cannot load prelude from embed.FS", "err", err)
+		os.Exit(1)
+	}
+	err = vm.ParseAndEval(bytes.NewReader(prelude), "<prelude>")
 	if err != nil {
 		logger.Error("error while parsing the prelude", "err", err)
 		os.Exit(1)
