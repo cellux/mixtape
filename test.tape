@@ -374,6 +374,20 @@ drop
 
 { 1 -20 gain 1s take 0 0 at 0.1 = } assert
 
+; clamp
+
+{ 5 0 10 clamp 5 = } assert
+{ -5 0 10 clamp 0 = } assert
+{ 15 0 10 clamp 10 = } assert
+
+{ 1.5 -1 1 clamp 1s take 0 0 at 1 = } assert
+{ -2 -1 1 clamp 1s take 0 0 at -1 = } assert
+
+; clip
+
+{ 1.5 clip 1s take 0 0 at 1 = } assert
+{ -2 clip 1s take 0 0 at -1 = } assert
+
 ; utilities
 
 { 3 4 5 drop + 7 = } assert
