@@ -161,3 +161,27 @@ false >:saturate
 { w/square phasor } >~square
 { w/pulse phasor } >~pulse
 { w/saw phasor } >~saw
+
+; lfo
+
+; ~lfo/sin: (freq -- stream)
+{( >:freq ~sin)} >~lfo/sin
+
+; ~lfo/tanh: (freq -- stream)
+{( >:freq ~tanh)} >~lfo/tanh
+
+; ~lfo/triangle: (freq -- stream)
+{( >:freq ~triangle 0.25p skip )} >~lfo/triangle
+
+; ~lfo/square: (freq -- stream)
+{( >:freq ~square 0.26p skip)} >~lfo/square
+
+; ~lfo/pulse: (pw freq -- stream)
+{( >:freq >:pw ~pulse :pw 0.01 + periods skip )} >~lfo/pulse
+
+; ~lfo/saw: (freq -- stream)
+{( >:freq ~saw 0.76p skip )} >~lfo/saw
+
+; unipolar <-> bipolar conversions
+{ 1 + 2 / } >uni
+{ 2 * 1 - } >bi

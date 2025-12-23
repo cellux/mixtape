@@ -193,6 +193,21 @@ func (s Stream) Delay(nframes int) Stream {
 	})
 }
 
+func (s Stream) Skip(nframes int) Stream {
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+		skipped := 0
+		for frame := range s.seq {
+			if skipped < nframes {
+				skipped++
+				continue
+			}
+			if !yield(frame) {
+				return
+			}
+		}
+	})
+}
+
 // equalPowerPan returns gains for left/right given pan in [-1,1].
 func equalPowerPan(p float64) (float64, float64) {
 	if p < -1 {
@@ -366,6 +381,23 @@ func init() {
 			return err
 		}
 		vm.Push(stream.Delay(int(nfNum)))
+		return nil
+	})
+
+	RegisterWord("skip", func(vm *VM) error {
+		nfNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		nf := int(nfNum)
+		if nf <= 0 {
+			return vm.Errorf("skip: nframes must be positive")
+		}
+		vm.Push(stream.Skip(nf))
 		return nil
 	})
 
