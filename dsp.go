@@ -193,6 +193,34 @@ func (s Stream) Delay(nframes int) Stream {
 	})
 }
 
+// Z1 returns a one-sample delay with an explicit initial frame.
+// The first output frame is the provided init; thereafter each output frame
+// is the previous input frame.
+func Z1(s Stream, init Frame) Stream {
+	var nframes int
+	if s.nframes == 0 {
+		nframes = 0
+	} else {
+		nframes = s.nframes + 1
+	}
+	nchannels := s.nchannels
+	return makeStream(nchannels, nframes, func(yield func(Frame) bool) {
+		prev := make(Frame, nchannels)
+		copy(prev, init)
+		out := make(Frame, nchannels)
+		for frame := range s.seq {
+			copy(out, prev)
+			copy(prev, frame)
+			if !yield(out) {
+				return
+			}
+		}
+		if !yield(prev) {
+			return
+		}
+	})
+}
+
 func (s Stream) Skip(nframes int) Stream {
 	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
 		skipped := 0
@@ -444,6 +472,40 @@ func init() {
 			return err
 		}
 		vm.Push(stream.Delay(int(nfNum)))
+		return nil
+	})
+
+	RegisterWord("z1*", func(vm *VM) error {
+		initVal := vm.Pop()
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+
+		nchannels := stream.nchannels
+		initFrame := make(Frame, nchannels)
+
+		switch v := initVal.(type) {
+		case Num:
+			for i := range nchannels {
+				initFrame[i] = Smp(v)
+			}
+		case Vec:
+			if len(v) != nchannels {
+				return vm.Errorf("z1*: init vec length must match channel count (got %d, expected %d)", len(v), nchannels)
+			}
+			for i, item := range v {
+				num, ok := item.(Num)
+				if !ok {
+					return vm.Errorf("z1*: init vec items must be numbers (index %d has %T)", i, item)
+				}
+				initFrame[i] = Smp(num)
+			}
+		default:
+			return vm.Errorf("z1*: init must be Num or Vec, got %T", initVal)
+		}
+
+		vm.Push(Z1(stream, initFrame))
 		return nil
 	})
 

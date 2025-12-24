@@ -37,6 +37,7 @@
 ; sh: ( input rate -- output ) sample-and-hold input at rate
 ; comb: ( input delay fb -- stream ) feedback comb filter
 ; delay: ( stream nf -- stream ) delay by nf frames
+; z1*: ( stream init -- stream ) one-sample delay with explicit init frame
 ; skip: ( stream nf -- stream ) skip first nf frames
 ; pan: ( input pan -- stereo ) equal-power pan mono input
 ; mix: ( vec ratio -- stream ) mix adjacent streams based on ratio in [0,1]
@@ -84,7 +85,8 @@
 ; tape1: ( nframes -- tape ) allocate mono tape
 ; tape2: ( nframes -- tape ) allocate stereo tape
 ; ~: ( val -- stream ) coerce to stream
-; take: ( stream nf -- stream ) take first nf frames
+; take: ( stream nf -- tape ) take first nf frames as a tape
+; frames: ( stream -- vec ) collect all frames of stream into vec
 ; mono: ( stream -- stream ) sum/convert to mono
 ; stereo: ( stream -- stream ) ensure stereo
 ; wt: ( val -- wt ) coerce to wavetable
@@ -415,3 +417,6 @@ false >:saturate
 
 ; bi: ( unipolar -- bipolar )
 { 2 * 1 - } >bi
+
+; z1: ( stream -- stream ) one-sample delay with zero init
+{ 0 z1* } >z1

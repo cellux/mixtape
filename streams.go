@@ -56,6 +56,10 @@ func makeTransformStream(inputs []Stream, seq iter.Seq[Frame]) Stream {
 	return makeStream(nchannels, nframes, seq)
 }
 
+func makeEmptyStream(nchannels int) Stream {
+	return makeStream(nchannels, 0, func(yield func(Frame) bool) {})
+}
+
 func streamFromVal(v Val) (Stream, error) {
 	if s, ok := v.(Streamable); ok {
 		return s.Stream(), nil
@@ -94,6 +98,25 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 		}
 	}
 	return t
+}
+
+func (s Stream) Frames(vm *VM) (Vec, error) {
+	if s.nframes == 0 {
+		return nil, vm.Errorf("frames: attempt to turn infinite stream into finite vec")
+	}
+	v := make(Vec, 0, s.nframes)
+	for frame := range s.seq {
+		if s.nchannels == 1 {
+			v = append(v, Num(frame[0]))
+		} else {
+			sv := make(Vec, s.nchannels)
+			for ch, smp := range frame {
+				sv[ch] = Num(smp)
+			}
+			v = append(v, sv)
+		}
+	}
+	return v, nil
 }
 
 func (s Stream) Mono() Stream {
@@ -246,6 +269,19 @@ func init() {
 			return err
 		}
 		vm.Push(stream.Take(vm, int(nfNum)))
+		return nil
+	})
+
+	RegisterWord("frames", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vec, err := stream.Frames(vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(vec)
 		return nil
 	})
 

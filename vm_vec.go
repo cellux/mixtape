@@ -12,6 +12,55 @@ func (v Vec) String() string {
 	return fmt.Sprintf("%v", []Val(v))
 }
 
+func (v Vec) allNums() bool {
+	for _, item := range v {
+		if _, ok := item.(Num); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (v Vec) Stream() Stream {
+	if v.allNums() {
+		return makeStream(1, len(v), func(yield func(Frame) bool) {
+			out := make(Frame, 1)
+			for _, item := range v {
+				out[0] = Smp(item.(Num))
+				if !yield(out) {
+					return
+				}
+			}
+		})
+	}
+	nchannels := 0
+	for _, item := range v {
+		if sv, ok := item.(Vec); ok {
+			if !sv.allNums() {
+				return makeEmptyStream(1)
+			}
+			if nchannels == 0 {
+				nchannels = len(sv)
+			} else if len(sv) != nchannels {
+				return makeEmptyStream(1)
+			}
+		} else {
+			return makeEmptyStream(1)
+		}
+	}
+	return makeStream(nchannels, len(v), func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		for _, sv := range v {
+			for ch := range nchannels {
+				out[ch] = Smp(sv.(Vec)[ch].(Num))
+			}
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 func (v Vec) Eval(vm *VM) error {
 	for _, val := range v {
 		if val.getVal() == Sym("--") && !vm.IsQuoting() {
