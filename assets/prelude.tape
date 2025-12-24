@@ -294,8 +294,8 @@ false >:saturate
 ; repeat: ( chunk n -- chunk ) repeat and concat
 { vdup cat } >repeat
 
-; mix: ( [streams] -- stream ) average a list of streams
-{ dup len swap {~} map {+} reduce swap / } >mix
+; avg: ( [streams] -- stream ) average a list of streams/numbers
+{ dup len swap {+} reduce swap / } >avg
 
 ; stretch: ( stream factor -- stream )
 { SRC_LINEAR swap resample } >stretch

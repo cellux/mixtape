@@ -388,6 +388,10 @@ drop
 { 1.5 clip 1s take 0 0 at 1 = } assert
 { -2 clip 1s take 0 0 at -1 = } assert
 
+; avg
+
+{ [2 5 8] avg 5 = } assert
+
 ; utilities
 
 { 3 4 5 drop + 7 = } assert
