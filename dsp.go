@@ -145,6 +145,29 @@ func OnePole(s Stream, a float64) Stream {
 	})
 }
 
+// Peak computes the maximum absolute value per frame, returning a mono stream.
+func Peak(s Stream) Stream {
+	return makeStream(1, s.nframes, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		for frame := range s.seq {
+			maxAbs := Smp(0)
+			for c := range s.nchannels {
+				v := frame[c]
+				if v < 0 {
+					v = -v
+				}
+				if v > maxAbs {
+					maxAbs = v
+				}
+			}
+			out[0] = maxAbs
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 // CombFilter applies a simple feedback comb filter to the input stream.
 // delayFrames is a (potentially varying) stream specifying the delay in samples.
 // feedback controls the amount of fed-back signal (-1..1 is stable).
@@ -486,6 +509,15 @@ func init() {
 			return err
 		}
 		vm.Push(DCFilter(stream))
+		return nil
+	})
+
+	RegisterWord("peak", func(vm *VM) error {
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(Peak(stream))
 		return nil
 	})
 

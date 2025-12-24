@@ -35,6 +35,7 @@
 ; dc*: ( stream alpha -- stream ) DC-blocking IIR with smoothing alpha
 ; onepole: ( stream alpha -- stream ) first-order IIR smoother; higher alpha = more smoothing
 ; dc: ( stream -- stream ) remove DC offset with alpha = 1-1/SR
+; peak: ( stream -- stream ) max(abs(x) for x in frame)
 ; sh: ( input rate -- output ) sample-and-hold input at rate
 ; comb: ( input delay fb -- stream ) feedback comb filter
 ; delay: ( stream nf -- stream ) delay by nf frames
