@@ -26,6 +26,10 @@ func SignOp() SmpUnOp {
 	}
 }
 
+func SquareOp() SmpUnOp {
+	return func(x Smp) Smp { return x * x }
+}
+
 func ExpOp() SmpUnOp {
 	return func(x Smp) Smp { return math.Exp(x) }
 }
@@ -180,6 +184,10 @@ func init() {
 
 	RegisterWord("sign", func(vm *VM) error {
 		return applySmpUnOp(vm, SignOp())
+	})
+
+	RegisterWord("square", func(vm *VM) error {
+		return applySmpUnOp(vm, SquareOp())
 	})
 
 	RegisterWord("exp", func(vm *VM) error {
