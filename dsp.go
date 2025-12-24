@@ -441,6 +441,38 @@ func init() {
 		return nil
 	})
 
+	RegisterWord("softclip", func(vm *VM) error {
+		nfMode, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		mode := int(nfMode)
+		switch mode {
+		case 0: // tanh
+			return applySmpUnOp(vm, TanhOp())
+		case 1: // atan (scaled to [-1,1])
+			return applySmpUnOp(vm, func(x Smp) Smp {
+				return Smp((2.0 / math.Pi) * math.Atan(float64(x)))
+			})
+		case 2: // cubic soft clip
+			return applySmpUnOp(vm, func(x Smp) Smp {
+				if x < -1 {
+					return -2.0 / 3.0
+				}
+				if x > 1 {
+					return 2.0 / 3.0
+				}
+				return x - (x*x*x)/3.0
+			})
+		case 3: // softsign
+			return applySmpUnOp(vm, func(x Smp) Smp {
+				return x / (1 + Smp(math.Abs(float64(x))))
+			})
+		default:
+			return vm.Errorf("softclip: invalid mode (%d)", mode)
+		}
+	})
+
 	RegisterWord("comb", func(vm *VM) error {
 		fb, err := Pop[Num](vm)
 		if err != nil {

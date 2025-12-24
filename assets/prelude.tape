@@ -76,6 +76,7 @@
 ; min: ( a b -- c ) minimum
 ; max: ( a b -- c ) maximum
 ; clamp: ( stream min max -- stream ) clamp samples to range
+; softclip: ( stream mode -- stream ) smooth saturation (0=tanh, 1=atan, 2=poly, 3=softsign)
 ; rand: ( -- n ) random float in [0,1)
 ; rand/seed: ( seed -- ) reseed RNG
 ; ~noise: ( :seed -- stream ) white noise
