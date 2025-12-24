@@ -33,6 +33,7 @@
 ; /sigmoid: ( :start :end :nf k -- envseg ) logistic envelope with slope k
 ; ~impulse: ( :freq :phase -- stream ) band-limited impulse train
 ; dc*: ( stream alpha -- stream ) DC-blocking IIR with smoothing alpha
+; onepole: ( stream alpha -- stream ) first-order IIR smoother; higher alpha = more smoothing
 ; dc: ( stream -- stream ) remove DC offset with alpha = 1-1/SR
 ; sh: ( input rate -- output ) sample-and-hold input at rate
 ; comb: ( input delay fb -- stream ) feedback comb filter

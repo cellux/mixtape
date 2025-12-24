@@ -110,6 +110,41 @@ func DCFilter(s Stream) Stream {
 	return DCBlock(s, alpha)
 }
 
+// OnePole applies a first-order IIR smoother: y[n] = a*y[n-1] + (1-a)*x[n]
+// a is clamped to [0,1]; a=0 is passthrough, larger values increase smoothing.
+func OnePole(s Stream, a float64) Stream {
+	if a < 0 {
+		a = 0
+	}
+	if a > 1 {
+		a = 1
+	}
+
+	nchannels := s.nchannels
+	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		prev := make(Frame, nchannels)
+		initialized := false
+
+		for frame := range s.seq {
+			if !initialized {
+				copy(prev, frame)
+				copy(out, prev)
+				initialized = true
+			} else {
+				for c := range nchannels {
+					prev[c] = Smp(a)*prev[c] + Smp(1-a)*frame[c]
+					out[c] = prev[c]
+				}
+			}
+
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 // CombFilter applies a simple feedback comb filter to the input stream.
 // delayFrames is a (potentially varying) stream specifying the delay in samples.
 // feedback controls the amount of fed-back signal (-1..1 is stable).
@@ -415,6 +450,19 @@ func init() {
 		}
 		alpha := float64(alphaNum)
 		vm.Push(DCBlock(stream, alpha))
+		return nil
+	})
+
+	RegisterWord("onepole", func(vm *VM) error {
+		alphaNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		stream, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(OnePole(stream, float64(alphaNum)))
 		return nil
 	})
 
