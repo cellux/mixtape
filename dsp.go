@@ -293,6 +293,69 @@ func Pan(s Stream, pan Stream) Stream {
 	})
 }
 
+// Mix takes N streams and mixes two neighbors into a single stream.
+//
+// The mixed streams are selected by the ratio argument. A value of
+// 0.7 with N=2 results in a 30%/70% mix of the first and second
+// streams.
+func Mix(ss []Stream, ratio Stream) Stream {
+	nchannels := ss[0].nchannels
+	allStreams := append(ss[:], ratio.Mono())
+	ratioIndex := len(ss)
+	return makeTransformStream(allStreams, func(yield func(Frame) bool) {
+		out := make(Frame, nchannels)
+		nexts := make([]func() (Frame, bool), len(allStreams))
+		stops := make([]func(), len(allStreams))
+		frames := make([]Frame, len(ss))
+		for i, s := range allStreams {
+			next, stop := iter.Pull(s.seq)
+			nexts[i] = next
+			stops[i] = stop
+		}
+		defer func() {
+			for _, stop := range stops {
+				stop()
+			}
+		}()
+		for {
+			for ch := range nchannels {
+				out[ch] = 0
+			}
+			ratioFrame, ok := nexts[ratioIndex]()
+			if !ok {
+				return
+			}
+			ratio := ratioFrame[0]
+			if ratio > 1 {
+				ratio = 1
+			}
+			if ratio < 0 {
+				ratio = 0
+			}
+			n := len(ss)
+			floatIndex := ratio * Smp(n-1)
+			leftIndex := min(n-1, int(floatIndex))
+			rightIndex := min(n-1, leftIndex+1)
+			rightWeight := floatIndex - Smp(leftIndex)
+			leftWeight := 1.0 - rightWeight
+			for i := range ss {
+				frames[i], ok = nexts[i]()
+				if !ok {
+					return
+				}
+			}
+			lframe := frames[leftIndex]
+			rframe := frames[rightIndex]
+			for ch := range nchannels {
+				out[ch] = lframe[ch]*leftWeight + rframe[ch]*rightWeight
+			}
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
 func init() {
 	RegisterWord("~impulse", func(vm *VM) error {
 		freq, err := vm.GetStream(":freq")
@@ -412,6 +475,41 @@ func init() {
 			return err
 		}
 		vm.Push(Pan(input, pan))
+		return nil
+	})
+
+	RegisterWord("mix", func(vm *VM) error {
+		// inputs ratio -- output
+		ratio, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		inputs, err := Pop[Vec](vm)
+		if err != nil {
+			return err
+		}
+		if len(inputs) == 0 {
+			return vm.Errorf("mix: input vec is empty")
+		}
+		if len(inputs) == 1 {
+			vm.Push(inputs[0])
+			return nil
+		}
+		streams := make([]Stream, len(inputs))
+		for i, v := range inputs {
+			s, err := streamFromVal(v)
+			if err != nil {
+				return err
+			}
+			streams[i] = s
+		}
+		nchannels := streams[0].nchannels
+		for _, s := range streams {
+			if s.nchannels != nchannels {
+				return vm.Errorf("mix: all inputs must have the same number of channels")
+			}
+		}
+		vm.Push(Mix(streams, ratio))
 		return nil
 	})
 }

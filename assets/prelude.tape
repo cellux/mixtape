@@ -39,6 +39,7 @@
 ; delay: ( stream nf -- stream ) delay by nf frames
 ; skip: ( stream nf -- stream ) skip first nf frames
 ; pan: ( input pan -- stereo ) equal-power pan mono input
+; mix: ( vec ratio -- stream ) mix adjacent streams based on ratio in [0,1]
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( x -- y ) absolute value
