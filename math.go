@@ -16,6 +16,16 @@ func AbsOp() SmpUnOp {
 	return func(x Smp) Smp { return math.Abs(x) }
 }
 
+func SignOp() SmpUnOp {
+	return func(x Smp) Smp {
+		if math.Signbit(x) {
+			return -1
+		} else {
+			return 1
+		}
+	}
+}
+
 func ExpOp() SmpUnOp {
 	return func(x Smp) Smp { return math.Exp(x) }
 }
@@ -166,6 +176,10 @@ func init() {
 
 	RegisterWord("abs", func(vm *VM) error {
 		return applySmpUnOp(vm, AbsOp())
+	})
+
+	RegisterWord("sign", func(vm *VM) error {
+		return applySmpUnOp(vm, SignOp())
 	})
 
 	RegisterWord("exp", func(vm *VM) error {

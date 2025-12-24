@@ -44,6 +44,7 @@
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( x -- y ) absolute value
+; sign: ( x -- -1|1 ) sign of x
 ; exp: ( x -- y ) natural exponential
 ; exp2: ( x -- y ) power-of-two exponential
 ; log10: ( x -- y ) base-10 logarithm

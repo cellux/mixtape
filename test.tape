@@ -85,6 +85,9 @@ stack len 0 = assert
 {  8 abs 8 = } assert
 { -8 abs 8 = } assert
 
+{  8 sign 1 = } assert
+{ -8 sign -1 = } assert
+
 { 1 exp 2.718281828459045 = } assert
 
 { 5 exp
