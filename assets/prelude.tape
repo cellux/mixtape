@@ -145,6 +145,13 @@
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
 ; vital/svf: ( :cutoff :q :drive :blend :saturate S -- s ) state-variable filter with env params
 ; vdup: ( x n -- [xs] ) n copies of x in vec
+
+; builtin methods
+
+; These show methods as =Type.word:= for clarity. The actual token is
+; =word=, and dispatch is based on the runtime type of the receiver
+; (first stack argument).
+
 ; Num.if: ( b then -- ) conditional execute when nonzero
 ; Num.if: ( b then else -- ) conditional with else branch
 ; Num.<: ( n n -- b ) less-than
@@ -321,7 +328,7 @@ false >:saturate
 ; clip: ( S -- s ) constrain stream samples to [-1,1]
 { -1 1 clamp } >clip
 
-; distribute: ( [ns] n -- [ns] ) scale vals so their sum equals n
+; distribute: ( [ns] n -- [ns] ) scale vals so their sum equals n; sum(ns) must be nonzero
 ; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
 {( over {+} reduce / >:unit { :unit * } map )} >distribute
 
