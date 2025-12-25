@@ -1,4 +1,4 @@
-; stack comment format
+;; stack comment format
 
 ; [TYPE.]NAME: ( ENV-IN* STACK-IN* -- STACK-OUT* ENV-OUT* ) DESCRIPTION
 
@@ -9,7 +9,7 @@
 ; STACK-OUT: values left on stack
 ; ENV-OUT: env vars modified by WORD
 
-; stack comment variable names
+;; stack comment variable names
 
 ; x y k : any value
 ; n : Num
@@ -29,16 +29,22 @@
 ; body : anything that can be evaluated
 ; any other name is a synonym for x
 
-; builtins
+;; a note on methods
+
+; doc comments show methods as =Type.word:= for clarity. The actual
+; token is =word=, and dispatch is based on the runtime type of the
+; receiver (first stack argument).
+
+;;; BUILTINS
+
+;; core VM words
 
 ; nil: ( -- nil ) push Nil onto stack
 ; throw: ( x -- ) raise an exception carrying x
 ; catch: ( body -- x|nil ) evaluate body and capture value carried in exception (or nil on success)
 ; loop: ( body -- ) evaluate body repeatedly until break/throw
-; log: ( x -- x ) log top of stack without consuming it
-; sr: ( -- n ) push global sample rate
-; =: ( x y -- b ) equality check
 ; stack: ( -- v ) push current stack snapshot
+; log: ( x -- x ) log top of stack without consuming it
 ; str: ( x -- str ) stringify
 ; drop: ( x -- ) drop top
 ; nip: ( x y -- y ) drop second-from-top
@@ -56,24 +62,31 @@
 ; eval: ( x -- <xs> ) evaluate x
 ; iter: ( I -- i ) obtain iterator from iterable
 ; next: ( i -- i x|nil ) advance iterator
-; /line: ( :start :end :nf -- t ) linear envelope segment
-; /exp: ( :start :end :nf k -- t ) exponential envelope segment with curve k
-; /log: ( :start :end :nf k -- t ) logarithmic envelope segment with curve k
-; /cos: ( :start :end :nf -- t ) cosine ease-in/out envelope segment
-; /pow: ( :start :end :nf p -- t ) power-law envelope segment with exponent p
-; /sigmoid: ( :start :end :nf k -- t ) logistic envelope segment with slope k
-; ~impulse: ( :freq :phase -- s ) band-limited impulse train
-; dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
-; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
-; onepole: ( S alpha -- s ) first-order IIR smoother; higher alpha = more smoothing
-; peak: ( S -- s ) max(abs(x) for x in frame)
-; sh: ( S rate -- s ) sample-and-hold input at rate
-; comb: ( S delay fb -- s ) feedback comb filter
-; delay: ( S n -- s ) delay by n frames
-; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
-; skip: ( S n -- s ) skip first n frames
-; pan: ( S pan -- s ) equal-power pan mono input
-; mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
+; vdup: ( x n -- [xs] ) n copies of x in vec
+; Num.if: ( b then -- ) conditional execute when nonzero
+; Num.if: ( b then else -- ) conditional with else branch
+; Num.<: ( n n -- b ) less-than
+; Num.<=: ( n n -- b ) less-or-equal
+; Num.>=: ( n n -- b ) greater-or-equal
+; Num.>: ( n n -- b ) greater-than
+; Vec.len: ( v -- n ) length of vector
+; Vec.at: ( v k -- x ) indexed lookup
+; Vec.clone: ( v -- v ) shallow copy
+; Vec.push: ( v x -- v ) append item (modifies vec)
+; Vec.pop: ( v -- v x ) pop last item (modifies vec)
+; Vec.each: ( v body -- ) iterate and eval body per item
+; Vec.map: ( v body -- v ) map body over items
+; Vec.reduce: ( v body -- x ) fold left with body, returns nil if v is empty
+; Vec.partition: ( v size step -- [vs] ) window vector
+; Vec.tape: ( v -- t ) convert numeric vector to mono tape
+; Str.+: ( str1 str2 -- str ) concatenate strings
+; Str.load: ( str -- t ) load audio file
+; Str.path/join: ( str1 str2 -- str ) join file system paths
+; Str.parse: ( str -- v ) parse string into AST words
+; Str.parse1: ( str -- x ) parse and take first word
+
+;; math
+
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( S -- s|n ) absolute value
@@ -99,6 +112,7 @@
 ; asinh: ( S -- s|n ) inverse hyperbolic sine
 ; acosh: ( S -- s|n ) inverse hyperbolic cosine
 ; atanh: ( S -- s|n ) inverse hyperbolic tangent
+; =: ( x y -- b ) equality check
 ; +: ( S S -- s|n ) add
 ; -: ( S S -- s|n ) subtract
 ; *: ( S S -- s|n ) multiply
@@ -111,21 +125,71 @@
 ; min: ( S S -- s|n ) minimum
 ; max: ( S S -- s|n ) maximum
 ; clamp: ( S min max -- s|n ) clamp samples to range
-; softclip: ( S mode -- s ) smooth saturation (0=tanh, 1=atan, 2=poly, 3=softsign)
+
+;; random numbers
+
 ; rand: ( -- n ) random float in [0,1)
 ; rand/seed: ( n -- ) reseed RNG used by rand
+
+;; envelope segments
+
+; /line: ( :start :end :nf -- t ) linear envelope segment
+; /exp: ( :start :end :nf k -- t ) exponential envelope segment with curve k
+; /log: ( :start :end :nf k -- t ) logarithmic envelope segment with curve k
+; /cos: ( :start :end :nf -- t ) cosine ease-in/out envelope segment
+; /pow: ( :start :end :nf p -- t ) power-law envelope segment with exponent p
+; /sigmoid: ( :start :end :nf k -- t ) logistic envelope segment with slope k
+
+; tapes
+
+; tape1: ( n -- t ) allocate mono tape
+; tape2: ( n -- t ) allocate stereo tape
+; Tape.shift: ( t amount -- t ) rotate samples by amount
+; Tape.resample: ( t converter ratio -- t ) resample tape
+; Tape.at: ( t frame channel -- n ) fetch sample
+; Tape.slice: ( t start end -- t ) slice of frames in [start,end)
+; Tape.+@: ( t t' offset -- t ) mix t' into t at offset
+
+; stream generators
+
+; ~: ( S -- s ) coerce to stream
 ; ~noise: ( :seed -- s ) white noise
 ; ~pink: ( :seed -- s ) pink noise
 ; ~brown: ( :seed step -- s ) brown noise with step size
-; unison: ( :freq :voices :spread :detune :phaseRand body -- s ) detuned/positioned voices
-; tape1: ( n -- t ) allocate mono tape
-; tape2: ( n -- t ) allocate stereo tape
 ; stream/empty: ( n -- s ) empty stream of n channels
-; ~: ( S -- s ) coerce to stream
-; take: ( s n -- t ) take first n frames
-; frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
+
+; stream transformers
+
+; sr: ( -- n ) push global sample rate
+; ~impulse: ( :freq :phase -- s ) band-limited impulse train
+; dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
+; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
+; onepole: ( S alpha -- s ) first-order IIR smoother; higher alpha = more smoothing
+; peak: ( S -- s ) max(abs(x) for x in frame)
+; sh: ( S rate -- s ) sample-and-hold input at rate
+; comb: ( S delay fb -- s ) feedback comb filter
+; delay: ( S n -- s ) delay by n frames
+; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
+; pan: ( S pan -- s ) equal-power pan mono input
+; mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
+; softclip: ( S mode -- s ) smooth saturation (0=tanh, 1=atan, 2=poly, 3=softsign)
+; skip: ( S n -- s ) skip first n frames
+; unison: ( :freq :voices :spread :detune :phaseRand body -- s ) detuned/positioned voices
 ; mono: ( S -- s ) sum/convert to mono
 ; stereo: ( S -- s ) ensure stereo
+
+; stream renderers
+
+; frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
+; take: ( s n -- t ) take first n frames
+
+; stream utilities
+
+; Streamable.join: ( S S -- s ) concatenate streams
+; Streamable.len ( S -- n ) length of stream, or 0 if stream is infinite
+
+; waves and wavetables
+
 ; wt: ( x -- wt ) coerce to wavetable
 ; wt/sin: ( -- wt ) sine wavetable
 ; wt/tanh: ( -- wt ) tanh wavetable
@@ -142,44 +206,13 @@
 ; wave/pulse: ( :pw n -- w ) pulse wave using env pulse width (single-cycle)
 ; wave/saw: ( n -- w ) saw wave (single-cycle)
 ; phasor: ( :freq :phase w -- s ) phase-accumulating oscillator using env freq/phase
+
+; ports
+
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
 ; vital/svf: ( :cutoff :q :drive :blend :saturate S -- s ) state-variable filter with env params
-; vdup: ( x n -- [xs] ) n copies of x in vec
 
-; builtin methods
-
-; These show methods as =Type.word:= for clarity. The actual token is
-; =word=, and dispatch is based on the runtime type of the receiver
-; (first stack argument).
-
-; Num.if: ( b then -- ) conditional execute when nonzero
-; Num.if: ( b then else -- ) conditional with else branch
-; Num.<: ( n n -- b ) less-than
-; Num.<=: ( n n -- b ) less-or-equal
-; Num.>=: ( n n -- b ) greater-or-equal
-; Num.>: ( n n -- b ) greater-than
-; Vec.len: ( v -- n ) length of vector
-; Vec.at: ( v k -- x ) indexed lookup
-; Vec.clone: ( v -- v ) shallow copy
-; Vec.push: ( v x -- v ) append item (modifies vec)
-; Vec.pop: ( v -- v x ) pop last item (modifies vec)
-; Vec.each: ( v body -- ) iterate and eval body per item
-; Vec.map: ( v body -- v ) map body over items
-; Vec.reduce: ( v body -- x ) fold left with body, returns nil if v is empty
-; Vec.partition: ( v size step -- [vs] ) window vector
-; Vec.tape: ( v -- t ) convert numeric vector to mono tape
-; Tape.nf: ( t -- n ) number of frames
-; Tape.shift: ( t amount -- t ) rotate samples by amount
-; Tape.resample: ( t converter ratio -- t ) resample tape
-; Tape.at: ( t frame channel -- n ) fetch sample
-; Tape.slice: ( t start end -- t ) slice of frames in [start,end)
-; Tape.+@: ( t t' offset -- t ) mix t' into t at offset
-; Str.+: ( str1 str2 -- str ) concatenate strings
-; Str.load: ( str -- t ) load audio file
-; Str.path/join: ( str1 str2 -- str ) join file system paths
-; Str.parse: ( str -- v ) parse string into AST words
-; Str.parse1: ( str -- x ) parse and take first word
-; Streamable.join: ( S S -- s ) concatenate streams
+;;; STANDARD LIBRARY
 
 ; true: ( -- -1 )
 -1 >true
