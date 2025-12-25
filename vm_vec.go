@@ -234,7 +234,7 @@ func init() {
 			return err
 		}
 		if len(v) == 0 {
-			vm.Push(v)
+			vm.Push(Nil)
 			return nil
 		}
 		vm.Push(v[0])

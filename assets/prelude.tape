@@ -73,7 +73,10 @@
 ; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
 ; skip: ( S n -- s ) skip first n frames
 ; pan: ( S pan -- s ) equal-power pan mono input
-; mix: ( [Ss] ratio -- s ) mix adjacent streams based on ratio in [0,1]
+; mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
+;                          mixes adjacent neighbors
+;                          all inputs must have same channels
+;                          empty vec is error
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( S -- s|n ) absolute value
@@ -120,6 +123,7 @@
 ; unison: ( :freq :voices :spread :detune :phaseRand body -- s ) detuned/positioned voices
 ; tape1: ( n -- t ) allocate mono tape
 ; tape2: ( n -- t ) allocate stereo tape
+; stream/empty: ( n -- s ) empty stream of n channels
 ; ~: ( S -- s ) coerce to stream
 ; take: ( s n -- t ) take first n frames
 ; frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
@@ -157,7 +161,7 @@
 ; Vec.pop: ( v -- v x ) pop last item (modifies vec)
 ; Vec.each: ( v body -- ) iterate and eval body per item
 ; Vec.map: ( v body -- v ) map body over items
-; Vec.reduce: ( v body -- x ) fold left with body
+; Vec.reduce: ( v body -- x ) fold left with body, returns nil if v is empty
 ; Vec.partition: ( v size step -- [vs] ) window vector
 ; Vec.tape: ( v -- t ) convert numeric vector to mono tape
 ; Tape.nf: ( t -- n ) number of frames

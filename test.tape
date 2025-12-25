@@ -120,6 +120,10 @@ stack len 0 = assert
 { 5.0 trunc 5 = } assert
 { 5.3 trunc 5 = } assert
 
+; stream/empty
+
+{ 1 stream/empty len 0 = } assert
+
 ; onepole
 
 { [0 1 1 1] ~ 0 onepole 4 take frames [0 1 1 1] = } assert
@@ -258,6 +262,7 @@ drop
 
 { [2 3 4] {+} reduce 9 = } assert
 { [2 3 4] {*} reduce 24 = } assert
+{ [] {+} reduce nil? } assert
 
 (
   { ~saw ~sin ~pulse ~triangle } >:waveform

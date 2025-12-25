@@ -87,15 +87,6 @@ func (t *Tape) WriteToWav(path string) error {
 }
 
 func init() {
-	RegisterMethod[*Tape]("nf", 1, func(vm *VM) error {
-		t, err := Pop[*Tape](vm)
-		if err != nil {
-			return err
-		}
-		vm.Push(t.nframes)
-		return nil
-	})
-
 	RegisterMethod[*Tape]("shift", 2, func(vm *VM) error {
 		amount, err := Pop[Num](vm)
 		if err != nil {
