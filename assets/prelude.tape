@@ -74,9 +74,6 @@
 ; skip: ( S n -- s ) skip first n frames
 ; pan: ( S pan -- s ) equal-power pan mono input
 ; mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
-;                          mixes adjacent neighbors
-;                          all inputs must have same channels
-;                          empty vec is error
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( S -- s|n ) absolute value
