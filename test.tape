@@ -87,6 +87,7 @@ stack len 0 = assert
 
 {  8 sign 1 = } assert
 { -8 sign -1 = } assert
+{  0 sign 0 = } assert
 
 { 4 square 16 = } assert
 { -4 square 16 = } assert

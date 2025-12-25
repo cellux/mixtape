@@ -1,11 +1,11 @@
 ; stack comment format
 
-; [TYPE.]NAME: ( ENV-IN* STACK-IN* WORD STACK-OUT* ENV-OUT* ) DESCRIPTION
+; [TYPE.]NAME: ( ENV-IN* STACK-IN* -- STACK-OUT* ENV-OUT* ) DESCRIPTION
 
 ; TYPE: if present, WORD is a method of first stack argument's type
+; NAME: name of word
 ; ENV-IN: env vars used by WORD
 ; STACK-IN: values expected on stack
-; WORD: name of word
 ; STACK-OUT: values left on stack
 ; ENV-OUT: env vars modified by WORD
 
@@ -56,12 +56,12 @@
 ; eval: ( x -- <xs> ) evaluate x
 ; iter: ( I -- i ) obtain iterator from iterable
 ; next: ( i -- i x|nil ) advance iterator
-; /line: ( :start :end :nf -- envseg ) linear envelope segment
-; /exp: ( :start :end :nf k -- envseg ) exponential envelope with curve k
-; /log: ( :start :end :nf k -- envseg ) logarithmic envelope with curve k
-; /cos: ( :start :end :nf -- envseg ) cosine ease-in/out envelope
-; /pow: ( :start :end :nf p -- envseg ) power-law envelope with exponent p
-; /sigmoid: ( :start :end :nf k -- envseg ) logistic envelope with slope k
+; /line: ( :start :end :nf -- t ) linear envelope segment
+; /exp: ( :start :end :nf k -- t ) exponential envelope segment with curve k
+; /log: ( :start :end :nf k -- t ) logarithmic envelope segment with curve k
+; /cos: ( :start :end :nf -- t ) cosine ease-in/out envelope segment
+; /pow: ( :start :end :nf p -- t ) power-law envelope segment with exponent p
+; /sigmoid: ( :start :end :nf k -- t ) logistic envelope segment with slope k
 ; ~impulse: ( :freq :phase -- s ) band-limited impulse train
 ; dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
 ; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
@@ -70,14 +70,14 @@
 ; sh: ( S rate -- s ) sample-and-hold input at rate
 ; comb: ( S delay fb -- s ) feedback comb filter
 ; delay: ( S n -- s ) delay by n frames
-; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame
+; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
 ; skip: ( S n -- s ) skip first n frames
 ; pan: ( S pan -- s ) equal-power pan mono input
 ; mix: ( [Ss] ratio -- s ) mix adjacent streams based on ratio in [0,1]
 ; e: ( -- n ) Euler's constant
 ; pi: ( -- n ) pi constant
 ; abs: ( S -- s|n ) absolute value
-; sign: ( S -- s|n ) sign of x (-1, 1)
+; sign: ( S -- s|n ) sign of x (-1, 0, 1)
 ; square: (S -- s|n ) square (x = x^2)
 ; exp: ( S -- s|n ) natural exponential
 ; exp2: ( S -- s|n ) power-of-two exponential
@@ -122,7 +122,7 @@
 ; tape2: ( n -- t ) allocate stereo tape
 ; ~: ( S -- s ) coerce to stream
 ; take: ( s n -- t ) take first n frames
-; frames: ( s -- [ns|[ns]] ) collect all frames into vec
+; frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
 ; mono: ( S -- s ) sum/convert to mono
 ; stereo: ( S -- s ) ensure stereo
 ; wt: ( x -- wt ) coerce to wavetable
@@ -171,7 +171,7 @@
 ; Str.path/join: ( str1 str2 -- str ) join file system paths
 ; Str.parse: ( str -- v ) parse string into AST words
 ; Str.parse1: ( str -- x ) parse and take first word
-; Streamable.join: ( S S -- s ) concatenate streams channel-wise
+; Streamable.join: ( S S -- s ) concatenate streams
 
 ; true: ( -- -1 )
 -1 >true

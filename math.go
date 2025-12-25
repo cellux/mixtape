@@ -18,11 +18,13 @@ func AbsOp() SmpUnOp {
 
 func SignOp() SmpUnOp {
 	return func(x Smp) Smp {
-		if math.Signbit(x) {
-			return -1
-		} else {
+		if x > 0 {
 			return 1
 		}
+		if x < 0 {
+			return -1
+		}
+		return 0
 	}
 }
 
