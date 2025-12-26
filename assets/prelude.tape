@@ -477,23 +477,23 @@ false >:saturate
 
 ;; lfo
 
-; ~lfo/sin: ( ENV: :phase | freq -- s )
-{( >:freq ~sin)} >~lfo/sin
+; ~lfo/sin: ( ENV: :freq :phase | -- s )
+{ ~sin } >~lfo/sin
 
-; ~lfo/tanh: ( ENV: :phase | freq -- s )
-{( >:freq ~tanh)} >~lfo/tanh
+; ~lfo/tanh: ( ENV: :freq :phase | -- s )
+{ ~tanh } >~lfo/tanh
 
-; ~lfo/triangle: ( ENV: :phase | freq -- s )
-{( >:freq ~triangle 0.25p skip )} >~lfo/triangle
+; ~lfo/triangle: ( ENV: :freq :phase | -- s )
+{ ~triangle 0.25p skip } >~lfo/triangle
 
-; ~lfo/square: ( ENV: :phase | freq -- s )
-{( >:freq ~square 0.26p skip)} >~lfo/square
+; ~lfo/square: ( ENV: :freq :phase | -- s )
+{ ~square 0.26p skip } >~lfo/square
 
-; ~lfo/pulse: ( ENV: :phase | pw freq -- s )
-{( >:freq >:pw ~pulse :pw 0.01 + periods skip )} >~lfo/pulse
+; ~lfo/pulse: ( ENV: :freq :phase :pw | -- s )
+{ ~pulse :pw 0.01 + periods skip } >~lfo/pulse
 
-; ~lfo/saw: ( ENV: :phase | freq -- s )
-{( >:freq ~saw 0.76p skip )} >~lfo/saw
+; ~lfo/saw: ( ENV: :freq :phase | -- s )
+{ ~saw 0.76p skip } >~lfo/saw
 
 ;; dsp
 
