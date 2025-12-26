@@ -338,6 +338,10 @@ false >:saturate
   drop
 } >start:end
 
+; for: ( I body -- <xs> ) evaluates body for each value produced by I
+{( >:for/body iter >:for/iter
+   { :for/iter eval dup nil? { drop break } if :for/body eval } loop )} >for
+
 ; zip: ( [xs] -- [[ys]] ) pull in lockstep until any iterator yields nil
 {( { iter } map >:zip/iters
    [] >:zip/result

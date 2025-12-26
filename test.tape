@@ -231,6 +231,8 @@ drop
   { dup } copy-with { [1 5 9] = } assert
 )
 
+{ [] [1 2 3] {1 + push} for [2 3 4] = } assert
+
 ( { 0 >:sum [1 2 3] {:sum + >:sum} each :sum 6 = } assert )
 
 ({ 0 >:even

@@ -212,7 +212,7 @@ func Pop[T Val](vm *VM) (T, error) {
 		return value, nil
 	} else {
 		var zeroT T
-		return zeroT, vm.Errorf("top of value stack has type %T, expected %T", val, zeroT)
+		return zeroT, vm.Errorf("value at top of stack has type %T, expected %T", val, zeroT)
 	}
 }
 
@@ -222,7 +222,7 @@ func Top[T Val](vm *VM) (T, error) {
 		return value, nil
 	} else {
 		var zeroT T
-		return zeroT, vm.Errorf("top of value stack has type %T, expected %T", top, zeroT)
+		return zeroT, vm.Errorf("value at top of stack has type %T, expected %T", top, zeroT)
 	}
 }
 
