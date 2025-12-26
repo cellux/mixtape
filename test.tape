@@ -383,7 +383,8 @@ drop
 { b-9 119 = } assert
 
 ; sample access
-{ 0.3 1s take 0 0 at 0.3 = } assert
+{ 0.3 1s take 0 at 0.3 = } assert
+{ 0.3 stereo 1s take 0 at [0.3 0.3] = } assert
 
 ; decibels
 
@@ -391,7 +392,7 @@ drop
 { 20 db 10 = } assert
 { -20 db 0.1 = } assert
 
-{ 1 -20 gain 1s take 0 0 at 0.1 = } assert
+{ 1 -20 gain 1s take 0 at 0.1 = } assert
 
 ; clamp
 
@@ -399,29 +400,29 @@ drop
 { -5 0 10 clamp 0 = } assert
 { 15 0 10 clamp 10 = } assert
 
-{ 1.5 -1 1 clamp 1s take 0 0 at 1 = } assert
-{ -2 -1 1 clamp 1s take 0 0 at -1 = } assert
+{ 1.5 -1 1 clamp 1s take 0 at 1 = } assert
+{ -2 -1 1 clamp 1s take 0 at -1 = } assert
 
 ; clip
 
 ; softclip
 
-{ 1 ~ 0 softclip 1s take 0 0 at 0.7615941559557649 = } assert
-{ 1 ~ 1 softclip 1s take 0 0 at 0.5 = } assert
-{ 0.5 ~ 2 softclip 1s take 0 0 at 0.4583333333333333 = } assert
-{ 2 ~ 3 softclip 1s take 0 0 at 0.6666666666666666 = } assert
+{ 1 ~ 0 softclip 1s take 0 at 0.7615941559557649 = } assert
+{ 1 ~ 1 softclip 1s take 0 at 0.5 = } assert
+{ 0.5 ~ 2 softclip 1s take 0 at 0.4583333333333333 = } assert
+{ 2 ~ 3 softclip 1s take 0 at 0.6666666666666666 = } assert
 
 
-{ 1.5 clip 1s take 0 0 at 1 = } assert
-{ -2 clip 1s take 0 0 at -1 = } assert
+{ 1.5 clip 1s take 0 at 1 = } assert
+{ -2 clip 1s take 0 at -1 = } assert
 
 ; mix
 
-{ [1 ~ 0 ~] 0 mix 1s take 0 0 at 1 = } assert
-{ [1 ~ 0 ~] 1 mix 1s take 0 0 at 0 = } assert
-{ [1 ~ 0 ~] 0.25 mix 1s take 0 0 at 0.75 = } assert
-{ [1 ~ 0 ~ 0.5 ~] 0.5 mix 1s take 0 0 at 0 = } assert
-{ [1 ~ 0 ~ 0.5 ~] 0.75 mix 1s take 0 0 at 0.25 = } assert
+{ [1 ~ 0 ~] 0 mix 1s take 0 at 1 = } assert
+{ [1 ~ 0 ~] 1 mix 1s take 0 at 0 = } assert
+{ [1 ~ 0 ~] 0.25 mix 1s take 0 at 0.75 = } assert
+{ [1 ~ 0 ~ 0.5 ~] 0.5 mix 1s take 0 at 0 = } assert
+{ [1 ~ 0 ~ 0.5 ~] 0.75 mix 1s take 0 at 0.25 = } assert
 
 ; avg
 

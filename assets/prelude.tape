@@ -148,9 +148,9 @@
 ; tape2: ( n -- t ) allocate stereo tape
 ; Tape.shift: ( t amount -- t ) rotate samples by amount
 ; Tape.resample: ( t converter ratio -- t ) resample tape
-; Tape.at: ( t frame channel -- n ) fetch sample
-; Tape.slice: ( t start end -- t ) slice of frames in [start,end)
-; Tape.+@: ( t t' offset -- t ) mix t' into t at offset
+; Tape.at: ( t frame -- [ns]|n ) fetch frame
+; Tape.slice: ( t start end -- t ) tape with frames between [start,end)
+; Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset
 
 ;; stream generators
 

@@ -469,11 +469,7 @@ func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 }
 
 func init() {
-	RegisterMethod[*Tape]("at", 3, func(vm *VM) error {
-		channelNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
+	RegisterMethod[*Tape]("at", 2, func(vm *VM) error {
 		frameNum, err := Pop[Num](vm)
 		if err != nil {
 			return err
@@ -482,16 +478,20 @@ func init() {
 		if err != nil {
 			return err
 		}
-		channel := int(channelNum)
-		if channel < 0 || channel >= t.nchannels {
-			return vm.Errorf("tape/at: invalid channel: %d", channel)
-		}
 		frame := int(frameNum)
 		if frame < 0 || frame >= t.nframes {
-			return vm.Errorf("tape/at: invalid frame index: %d", frame)
+			return vm.Errorf("Tape.at: invalid frame index: %d", frame)
 		}
-		sampleOffset := frame*t.nchannels + channel
-		vm.Push(Num(t.samples[sampleOffset]))
+		sampleOffset := frame * t.nchannels
+		if t.nchannels == 1 {
+			vm.Push(Num(t.samples[sampleOffset]))
+		} else {
+			v := make(Vec, t.nchannels)
+			for ch := range t.nchannels {
+				v[ch] = Num(t.samples[sampleOffset+ch])
+			}
+			vm.Push(v)
+		}
 		return nil
 	})
 
