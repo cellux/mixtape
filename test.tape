@@ -120,9 +120,9 @@ stack len 0 = assert
 { 5.0 trunc 5 = } assert
 { 5.3 trunc 5 = } assert
 
-; stream/empty
+; ~empty
 
-{ 1 stream/empty len 0 = } assert
+{ 1 ~empty len 0 = } assert
 
 ; onepole
 

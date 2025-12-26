@@ -250,14 +250,14 @@ func applySmpBinOp(vm *VM, op SmpBinOp) error {
 }
 
 func init() {
-	RegisterWord("stream/empty", func(vm *VM) error {
+	RegisterWord("~empty", func(vm *VM) error {
 		nchannelsNum, err := Pop[Num](vm)
 		if err != nil {
 			return err
 		}
 		nchannels := int(nchannelsNum)
 		if nchannels < 1 {
-			return vm.Errorf("stream/empty: invalid number of channels: %d", nchannelsNum)
+			return vm.Errorf("~empty: invalid number of channels: %d", nchannelsNum)
 		}
 		vm.Push(makeEmptyStream(nchannels))
 		return nil

@@ -1,6 +1,8 @@
-;; stack comment format
+;;; STACK COMMENT FORMAT
 
-; [TYPE.]NAME: ( ENV-IN* STACK-IN* -- STACK-OUT* ENV-OUT* ) DESCRIPTION
+; [TYPE.]NAME: ( [ENV-IN] [STACK-IN] -- [STACK-OUT] [ENV-OUT] ) DESCRIPTION
+
+; [...] means optional
 
 ; TYPE: if present, WORD is a method of first stack argument's type
 ; NAME: name of word
@@ -13,7 +15,7 @@
 
 ; x y k : any value
 ; n : Num
-; b : Num interpreted as a boolean: 0=false, anything else is true (-1)
+; b : Num interpreted as a boolean: 0=false, anything else is true
 ; v : Vec
 ; w : Wave
 ; S : Streamable (Num, Vec, Wave, Tape, Stream)
@@ -29,7 +31,7 @@
 ; body : anything that can be evaluated
 ; any other name is a synonym for x
 
-;; a note on methods
+;; methods
 
 ; doc comments show methods as =Type.word:= for clarity. The actual
 ; token is =word=, and dispatch is based on the runtime type of the
@@ -37,7 +39,7 @@
 
 ;;; BUILTINS
 
-;; core VM words
+;; core
 
 ; nil: ( -- nil ) push Nil onto stack
 ; throw: ( x -- ) raise an exception carrying x
@@ -140,7 +142,7 @@
 ; /pow: ( :start :end :nf p -- t ) power-law envelope segment with exponent p
 ; /sigmoid: ( :start :end :nf k -- t ) logistic envelope segment with slope k
 
-; tapes
+;; tapes
 
 ; tape1: ( n -- t ) allocate mono tape
 ; tape2: ( n -- t ) allocate stereo tape
@@ -150,18 +152,14 @@
 ; Tape.slice: ( t start end -- t ) slice of frames in [start,end)
 ; Tape.+@: ( t t' offset -- t ) mix t' into t at offset
 
-; stream generators
+;; stream generators
 
 ; ~: ( S -- s ) coerce to stream
-; ~noise: ( :seed -- s ) white noise
-; ~pink: ( :seed -- s ) pink noise
-; ~brown: ( :seed step -- s ) brown noise with step size
-; stream/empty: ( n -- s ) empty stream of n channels
-
-; stream transformers
-
-; sr: ( -- n ) push global sample rate
+; ~empty: ( n -- s ) empty stream of n channels
 ; ~impulse: ( :freq :phase -- s ) band-limited impulse train
+
+;; stream transformers
+
 ; dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
 ; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
 ; onepole: ( S alpha -- s ) first-order IIR smoother; higher alpha = more smoothing
@@ -188,17 +186,14 @@
 ; Streamable.join: ( S S -- s ) concatenate streams
 ; Streamable.len ( S -- n ) length of stream, or 0 if stream is infinite
 
-; waves and wavetables
+;; noise generators
 
-; wt: ( x -- wt ) coerce to wavetable
-; wt/sin: ( -- wt ) sine wavetable
-; wt/tanh: ( -- wt ) tanh wavetable
-; wt/triangle: ( -- wt ) triangle wavetable
-; wt/square: ( -- wt ) square wavetable
-; wt/pulse: ( :pw -- wt ) pulse wavetable using env pulse width
-; wt/saw: ( -- wt ) saw wavetable
-; ~wt: ( :freq :phase :morph wt -- s ) wavetable oscillator with env freq/phase/morph
-; ~fm: ( :freq :mod :index :phase wt -- s ) wavetable FM oscillator with env controls
+; ~noise: ( :seed -- s ) white noise
+; ~pink: ( :seed -- s ) pink noise
+; ~brown: ( :seed step -- s ) brown noise with step size
+
+;; waves and wavetables
+
 ; wave/sin: ( n -- w ) sine wave (single-cycle)
 ; wave/tanh: ( n -- w ) tanh-shaped wave (single-cycle)
 ; wave/triangle: ( n -- w ) triangle wave (single-cycle)
@@ -207,10 +202,25 @@
 ; wave/saw: ( n -- w ) saw wave (single-cycle)
 ; phasor: ( :freq :phase w -- s ) phase-accumulating oscillator using env freq/phase
 
-; ports
+; wt: ( x -- wt ) coerce to wavetable
+; wt/sin: ( -- wt ) sine wavetable
+; wt/tanh: ( -- wt ) tanh wavetable
+; wt/triangle: ( -- wt ) triangle wavetable
+; wt/square: ( -- wt ) square wavetable
+; wt/pulse: ( :pw -- wt ) pulse wavetable using env pulse width
+; wt/saw: ( -- wt ) saw wavetable
+
+; ~wt: ( :freq :phase :morph wt -- s ) wavetable oscillator with env freq/phase/morph
+; ~fm: ( :freq :mod :index :phase wt -- s ) wavetable FM oscillator with env controls
+
+;; ports
 
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
 ; vital/svf: ( :cutoff :q :drive :blend :saturate S -- s ) state-variable filter with env params
+
+;; misc
+
+; sr: ( -- n ) push global sample rate
 
 ;;; STANDARD LIBRARY
 
@@ -244,6 +254,79 @@
 ; break: ( -- ) exits current loop
 { nil throw } >break
 
+;; oscillator parameters
+
+; :freq: ( -- n ) frequency
+440 >:freq
+; :phase: ( -- n ) phase
+0.0 >:phase
+; :pw: ( -- n ) pulse width
+0.5 >:pw
+
+; f: ( n -- :freq ) set :freq
+{ ":freq" swap set } >f
+
+;; filter parameters
+
+; :cutoff: ( -- n ) cutoff
+1200  >:cutoff
+; :q: ( -- n ) resonance
+0.7   >:q
+; :drive: ( -- n ) drive
+1.0   >:drive
+; :blend: ( -- n ) blend
+0.0   >:blend
+; :saturate: ( -- b ) saturation toggle
+false >:saturate
+
+;; FM parameters
+
+; :mod: ( -- n ) FM phase offset (in cycles)
+0.0 >:mod
+; :index: ( -- n ) FM index
+1.0 >:index
+
+;; noise RNG parameters
+
+; :seed: ( -- n ) seed used by noise generators
+0 >:seed
+
+;; envelope parameters
+
+; start: ( -- n )
+0 >:start
+; end: ( -- n )
+1 >:end
+
+;; utilities
+
+; sum: ( [Ss|ns] -- s|n )
+{ {+} reduce } >sum
+
+; distribute: ( [ns] n -- [ns] ) scale vals so their sum equals n; sum(ns) must be nonzero
+; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
+{( over sum / >:unit { :unit * } map )} >distribute
+
+; avg: ( [Ss|ns] -- s|n ) average a list of streams/numbers
+{ dup len swap {+} reduce swap / } >avg
+
+; clip: ( S -- s ) constrain stream samples to [-1,1]
+{ -1 1 clamp } >clip
+
+; cat: ( [Ss] -- s ) concatenate streams
+{ {join} reduce } >cat
+
+; repeat: ( S n -- s ) repeat and concat
+{ vdup cat } >repeat
+
+; start:end: ( [ns] -- :start :end )
+; after [0 2 5 6] start:end, :start = [0 2 5], :end = [2 5 6]
+{ 2 1 partition
+  dup { 0 at } map >:start
+  dup { 1 at } map >:end
+  drop
+} >start:end
+
 ; zip: ( [xs] -- [[ys]] ) pull in lockstep until any iterator yields nil
 {( { iter } map >:zip/iters
    [] >:zip/result
@@ -254,26 +337,7 @@
    :zip/result
 )} >zip
 
-; seq iterates over N iterables
-; the N iterables have N names, received in :seq/syms
-;
-; seq looks up the N iterables by name
-; turns them into iterators -> :seq/symiters
-;
-; in each iteration:
-;
-; 1. for each iterable I:
-;
-;    a. gets next value V from I (eval)
-;    b. if value is nil: exit
-;    c. otherwise sets name of iterable I in local env to V
-;
-; 2. invokes seq/body
-;
-; seq/body typically generates a value (piece of sound, envelope
-; segment, etc.) which depends on the parameters set in step 1
-;
-; these values can be collected by using seq inside [...]
+;; sequencer
 
 ; seq: ( body [syms] -- <xs> )
 {( >seq/body >:seq/syms
@@ -289,47 +353,7 @@
    } loop
 )} >seq
 
-; oscillator defaults
-
-; :freq: ( -- n ) frequency
-440 >:freq
-; :phase: ( -- n ) phase
-0.0 >:phase
-; :pw: ( -- n ) pulse width
-0.5 >:pw
-
-; filter defaults
-
-; :cutoff: ( -- n ) cutoff
-1200  >:cutoff
-; :q: ( -- n ) resonance
-0.7   >:q
-; :drive: ( -- n ) drive
-1.0   >:drive
-; :blend: ( -- n ) blend
-0.0   >:blend
-; :saturate: ( -- b ) saturation toggle
-false >:saturate
-
-; FM defaults
-
-; :mod: ( -- n ) FM phase offset (in cycles)
-0.0 >:mod
-; :index: ( -- n ) FM index
-1.0 >:index
-
-; noise RNG defaults
-
-; :seed: ( -- n ) seed used by noise generators
-0 >:seed
-
-; start: ( -- n )
-0 >:start
-; end: ( -- n )
-1 >:end
-
-; f: ( n -- :freq ) set default :freq
-{ ":freq" swap set } >f
+;; time
 
 ; seconds: ( dur -- n ) length of n seconds in frames
 { sr * } >seconds
@@ -343,6 +367,8 @@ false >:saturate
 ; ticks: ( :bpm :tpb ticks -- n ) length of n ticks in frames
 { beats :tpb / } >ticks
 
+;; pitch
+
 ; st: ( semitones -- ratio ) frequency multiplier for n semitone steps
 { 12 / exp2 } >st
 
@@ -352,46 +378,23 @@ false >:saturate
 ; cents: ( cents -- ratio ) frequency multiplier for n cents
 { 1200 / exp2 } >cents
 
+;; amplitude
+
 ; db: ( db -- amp ) convert decibels to linear amplitude multiplier
 { 20 / 10 swap pow } >db
 
 ; gain: ( S db -- s ) apply gain in dB to a stream
 { db * } >gain
 
-; clip: ( S -- s ) constrain stream samples to [-1,1]
-{ -1 1 clamp } >clip
+; unipolar <-> bipolar conversions
 
-; distribute: ( [ns] n -- [ns] ) scale vals so their sum equals n; sum(ns) must be nonzero
-; (e.g., [2 3 1 4] 200 distribute -> [40 60 20 80])
-{( over {+} reduce / >:unit { :unit * } map )} >distribute
+; uni: ( bipolar -- unipolar )
+{ 1 + 2 / } >uni
 
-; cat: ( [Ss] -- s ) concatenate streams
-{ {join} reduce } >cat
+; bi: ( unipolar -- bipolar )
+{ 2 * 1 - } >bi
 
-; repeat: ( S n -- s ) repeat and concat
-{ vdup cat } >repeat
-
-; avg: ( [Ss|ns] -- s|n ) average a list of streams/numbers
-{ dup len swap {+} reduce swap / } >avg
-
-; stretch: ( S factor -- s )
-{ SRC_LINEAR swap resample } >stretch
-
-; start:end: ( [ns] -- :start :end )
-; after [0 2 5 6] start:end, :start = [0 2 5], :end = [2 5 6]
-{ 2 1 partition
-  dup { 0 at } map >:start
-  dup { 1 at } map >:end
-  drop
-} >start:end
-
-; env generates an envelope
-;
-; ys: values at envelope points
-; ds: durations between envelope points (in frames)
-; envsegs: closures which generate the envelope segments
-;
-; len(envsegs) = len(ds) = len(ys) - 1
+;; envelope generators
 
 ; env: ( [ys] [ds] [segs] -- env )
 {( >:envseg >:nf start:end
@@ -401,9 +404,6 @@ false >:saturate
      seq
    ] cat
 )} >env
-
-; sum: ( [Ss|ns] -- s|n )
-{ {+} reduce } >sum
 
 ; adsr: ( a d s r dur -- env )
 {( >:dur >:release >:sustain/level >:decay >:attack
@@ -423,8 +423,8 @@ false >:saturate
    env
 )} >perc
 
-; default waves (single-cycle waveforms)
-; size = 0 means use hard-coded default size
+;; default waves (single-cycle waveforms)
+;; size = 0 means use hard-coded default size
 
 ; w/sin: ( -- w )
 { 0 wave/sin } >w/sin
@@ -444,7 +444,7 @@ false >:saturate
 ; w/saw: ( -- w )
 { 0 wave/saw } >w/saw
 
-; wave phasors
+;; wave phasors
 
 ; ~sin: ( :freq :phase -- s )
 { w/sin phasor } >~sin
@@ -464,7 +464,7 @@ false >:saturate
 ; ~saw: ( :freq :phase -- s )
 { w/saw phasor } >~saw
 
-; lfo
+;; lfo
 
 ; ~lfo/sin: ( :phase freq -- s )
 {( >:freq ~sin)} >~lfo/sin
@@ -484,13 +484,10 @@ false >:saturate
 ; ~lfo/saw: ( :phase freq -- s )
 {( >:freq ~saw 0.76p skip )} >~lfo/saw
 
-; unipolar <-> bipolar conversions
-
-; uni: ( bipolar -- unipolar )
-{ 1 + 2 / } >uni
-
-; bi: ( unipolar -- bipolar )
-{ 2 * 1 - } >bi
+;; dsp
 
 ; z1: ( s -- s ) one-sample delay with zero init
 { 0 z1* } >z1
+
+; stretch: ( S factor -- s )
+{ SRC_LINEAR swap resample } >stretch
