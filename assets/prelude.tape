@@ -1,11 +1,11 @@
 ;;; STACK COMMENT FORMAT
 
-; [TYPE.]NAME: ( [ENV-IN] [STACK-IN] -- [STACK-OUT] [ENV-OUT] ) DESCRIPTION
+; [TYPE.]NAME: ( [ENV: ENV-IN |] [STACK-IN] -- [STACK-OUT] [| SETS: ENV-OUT] ) DESCRIPTION
 
 ; [...] means optional
 
 ; TYPE: if present, WORD is a method of first stack argument's type
-; NAME: name of word
+; NAME: name of word - if ends with !, word mutates its receiver
 ; ENV-IN: env vars used by WORD
 ; STACK-IN: values expected on stack
 ; STACK-OUT: values left on stack
@@ -26,6 +26,7 @@
 ; str : Str
 ; sym : Symbol
 ; [xs] : Vec of x
+; n|[ns]: sample frame, mono frame is Num; multi-channel frame is Vec[Num] (L,R,...)
 ; <xs> : arbitrary values on stack
 ; s|n : Stream or Num
 ; body : anything that can be evaluated
@@ -36,6 +37,16 @@
 ; doc comments show methods as =Type.word:= for clarity. The actual
 ; token is =word=, and dispatch is based on the runtime type of the
 ; receiver (first stack argument).
+
+;;; SYNTAX SUGAR
+
+; :name -> ":name" get
+; @foo -> "foo" get
+; >foo -> "foo" swap set
+; 1s -> 1 seconds
+; 1b -> 1 beats
+; 1t -> 1 ticks
+; 1p -> 1 periods
 
 ;;; BUILTINS
 
@@ -74,8 +85,8 @@
 ; Vec.len: ( v -- n ) length of vector
 ; Vec.at: ( v k -- x ) indexed lookup
 ; Vec.clone: ( v -- v ) shallow copy
-; Vec.push: ( v x -- v ) append item (modifies vec)
-; Vec.pop: ( v -- v x ) pop last item (modifies vec)
+; Vec.push: ( v x -- v ) append item, mutates v
+; Vec.pop: ( v -- v x ) pop last item, mutates v
 ; Vec.each: ( v body -- ) iterate and eval body per item
 ; Vec.map: ( v body -- v ) map body over items
 ; Vec.reduce: ( v body -- x ) fold left with body, returns nil if v is empty
@@ -135,28 +146,28 @@
 
 ;; envelope segments
 
-; /line: ( :start :end :nf -- t ) linear envelope segment
-; /exp: ( :start :end :nf k -- t ) exponential envelope segment with curve k
-; /log: ( :start :end :nf k -- t ) logarithmic envelope segment with curve k
-; /cos: ( :start :end :nf -- t ) cosine ease-in/out envelope segment
-; /pow: ( :start :end :nf p -- t ) power-law envelope segment with exponent p
-; /sigmoid: ( :start :end :nf k -- t ) logistic envelope segment with slope k
+; /line: ( ENV: :start :end :nf | -- t ) linear envelope segment
+; /exp: ( ENV: :start :end :nf | k -- t ) exponential envelope segment with curve k
+; /log: ( ENV: :start :end :nf | k -- t ) logarithmic envelope segment with curve k
+; /cos: ( ENV: :start :end :nf | -- t ) cosine ease-in/out envelope segment
+; /pow: ( ENV: :start :end :nf | p -- t ) power-law envelope segment with exponent p
+; /sigmoid: ( ENV: :start :end :nf | k -- t ) logistic envelope segment with slope k
 
 ;; tapes
 
 ; tape1: ( n -- t ) allocate mono tape
 ; tape2: ( n -- t ) allocate stereo tape
-; Tape.shift: ( t amount -- t ) rotate samples by amount
+; Tape.shift: ( t amount -- t ) rotate samples by amount, mutates t
 ; Tape.resample: ( t converter ratio -- t ) resample tape
-; Tape.at: ( t frame -- [ns]|n ) fetch frame
-; Tape.slice: ( t start end -- t ) tape with frames between [start,end)
-; Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset
+; Tape.at: ( t frame -- n|[ns] ) fetch frame
+; Tape.slice: ( t start end -- t ) tape with frames between [start,end), mutates t
+; Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset, mutates t
 
 ;; stream generators
 
 ; ~: ( S -- s ) coerce to stream
 ; ~empty: ( n -- s ) empty stream of n channels
-; ~impulse: ( :freq :phase -- s ) band-limited impulse train
+; ~impulse: ( ENV: :freq :phase | -- s ) band-limited impulse train
 
 ;; stream transformers
 
@@ -168,11 +179,11 @@
 ; comb: ( S delay fb -- s ) feedback comb filter
 ; delay: ( S n -- s ) delay by n frames
 ; z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
-; pan: ( S pan -- s ) equal-power pan mono input
+; pan: ( S pan -- s ) equal-power pan mono input with pan between [-1,1]
 ; mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
 ; softclip: ( S mode -- s ) smooth saturation (0=tanh, 1=atan, 2=poly, 3=softsign)
 ; skip: ( S n -- s ) skip first n frames
-; unison: ( :freq :voices :spread :detune :phaseRand body -- s ) detuned/positioned voices
+; unison: ( ENV: :freq :voices :spread :detune :phaseRand | body -- s ) detuned/positioned voices
 ; mono: ( S -- s ) sum/convert to mono
 ; stereo: ( S -- s ) ensure stereo
 
@@ -188,9 +199,9 @@
 
 ;; noise generators
 
-; ~noise: ( :seed -- s ) white noise
-; ~pink: ( :seed -- s ) pink noise
-; ~brown: ( :seed step -- s ) brown noise with step size
+; ~noise: ( ENV: :seed | -- s ) white noise
+; ~pink: ( ENV: :seed | -- s ) pink noise
+; ~brown: ( ENV: :seed | step -- s ) brown noise with step size
 
 ;; waves and wavetables
 
@@ -198,25 +209,25 @@
 ; wave/tanh: ( n -- w ) tanh-shaped wave (single-cycle)
 ; wave/triangle: ( n -- w ) triangle wave (single-cycle)
 ; wave/square: ( n -- w ) square wave (single-cycle)
-; wave/pulse: ( :pw n -- w ) pulse wave using env pulse width (single-cycle)
+; wave/pulse: ( ENV: :pw | n -- w ) pulse wave using env pulse width (single-cycle)
 ; wave/saw: ( n -- w ) saw wave (single-cycle)
-; phasor: ( :freq :phase w -- s ) phase-accumulating oscillator using env freq/phase
+; phasor: ( ENV: :freq :phase | w -- s ) phase-accumulating oscillator using env freq/phase
 
 ; wt: ( x -- wt ) coerce to wavetable
 ; wt/sin: ( -- wt ) sine wavetable
 ; wt/tanh: ( -- wt ) tanh wavetable
 ; wt/triangle: ( -- wt ) triangle wavetable
 ; wt/square: ( -- wt ) square wavetable
-; wt/pulse: ( :pw -- wt ) pulse wavetable using env pulse width
+; wt/pulse: ( ENV: :pw | -- wt ) pulse wavetable using env pulse width
 ; wt/saw: ( -- wt ) saw wavetable
 
-; ~wt: ( :freq :phase :morph wt -- s ) wavetable oscillator with env freq/phase/morph
-; ~fm: ( :freq :mod :index :phase wt -- s ) wavetable FM oscillator with env controls
+; ~wt: ( ENV: :freq :phase :morph | wt -- s ) wavetable oscillator with env freq/phase/morph
+; ~fm: ( ENV: :freq :mod :index :phase | wt -- s ) wavetable FM oscillator with env controls
 
 ;; ports
 
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
-; vital/svf: ( :cutoff :q :drive :blend :saturate S -- s ) state-variable filter with env params
+; vital/svf: ( ENV: :cutoff :q :drive :blend :saturate | S -- s ) state-variable filter
 
 ;; misc
 
@@ -263,7 +274,7 @@
 ; :pw: ( -- n ) pulse width
 0.5 >:pw
 
-; f: ( n -- :freq ) set :freq
+; f: ( n -- | SETS: :freq ) shorthand for setting :freq to n
 { ":freq" swap set } >f
 
 ;; filter parameters
@@ -319,7 +330,7 @@ false >:saturate
 ; repeat: ( S n -- s ) repeat and concat
 { vdup cat } >repeat
 
-; start:end: ( [ns] -- :start :end )
+; start:end: ( [ns] -- | SETS: :start :end )
 ; after [0 2 5 6] start:end, :start = [0 2 5], :end = [2 5 6]
 { 2 1 partition
   dup { 0 at } map >:start
@@ -339,7 +350,7 @@ false >:saturate
 
 ;; sequencer
 
-; seq: ( body [syms] -- <xs> )
+; seq: ( body [syms] -- <xs> ) see examples/seq.tape for details
 {( >seq/body >:seq/syms
    :seq/syms { get iter } map >:seq/symiters
    {
@@ -361,10 +372,10 @@ false >:saturate
 ; beats: ( :bpm beats -- n ) length of n beats in frames
 { sr :bpm 60 / / * } >beats
 
-; periods: ( :freq periods -- n ) length of n periods in frames
+; periods: ( ENV: :freq | periods -- n ) length of n periods in frames
 { sr :freq / * } >periods
 
-; ticks: ( :bpm :tpb ticks -- n ) length of n ticks in frames
+; ticks: ( ENV: :bpm :tpb | ticks -- n ) length of n ticks in frames
 { beats :tpb / } >ticks
 
 ;; pitch
@@ -438,7 +449,7 @@ false >:saturate
 ; w/square: ( -- w )
 { 0 wave/square } >w/square
 
-; w/pulse: ( :pw -- w )
+; w/pulse: ( ENV: :pw | -- w )
 { 0 wave/pulse } >w/pulse
 
 ; w/saw: ( -- w )
@@ -446,42 +457,42 @@ false >:saturate
 
 ;; wave phasors
 
-; ~sin: ( :freq :phase -- s )
+; ~sin: ( ENV: :freq :phase | -- s )
 { w/sin phasor } >~sin
 
-; ~tanh: ( :freq :phase -- s )
+; ~tanh: ( ENV: :freq :phase | -- s )
 { w/tanh phasor } >~tanh
 
-; ~triangle: ( :freq :phase -- s )
+; ~triangle: ( ENV: :freq :phase | -- s )
 { w/triangle phasor } >~triangle
 
-; ~square: ( :freq :phase -- s )
+; ~square: ( ENV: :freq :phase | -- s )
 { w/square phasor } >~square
 
-; ~pulse: ( :freq :phase :pw -- s )
+; ~pulse: ( ENV: :freq :phase :pw | -- s )
 { w/pulse phasor } >~pulse
 
-; ~saw: ( :freq :phase -- s )
+; ~saw: ( ENV: :freq :phase | -- s )
 { w/saw phasor } >~saw
 
 ;; lfo
 
-; ~lfo/sin: ( :phase freq -- s )
+; ~lfo/sin: ( ENV: :phase | freq -- s )
 {( >:freq ~sin)} >~lfo/sin
 
-; ~lfo/tanh: ( :phase freq -- s )
+; ~lfo/tanh: ( ENV: :phase | freq -- s )
 {( >:freq ~tanh)} >~lfo/tanh
 
-; ~lfo/triangle: ( :phase freq -- s )
+; ~lfo/triangle: ( ENV: :phase | freq -- s )
 {( >:freq ~triangle 0.25p skip )} >~lfo/triangle
 
-; ~lfo/square: ( :phase freq -- s )
+; ~lfo/square: ( ENV: :phase | freq -- s )
 {( >:freq ~square 0.26p skip)} >~lfo/square
 
-; ~lfo/pulse: ( :phase :pw pw freq -- s )
+; ~lfo/pulse: ( ENV: :phase | pw freq -- s )
 {( >:freq >:pw ~pulse :pw 0.01 + periods skip )} >~lfo/pulse
 
-; ~lfo/saw: ( :phase freq -- s )
+; ~lfo/saw: ( ENV: :phase | freq -- s )
 {( >:freq ~saw 0.76p skip )} >~lfo/saw
 
 ;; dsp
