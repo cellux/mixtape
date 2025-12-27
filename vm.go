@@ -507,7 +507,7 @@ func (vm *VM) Parse(r io.Reader, filename string) (Vec, error) {
 						if text == ">=" {
 							appendTokens(text, Sym(text))
 						} else {
-							appendTokens(text, Str(text[1:]), Sym("swap"), Sym("set"))
+							appendTokens(text, Str(text[1:]), Sym("set"))
 						}
 					default:
 						appendTokens(text, Sym(text))

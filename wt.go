@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"iter"
 	"math"
 )
 
@@ -224,78 +223,62 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 
 // WavetableOsc produces a mono stream using freq and morph streams, with mip selection.
 func WavetableOsc(freq Stream, phase float64, wt *Wavetable, morph Stream) Stream {
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		fnext, fstop := iter.Pull(freq.Mono().seq)
-		defer fstop()
-		mnext, mstop := iter.Pull(morph.Mono().seq)
-		defer mstop()
-		if phase < 0.0 || phase >= 1.0 {
-			phase = 0.0
+	fnext := freq.Mono().Next
+	mnext := morph.Mono().Next
+	if phase < 0.0 || phase >= 1.0 {
+		phase = 0.0
+	}
+	ph := Smp(phase)
+	sr := Smp(SampleRate())
+	out := make(Frame, 1)
+	return makeStream(1, 0, func() (Frame, bool) {
+		mframe, mok := mnext()
+		if !mok {
+			return nil, false
 		}
-		ph := Smp(phase)
-		sr := Smp(SampleRate())
-		for {
-			mf, mok := mnext()
-			if !mok {
-				return
-			}
-			f, ok := fnext()
-			if !ok {
-				return
-			}
-			out[0] = wt.SampleMip(ph, mf[0], f[0], float64(sr))
-			if !yield(out) {
-				return
-			}
-			inc := f[0] / sr
-			ph = math.Mod(ph+inc, 1.0)
+		fframe, fok := fnext()
+		if !fok {
+			return nil, false
 		}
+		out[0] = wt.SampleMip(ph, mframe[0], fframe[0], float64(sr))
+		inc := fframe[0] / sr
+		ph = math.Mod(ph+inc, 1.0)
+		return out, true
 	})
 }
 
 // FMOsc implements phase modulation (FM) using a wavetable.
 // The mod stream is in cycles, not Hz. Index is a multiplier on the mod signal.
 func FMOsc(wt *Wavetable, freq Stream, mod Stream, index Stream, phase float64) Stream {
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		fnext, fstop := iter.Pull(freq.Mono().seq)
-		defer fstop()
-		mnext, mstop := iter.Pull(mod.Mono().seq)
-		defer mstop()
-		inext, istop := iter.Pull(index.Mono().seq)
-		defer istop()
-
-		if phase < 0.0 || phase >= 1.0 {
-			phase = 0.0
+	fnext := freq.Mono().Next
+	mnext := mod.Mono().Next
+	inext := index.Mono().Next
+	if phase < 0.0 || phase >= 1.0 {
+		phase = 0.0
+	}
+	ph := Smp(phase)
+	sr := Smp(SampleRate())
+	out := make(Frame, 1)
+	return makeStream(1, 0, func() (Frame, bool) {
+		mframe, mok := mnext()
+		if !mok {
+			return nil, false
 		}
-		ph := Smp(phase)
-		sr := Smp(SampleRate())
-
-		for {
-			mframe, mok := mnext()
-			if !mok {
-				return
-			}
-			iframe, iok := inext()
-			if !iok {
-				return
-			}
-			fframe, fok := fnext()
-			if !fok {
-				return
-			}
-
-			pmPhase := ph + iframe[0]*mframe[0]
-			out[0] = wt.SampleMip(pmPhase, 0, fframe[0], float64(sr))
-
-			if !yield(out) {
-				return
-			}
-
-			inc := fframe[0] / sr
-			ph = math.Mod(ph+inc, 1.0)
+		iframe, iok := inext()
+		if !iok {
+			return nil, false
 		}
+		fframe, fok := fnext()
+		if !fok {
+			return nil, false
+		}
+
+		pmPhase := ph + iframe[0]*mframe[0]
+		out[0] = wt.SampleMip(pmPhase, 0, fframe[0], float64(sr))
+
+		inc := fframe[0] / sr
+		ph = math.Mod(ph+inc, 1.0)
+		return out, true
 	})
 }
 

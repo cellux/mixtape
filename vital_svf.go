@@ -1,7 +1,6 @@
 package main
 
 import (
-	"iter"
 	"math"
 )
 
@@ -64,41 +63,36 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) St
 	nchannels := input.nchannels
 
 	// Let makeTransformStream compute nframes as the shortest among inputs.
-	return makeTransformStream([]Stream{input, cutoff, resonance, drive, blend}, func(yield func(Frame) bool) {
-		inNext, inStop := iter.Pull(input.WithNChannels(nchannels).seq)
-		cNext, cStop := iter.Pull(cutoff.Mono().seq)
-		rNext, rStop := iter.Pull(resonance.Mono().seq)
-		dNext, dStop := iter.Pull(drive.Mono().seq)
-		bNext, bStop := iter.Pull(blend.Mono().seq)
-		defer inStop()
-		defer cStop()
-		defer rStop()
-		defer dStop()
-		defer bStop()
+	return makeTransformStream([]Stream{input, cutoff, resonance, drive, blend}, func(inputs []Stream) Stepper {
+		inNext := inputs[0].WithNChannels(nchannels).Next
+		cNext := inputs[1].Mono().Next
+		rNext := inputs[2].Mono().Next
+		dNext := inputs[3].Mono().Next
+		bNext := inputs[4].Mono().Next
 
 		state := newDigitalSVFState(nchannels)
 		out := make(Frame, nchannels)
 
-		for {
+		return func() (Frame, bool) {
 			inFrame, ok := inNext()
 			if !ok {
-				return
+				return nil, false
 			}
 			cFrame, ok := cNext()
 			if !ok {
-				return
+				return nil, false
 			}
 			rFrame, ok := rNext()
 			if !ok {
-				return
+				return nil, false
 			}
 			dFrame, ok := dNext()
 			if !ok {
-				return
+				return nil, false
 			}
 			bFrame, ok := bNext()
 			if !ok {
-				return
+				return nil, false
 			}
 
 			cut := cFrame[0]
@@ -153,9 +147,7 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) St
 				out[c] = y
 			}
 
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }

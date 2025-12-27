@@ -35,24 +35,3 @@ func (s Sym) Equal(other Val) bool {
 		return false
 	}
 }
-
-func init() {
-	RegisterMethod[Sym]("get", 1, func(vm *VM) error {
-		sym, err := Pop[Sym](vm)
-		if err != nil {
-			return err
-		}
-		vm.Push(vm.GetVal(Str(sym)))
-		return nil
-	})
-
-	RegisterMethod[Sym]("set", 2, func(vm *VM) error {
-		val := vm.Pop()
-		sym, err := Pop[Sym](vm)
-		if err != nil {
-			return err
-		}
-		vm.SetVal(Str(sym), val)
-		return nil
-	})
-}

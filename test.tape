@@ -174,8 +174,8 @@ stack len 0 = assert
 { "foo" sym "foo" sym = } assert
 { "foo" sym "foo" != } assert
 { { foo } 0 at "foo" sym = } assert
-( { { foo } 0 at 5 set "foo" get 5 = } assert )
-( { "foo" 5 set { foo } 0 at get 5 = } assert )
+( { 5 { foo } 0 at set "foo" get 5 = } assert )
+( { 5 "foo" set { foo } 0 at get 5 = } assert )
 
 ; vectors
 
@@ -331,8 +331,8 @@ drop
 
 ; set/get
 
-( { "foo" 100 set "foo" get 100 = } assert )
-( { "foo" 100 set foo 100 = } assert )
+( { 100 "foo" set "foo" get 100 = } assert )
+( { 100 "foo" set foo 100 = } assert )
 ( { 100 >foo "foo" get 100 = } assert )
 ( { 100 >foo @foo 100 = } assert )
 
@@ -426,9 +426,66 @@ drop
 { [1 ~ 0 ~ 0.5 ~] 0.5 mix 1s take 0 at [0] = } assert
 { [1 ~ 0 ~ 0.5 ~] 0.75 mix 1s take 0 at [0.25] = } assert
 
+; join / cat
+
+{ [[1] tape [2] tape [3] tape] cat frames [1 2 3] = } assert
+
+{( [1 2 3] tape ~ >:blip
+   [ :blip :blip :blip ] cat frames [1 2 3 1 2 3 1 2 3] =
+)} assert
+
+{( [1 2 3] tape ~ >:blip
+   [ :blip :blip :blip ] cat len 9 =
+)} assert
+
+{( [1 2 3] tape ~ >:blip
+   [ 1 2 3 ] 3 vdup cat frames [1 2 3 1 2 3 1 2 3] =
+)} assert
+
+{( [0 1 0.5 0.5 0]
+   [0.2 2 1 8] 1b distribute
+   [{9 /exp} {-3 /exp} {/line} {-3 /exp}]
+   env >:env
+   :env len >:envlen
+   [
+     :env 1 ~ *
+     :env 1 ~ *
+     :env 1 ~ *
+   ] cat
+   len
+   :envlen 3 * =
+)} assert
+
+{( [1 2 3] tape ~ >:blip
+   [ :blip 2 * :blip 3 * :blip 4 * ] cat frames
+   [2 4 6 3 6 9 4 8 12] =
+)} assert
+
+{( [1 2] tape ~ >:blip
+   [ :blip 1 + :blip 2 + ] cat frames
+   [2 3 3 4] =
+)} assert
+
 ; avg
 
 { [2 5 8] avg 5 = } assert
+
+; combine / stream binops
+
+{( [1 2 3] tape ~ >:s
+   :s :s + frames [2 4 6] =
+)} assert
+
+{( [1 2 3] tape ~ >:s
+   :s :s + :s + frames [3 6 9] =
+)} assert
+
+; makeTransformStream nframes selection
+
+{ 1 ~ 2 ~ + len 0 = } assert                    ; all inputs infinite -> len 0
+{ 1 ~ [10 20 30] tape + len 3 = } assert        ; first infinite, second finite -> shortest finite
+{ [10 20 30] tape 1 ~ + len 3 = } assert        ; first finite, second infinite -> shortest finite
+{ [1 2] tape [10 20 30] tape + len 2 = } assert ; shortest finite of two finites
 
 ; tapes
 

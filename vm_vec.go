@@ -23,13 +23,16 @@ func (v Vec) allNums() bool {
 
 func (v Vec) Stream() Stream {
 	if v.allNums() {
-		return makeStream(1, len(v), func(yield func(Frame) bool) {
-			out := make(Frame, 1)
-			for _, item := range v {
-				out[0] = Smp(item.(Num))
-				if !yield(out) {
-					return
+		out := make(Frame, 1)
+		return makeRewindableStream(1, len(v), func() Stepper {
+			index := 0
+			return func() (Frame, bool) {
+				if index >= len(v) {
+					return nil, false
 				}
+				out[0] = Smp(v[index].(Num))
+				index++
+				return out, true
 			}
 		})
 	}
@@ -48,15 +51,19 @@ func (v Vec) Stream() Stream {
 			return makeEmptyStream(1)
 		}
 	}
-	return makeStream(nchannels, len(v), func(yield func(Frame) bool) {
-		out := make(Frame, nchannels)
-		for _, sv := range v {
+	out := make(Frame, nchannels)
+	return makeRewindableStream(nchannels, len(v), func() Stepper {
+		index := 0
+		return func() (Frame, bool) {
+			if index >= len(v) {
+				return nil, false
+			}
+			sv := v[index].(Vec)
 			for ch := range nchannels {
-				out[ch] = Smp(sv.(Vec)[ch].(Num))
+				out[ch] = Smp(sv[ch].(Num))
 			}
-			if !yield(out) {
-				return
-			}
+			index++
+			return out, true
 		}
 	})
 }

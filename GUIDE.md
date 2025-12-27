@@ -102,7 +102,7 @@ Variables are stored in the environment and are commonly named with a leading `:
 
 Mixtape has a few reader expansions (these appear in tests and the README):
 
-- `>foo` expands to `"foo" swap set` (store).
+- `>foo` expands to `"foo" set` (store).
 - `@foo` expands to `"foo" get` (load).
 
 And for `:names` (common for parameters):

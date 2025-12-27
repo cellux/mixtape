@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"iter"
 )
 
 // Coefficients from Vital's IIR halfband decimator (src/synthesis/filters/iir_halfband_decimator.cpp).
@@ -72,26 +71,21 @@ func iirHalfbandStage(input Stream, tapsA, tapsB []float64) Stream {
 
 	stage := newHalfbandStage(nchannels, tapsA, tapsB)
 
-	return makeStream(nchannels, nframes, func(yield func(Frame) bool) {
-		next, stop := iter.Pull(input.seq)
-		defer stop()
-		out := make(Frame, nchannels)
-		for {
-			f0, ok := next()
-			if !ok {
-				return
-			}
-			f1, ok := next()
-			if !ok {
-				return
-			}
-			for c := range nchannels {
-				out[c] = stage.step(c, f0[c], f1[c])
-			}
-			if !yield(out) {
-				return
-			}
+	next := input.Next
+	out := make(Frame, nchannels)
+	return makeStream(nchannels, nframes, func() (Frame, bool) {
+		f0, ok := next()
+		if !ok {
+			return nil, false
 		}
+		f1, ok := next()
+		if !ok {
+			return nil, false
+		}
+		for c := range nchannels {
+			out[c] = stage.step(c, f0[c], f1[c])
+		}
+		return out, true
 	})
 }
 

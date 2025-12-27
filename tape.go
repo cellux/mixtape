@@ -56,13 +56,17 @@ func (t *Tape) String() string {
 }
 
 func (t *Tape) Stream() Stream {
-	return makeStream(t.nchannels, t.nframes, func(yield func(Frame) bool) {
+	nc := t.nchannels
+	nf := t.nframes
+	return makeRewindableStream(nc, nf, func() Stepper {
 		index := 0
-		for range t.nframes {
-			if !yield(t.samples[index : index+t.nchannels]) {
-				return
+		return func() (Frame, bool) {
+			if index >= nf*nc {
+				return nil, false
 			}
-			index += t.nchannels
+			frame := t.samples[index : index+nc]
+			index += nc
+			return frame, true
 		}
 	})
 }
@@ -117,23 +121,43 @@ func (t *Tape) GetInterpolatedFrameAtIndex(index float64, out Frame) {
 
 	// For tiny waves, just do linear.
 	if nf < 4 {
-		i1 := (i0 + 1) % nf
-		for ch := range nc {
-			out[ch] = smps[nc*i0+ch]*(1.0-frac) + smps[nc*i1+ch]*frac
+		i1 := i0 + 1
+		if i1 == nf {
+			i1 = 0
 		}
-	} else {
-		// 4-point Catmull-Rom (equivalent to cubic Lagrange with uniform parameterization).
-		im1 := (i0 - 1 + nf) % nf
-		i1 := (i0 + 1) % nf
-		i2 := (i0 + 2) % nf
-		t := frac
+		base0 := i0 * nc
+		base1 := i1 * nc
 		for ch := range nc {
-			a0 := -0.5*smps[nc*im1+ch] + 1.5*smps[nc*i0+ch] - 1.5*smps[nc*i1+ch] + 0.5*smps[nc*i2+ch]
-			a1 := smps[nc*im1+ch] - 2.5*smps[nc*i0+ch] + 2.0*smps[nc*i1+ch] - 0.5*smps[nc*i2+ch]
-			a2 := -0.5*smps[nc*im1+ch] + 0.5*smps[nc*i1+ch]
-			a3 := smps[nc*i0+ch]
-			out[ch] = ((a0*t+a1)*t+a2)*t + a3
+			out[ch] = smps[base0+ch]*(1.0-frac) + smps[base1+ch]*frac
 		}
+		return
+	}
+
+	// 4-point Catmull-Rom (equivalent to cubic Lagrange with uniform parameterization).
+	im1 := i0 - 1
+	if im1 < 0 {
+		im1 += nf
+	}
+	i1 := i0 + 1
+	if i1 == nf {
+		i1 = 0
+	}
+	i2 := i1 + 1
+	if i2 == nf {
+		i2 = 0
+	}
+
+	baseM1 := im1 * nc
+	base0 := i0 * nc
+	base1 := i1 * nc
+	base2 := i2 * nc
+	f := frac
+	for ch := range nc {
+		a0 := -0.5*smps[baseM1+ch] + 1.5*smps[base0+ch] - 1.5*smps[base1+ch] + 0.5*smps[base2+ch]
+		a1 := smps[baseM1+ch] - 2.5*smps[base0+ch] + 2.0*smps[base1+ch] - 0.5*smps[base2+ch]
+		a2 := -0.5*smps[baseM1+ch] + 0.5*smps[base1+ch]
+		a3 := smps[base0+ch]
+		out[ch] = ((a0*f+a1)*f+a2)*f + a3
 	}
 }
 
@@ -152,17 +176,20 @@ func (t *Tape) AtPhase(phase Stream) Stream {
 	if nf == 0 {
 		return makeEmptyStream(nc)
 	}
-	return makeStream(nc, 0, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{phase}, func(inputs []Stream) Stepper {
+		pnext := inputs[0].Next
 		out := make(Frame, nc)
-		for frame := range phase.seq {
+		return func() (Frame, bool) {
+			frame, ok := pnext()
+			if !ok {
+				return nil, false
+			}
 			p := math.Mod(float64(frame[0]), 1.0)
 			if p < 0 {
 				p += 1.0
 			}
 			t.GetInterpolatedFrameAtPhase(p, out)
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -877,7 +904,7 @@ func init() {
 		}
 		s := rhs.Stream().WithNChannels(nchannels)
 		writeIndex := offset * nchannels
-		for frame := range s.seq {
+		for frame := range s.Seq() {
 			for i := range nchannels {
 				lhs.samples[writeIndex] += frame[i]
 				writeIndex++

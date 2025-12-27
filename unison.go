@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"iter"
 	"math"
 )
 
@@ -181,38 +180,26 @@ func init() {
 		}
 
 		// Mix voices into stereo
-		mix := makeStream(2, 0, func(yield func(Frame) bool) {
+		nexts := make([]Stepper, len(voiceStreams))
+		for i, vs := range voiceStreams {
+			nexts[i] = vs.Mono().Next
+		}
+		mix := makeStream(2, 0, func() (Frame, bool) {
 			out := make(Frame, 2)
-			nexts := make([]func() (Frame, bool), len(voiceStreams))
-			stops := make([]func(), len(voiceStreams))
-			for i, vs := range voiceStreams {
-				next, stop := iter.Pull(vs.Mono().seq)
-				nexts[i] = next
-				stops[i] = stop
-			}
-			defer func() {
-				for _, stop := range stops {
-					stop()
-				}
-			}()
 			norm := 1.0 / float64(len(voiceStreams))
-			for {
-				var lsum, rsum Smp
-				for i := range voiceStreams {
-					frame, ok := nexts[i]()
-					if !ok {
-						return
-					}
-					s := frame[0]
-					lsum += s * panLR[i][0]
-					rsum += s * panLR[i][1]
+			var lsum, rsum Smp
+			for i := range voiceStreams {
+				frame, ok := nexts[i]()
+				if !ok {
+					return nil, false
 				}
-				out[0] = Smp(lsum * norm)
-				out[1] = Smp(rsum * norm)
-				if !yield(out) {
-					return
-				}
+				s := frame[0]
+				lsum += s * panLR[i][0]
+				rsum += s * panLR[i][1]
 			}
+			out[0] = Smp(lsum * norm)
+			out[1] = Smp(rsum * norm)
+			return out, true
 		})
 
 		vm.Push(mix)

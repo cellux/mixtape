@@ -5,10 +5,14 @@ import (
 	"iter"
 )
 
+type Stepper func() (Frame, bool)
+type StepperFactory func() Stepper
+
 type Stream struct {
-	nchannels int
-	nframes   int
-	seq       iter.Seq[Frame]
+	nchannels  int
+	nframes    int
+	newStepper StepperFactory
+	next       Stepper
 }
 
 func (s Stream) getVal() Val { return s }
@@ -17,16 +21,63 @@ func (s Stream) String() string {
 	return fmt.Sprintf("Stream(%d,%d)", s.nchannels, s.nframes)
 }
 
+// Next returns the next frame and whether it is valid.
+func (s Stream) Next() (Frame, bool) {
+	if s.next == nil {
+		return nil, false
+	}
+	return s.next()
+}
+
+// clone returns a fresh Stream with its own Stepper, if available.
+func (s Stream) clone() Stream {
+	if s.newStepper == nil {
+		return s
+	}
+	return Stream{
+		nchannels:  s.nchannels,
+		nframes:    s.nframes,
+		newStepper: s.newStepper,
+		next:       s.newStepper(),
+	}
+}
+
+// Seq exposes the stream as an iter.Seq to keep range-style iteration without goroutines.
+func (s Stream) Seq() iter.Seq[Frame] {
+	return func(yield func(Frame) bool) {
+		for {
+			f, ok := s.Next()
+			if !ok {
+				return
+			}
+			if !yield(f) {
+				return
+			}
+		}
+	}
+}
+
 type Streamable interface {
 	Val
 	Stream() Stream
 }
 
-func makeStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
+func makeStream(nchannels, nframes int, next Stepper) Stream {
 	return Stream{
 		nchannels: nchannels,
 		nframes:   nframes,
-		seq:       seq,
+		next:      next,
+	}
+}
+
+// makeRewindableStream constructs a Stream whose iteration can be restarted
+// by cloning. The factory must produce an independent Stepper each time.
+func makeRewindableStream(nchannels, nframes int, factory StepperFactory) Stream {
+	return Stream{
+		nchannels:  nchannels,
+		nframes:    nframes,
+		newStepper: factory,
+		next:       factory(),
 	}
 }
 
@@ -34,30 +85,41 @@ func makeStream(nchannels, nframes int, seq iter.Seq[Frame]) Stream {
 // The output stream:
 //   - has the same number of channels as the first input
 //   - has nframes = 0 if all inputs are infinite
-//     has nframes = length of the shortest input otherwise
-func makeTransformStream(inputs []Stream, seq iter.Seq[Frame]) Stream {
+//     has nframes = length of the shortest finite input otherwise
+func makeTransformStream(inputs []Stream, mk func([]Stream) Stepper) Stream {
 	nchannels := inputs[0].nchannels
 	nframesMin := inputs[0].nframes
 	nframesMax := inputs[0].nframes
+
 	for _, s := range inputs {
-		if s.nframes > 0 && s.nframes < nframesMin {
+		if s.nframes > 0 && (nframesMin == 0 || s.nframes < nframesMin) {
 			nframesMin = s.nframes
 		}
 		if s.nframes > nframesMax {
 			nframesMax = s.nframes
 		}
 	}
+
 	var nframes int
 	if nframesMax == 0 {
 		nframes = 0
 	} else {
 		nframes = nframesMin
 	}
-	return makeStream(nchannels, nframes, seq)
+
+	return makeRewindableStream(nchannels, nframes, func() Stepper {
+		clones := make([]Stream, len(inputs))
+		for i, s := range inputs {
+			clones[i] = s.clone()
+		}
+		return mk(clones)
+	})
 }
 
 func makeEmptyStream(nchannels int) Stream {
-	return makeStream(nchannels, 0, func(yield func(Frame) bool) {})
+	return makeStream(nchannels, 0, func() (Frame, bool) {
+		return nil, false
+	})
 }
 
 func streamFromVal(v Val) (Stream, error) {
@@ -78,7 +140,7 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 	end := nframes * nchannels
 	pct1 := end / 100
 	pct1 = pct1 - (pct1 % nchannels)
-	for frame := range s.seq {
+	for frame := range s.Seq() {
 		for ch := range nchannels {
 			t.samples[writeIndex] = frame[ch]
 			writeIndex++
@@ -105,7 +167,7 @@ func (s Stream) Frames(vm *VM) (Vec, error) {
 		return nil, vm.Errorf("frames: attempt to turn infinite stream into finite vec")
 	}
 	v := make(Vec, 0, s.nframes)
-	for frame := range s.seq {
+	for frame := range s.Seq() {
 		if s.nchannels == 1 {
 			v = append(v, Num(frame[0]))
 		} else {
@@ -121,35 +183,41 @@ func (s Stream) Frames(vm *VM) (Vec, error) {
 
 func (s Stream) Mono() Stream {
 	if s.nchannels == 1 {
-		return s
+		return s.clone()
 	}
-	return makeStream(1, s.nframes, func(yield func(Frame) bool) {
+	return makeRewindableStream(1, s.nframes, func() Stepper {
 		out := make(Frame, 1)
-		for frame := range s.seq {
+		next := s.clone().Next
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			var sum Smp
 			for ch := range s.nchannels {
 				sum += frame[ch]
 			}
 			out[0] = sum / Smp(len(frame))
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
 
 func (s Stream) Stereo() Stream {
 	if s.nchannels == 2 {
-		return s
+		return s.clone()
 	}
-	return makeStream(2, s.nframes, func(yield func(Frame) bool) {
+	return makeRewindableStream(2, s.nframes, func() Stepper {
 		out := make(Frame, 2)
-		for frame := range s.seq {
+		next := s.clone().Next
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			out[0] = frame[0]
 			out[1] = frame[0]
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -166,21 +234,25 @@ func (s Stream) WithNChannels(nchannels int) Stream {
 
 func (s Stream) Combine(other Stream, op SmpBinOp) Stream {
 	nchannels := s.nchannels
-	return makeTransformStream([]Stream{s, other}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s, other}, func(inputs []Stream) Stepper {
 		out := make(Frame, nchannels)
-		onext, ostop := iter.Pull(other.WithNChannels(nchannels).seq)
-		defer ostop()
-		for frame := range s.seq {
+		lhs := inputs[0]
+		rhs := inputs[1]
+		snext := lhs.WithNChannels(nchannels).Next
+		onext := rhs.WithNChannels(nchannels).Next
+		return func() (Frame, bool) {
+			frame, ok := snext()
+			if !ok {
+				return nil, false
+			}
 			oframe, ok := onext()
 			if !ok {
-				return
+				return nil, false
 			}
 			for i := range nchannels {
 				out[i] = op(frame[i], oframe[i])
 			}
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -190,16 +262,22 @@ func (s Stream) Join(other Stream) Stream {
 	if s.nframes > 0 && other.nframes > 0 {
 		nframes = s.nframes + other.nframes
 	}
-	return makeStream(s.nchannels, nframes, func(yield func(Frame) bool) {
-		for frame := range s.seq {
-			if !yield(frame) {
-				return
+	return makeRewindableStream(s.nchannels, nframes, func() Stepper {
+		// Each consumer gets its own traversal; reset the steppers per clone.
+		lhs := s.clone()
+		rhs := other.clone()
+		snext := lhs.Next
+		onext := rhs.Next
+		phase := 0
+		return func() (Frame, bool) {
+			if phase == 0 {
+				frame, ok := snext()
+				if ok {
+					return frame, true
+				}
+				phase = 1
 			}
-		}
-		for frame := range other.seq {
-			if !yield(frame) {
-				return
-			}
+			return onext()
 		}
 	})
 }
@@ -214,15 +292,19 @@ func applySmpUnOp(vm *VM, op SmpUnOp) error {
 		return nil
 	}
 	s := input.Stream()
-	result := makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+	result := makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
+		s := inputs[0]
 		out := make(Frame, s.nchannels)
-		for frame := range s.seq {
+		next := s.Next
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			for ch := range s.nchannels {
 				out[ch] = op(frame[ch])
 			}
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 	vm.Push(result)
@@ -257,7 +339,7 @@ func init() {
 		}
 		nchannels := int(nchannelsNum)
 		if nchannels < 1 {
-			return vm.Errorf("~empty: invalid number of channels: %d", nchannelsNum)
+			return vm.Errorf("~empty: invalid number of channels: %d", int(nchannelsNum))
 		}
 		vm.Push(makeEmptyStream(nchannels))
 		return nil

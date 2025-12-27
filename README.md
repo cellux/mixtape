@@ -81,7 +81,7 @@ Editor basics (subset):
 Special parsing sugar:
 
 - `@foo` expands to `"foo" get` (load variable).
-- `>foo` expands to `"foo" swap set` (store variable).
+- `>foo` expands to `"foo" set` (store variable).
 - Numeric suffixes expand to unit conversion words:
   - `1s` → `1 seconds`
   - `1b` → `1 beats`

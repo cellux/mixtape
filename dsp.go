@@ -2,35 +2,31 @@ package main
 
 import (
 	"fmt"
-	"iter"
 	"math"
 )
 
 func Phasor(freq Stream, phase float64) Stream {
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		fnext, fstop := iter.Pull(freq.Mono().seq)
-		defer fstop()
+	return makeRewindableStream(1, 0, func() Stepper {
+		fnext := freq.Mono().Next
 		if phase < 0.0 || phase >= 1.0 {
 			phase = 0.0
 		}
 		p := Smp(phase)
 		sr := Smp(SampleRate())
-		for {
-			out[0] = p
-			if !yield(out) {
-				return
-			}
+		out := make(Frame, 1)
+		return func() (Frame, bool) {
 			f, ok := fnext()
 			if !ok {
-				return
+				return nil, false
 			}
+			out[0] = p
 			periodSamples := sr / f[0]
 			if periodSamples == 0 {
-				return
+				return nil, false
 			}
 			incr := 1.0 / periodSamples
 			p = math.Mod(p+incr, 1.0)
+			return out, true
 		}
 	})
 }
@@ -38,21 +34,18 @@ func Phasor(freq Stream, phase float64) Stream {
 // impulseStream produces a mono infinite stream of impulses (value 1) at the
 // provided frequency. Output is 0 elsewhere. Phase is in [0,1).
 func impulseStream(freq Stream, phase float64) Stream {
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		fnext, fstop := iter.Pull(freq.Mono().seq)
-		defer fstop()
-
+	return makeRewindableStream(1, 0, func() Stepper {
+		fnext := freq.Mono().Next
 		if phase < 0.0 || phase >= 1.0 {
 			phase = 0.0
 		}
 		p := Smp(phase)
 		sr := Smp(SampleRate())
-
-		for {
+		out := make(Frame, 1)
+		return func() (Frame, bool) {
 			f, ok := fnext()
 			if !ok {
-				return
+				return nil, false
 			}
 
 			inc := f[0] / sr
@@ -68,9 +61,7 @@ func impulseStream(freq Stream, phase float64) Stream {
 				}
 			}
 
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -88,20 +79,23 @@ func DCBlock(s Stream, alpha float64) Stream {
 	if s.nframes != 0 {
 		return DCMeanCenter(s)
 	}
-	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
 		out := make(Frame, s.nchannels)
 		prevIn := make([]Smp, s.nchannels)
 		prevOut := make([]Smp, s.nchannels)
-		for frame := range s.seq {
+		next := inputs[0].Next
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			for c := range s.nchannels {
 				y := frame[c] - prevIn[c] + Smp(alpha)*prevOut[c]
 				prevIn[c] = frame[c]
 				prevOut[c] = y
 				out[c] = y
 			}
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -122,14 +116,17 @@ func OnePole(s Stream, a float64) Stream {
 	if a > 1 {
 		a = 1
 	}
-
 	nchannels := s.nchannels
-	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
-		out := make(Frame, nchannels)
+	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
 		prev := make(Frame, nchannels)
+		out := make(Frame, nchannels)
+		next := inputs[0].Next
 		initialized := false
-
-		for frame := range s.seq {
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			if !initialized {
 				copy(prev, frame)
 				copy(out, prev)
@@ -140,19 +137,21 @@ func OnePole(s Stream, a float64) Stream {
 					out[c] = prev[c]
 				}
 			}
-
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
 
 // Peak computes the maximum absolute value per frame, returning a mono stream.
 func Peak(s Stream) Stream {
-	return makeStream(1, s.nframes, func(yield func(Frame) bool) {
+	return makeRewindableStream(1, s.nframes, func() Stepper {
 		out := make(Frame, 1)
-		for frame := range s.seq {
+		next := s.clone().Next
+		return func() (Frame, bool) {
+			frame, ok := next()
+			if !ok {
+				return nil, false
+			}
 			maxAbs := Smp(0)
 			for c := range s.nchannels {
 				v := frame[c]
@@ -164,9 +163,7 @@ func Peak(s Stream) Stream {
 				}
 			}
 			out[0] = maxAbs
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -187,21 +184,23 @@ func CombFilter(input Stream, delayFrames Stream, feedback float64) Stream {
 	// Big enough for a couple seconds of delay.
 	bufSize := max(SampleRate()*4, 1)
 
-	return makeTransformStream([]Stream{input, delayFrames}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{input, delayFrames}, func(inputs []Stream) Stepper {
 		bufs := make([][]Smp, nchannels)
 		for c := range bufs {
 			bufs[c] = make([]Smp, bufSize)
 		}
-		writeIdx := 0
-
-		dnext, dstop := iter.Pull(delayFrames.Mono().seq)
-		defer dstop()
-
 		out := make(Frame, nchannels)
-		for frame := range input.seq {
+		inext := inputs[0].Next
+		dnext := inputs[1].Mono().Next
+		writeIdx := 0
+		return func() (Frame, bool) {
+			frame, ok := inext()
+			if !ok {
+				return nil, false
+			}
 			dframe, ok := dnext()
 			if !ok {
-				return
+				return nil, false
 			}
 			// Delay in samples (can be fractional).
 			d := float64(dframe[0])
@@ -231,25 +230,25 @@ func CombFilter(input Stream, delayFrames Stream, feedback float64) Stream {
 				writeIdx = 0
 			}
 
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
 
 func (s Stream) Delay(nframes int) Stream {
-	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
 		out := make(Frame, s.nchannels)
-		for range nframes {
-			if !yield(out) {
-				return
+		next := inputs[0].Next
+		remaining := nframes
+		return func() (Frame, bool) {
+			if remaining > 0 {
+				remaining--
+				for i := range out {
+					out[i] = 0
+				}
+				return out, true
 			}
-		}
-		for frame := range s.seq {
-			if !yield(frame) {
-				return
-			}
+			return next()
 		}
 	})
 }
@@ -265,34 +264,52 @@ func Z1(s Stream, init Frame) Stream {
 		nframes = s.nframes + 1
 	}
 	nchannels := s.nchannels
-	return makeStream(nchannels, nframes, func(yield func(Frame) bool) {
+	return makeRewindableStream(nchannels, nframes, func() Stepper {
+		snext := s.clone().Next
 		prev := make(Frame, nchannels)
 		copy(prev, init)
 		out := make(Frame, nchannels)
-		for frame := range s.seq {
-			copy(out, prev)
-			copy(prev, frame)
-			if !yield(out) {
-				return
+		first := true
+		finalSent := false
+		return func() (Frame, bool) {
+			if first {
+				first = false
+				copy(out, prev)
+				frame, ok := snext()
+				if ok {
+					copy(prev, frame)
+				}
+				return out, true
 			}
-		}
-		if !yield(prev) {
-			return
+			frame, ok := snext()
+			if ok {
+				copy(out, prev)
+				copy(prev, frame)
+				return out, true
+			}
+			if finalSent {
+				return nil, false
+			}
+			finalSent = true
+			copy(out, prev)
+			return out, true
 		}
 	})
 }
 
 func (s Stream) Skip(nframes int) Stream {
-	return makeTransformStream([]Stream{s}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
+		next := inputs[0].Next
 		skipped := 0
-		for frame := range s.seq {
-			if skipped < nframes {
+		return func() (Frame, bool) {
+			for skipped < nframes {
+				_, ok := next()
+				if !ok {
+					return nil, false
+				}
 				skipped++
-				continue
 			}
-			if !yield(frame) {
-				return
-			}
+			return next()
 		}
 	})
 }
@@ -315,19 +332,21 @@ func SampleHold(input Stream, rate Stream) Stream {
 	nchannels := input.nchannels
 	sr := Smp(SampleRate())
 
-	return makeTransformStream([]Stream{input, rate}, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{input, rate}, func(inputs []Stream) Stepper {
 		out := make(Frame, nchannels)
 		held := make(Frame, nchannels)
+		inext := inputs[0].Next
+		rnext := inputs[1].Mono().Next
 		hasHeld := false
 		p := Smp(0)
-
-		rnext, rstop := iter.Pull(rate.Mono().seq)
-		defer rstop()
-
-		for frame := range input.seq {
+		return func() (Frame, bool) {
 			rframe, ok := rnext()
 			if !ok {
-				return
+				return nil, false
+			}
+			frame, ok := inext()
+			if !ok {
+				return nil, false
 			}
 
 			inc := rframe[0] / sr
@@ -347,9 +366,7 @@ func SampleHold(input Stream, rate Stream) Stream {
 			}
 
 			copy(out, held)
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -357,27 +374,23 @@ func SampleHold(input Stream, rate Stream) Stream {
 // Pan applies equal-power panning to a mono stream, returning stereo.
 // Pan value can be a Num or Streamable providing values in [-1..1].
 func Pan(s Stream, pan Stream) Stream {
-	return makeStream(2, s.nframes, func(yield func(Frame) bool) {
+	return makeTransformStream([]Stream{s, pan}, func(inputs []Stream) Stepper {
+		snext := inputs[0].Mono().Next
+		pnext := inputs[1].Mono().Next
 		out := make(Frame, 2)
-		snext, sstop := iter.Pull(s.Mono().seq)
-		pnext, pstop := iter.Pull(pan.Mono().seq)
-		defer sstop()
-		defer pstop()
-		for {
+		return func() (Frame, bool) {
 			sframe, ok := snext()
 			if !ok {
-				return
+				return nil, false
 			}
 			pframe, ok := pnext()
 			if !ok {
-				return
+				return nil, false
 			}
 			l, r := equalPowerPan(float64(pframe[0]))
 			out[0] = sframe[0] * Smp(l)
 			out[1] = sframe[0] * Smp(r)
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }
@@ -390,29 +403,21 @@ func Pan(s Stream, pan Stream) Stream {
 func Mix(ss []Stream, ratio Stream) Stream {
 	nchannels := ss[0].nchannels
 	allStreams := append(ss[:], ratio.Mono())
-	ratioIndex := len(ss)
-	return makeTransformStream(allStreams, func(yield func(Frame) bool) {
-		out := make(Frame, nchannels)
-		nexts := make([]func() (Frame, bool), len(allStreams))
-		stops := make([]func(), len(allStreams))
-		frames := make([]Frame, len(ss))
-		for i, s := range allStreams {
-			next, stop := iter.Pull(s.seq)
-			nexts[i] = next
-			stops[i] = stop
+	return makeTransformStream(allStreams, func(inputs []Stream) Stepper {
+		nexts := make([]Stepper, len(inputs))
+		frames := make([]Frame, len(inputs)-1)
+		ratioIndex := len(inputs) - 1
+		for i, s := range inputs {
+			nexts[i] = s.Next
 		}
-		defer func() {
-			for _, stop := range stops {
-				stop()
-			}
-		}()
-		for {
+		out := make(Frame, nchannels)
+		return func() (Frame, bool) {
 			for ch := range nchannels {
 				out[ch] = 0
 			}
 			ratioFrame, ok := nexts[ratioIndex]()
 			if !ok {
-				return
+				return nil, false
 			}
 			ratio := ratioFrame[0]
 			if ratio > 1 {
@@ -430,7 +435,7 @@ func Mix(ss []Stream, ratio Stream) Stream {
 			for i := range ss {
 				frames[i], ok = nexts[i]()
 				if !ok {
-					return
+					return nil, false
 				}
 			}
 			lframe := frames[leftIndex]
@@ -438,9 +443,7 @@ func Mix(ss []Stream, ratio Stream) Stream {
 			for ch := range nchannels {
 				out[ch] = lframe[ch]*leftWeight + rframe[ch]*rightWeight
 			}
-			if !yield(out) {
-				return
-			}
+			return out, true
 		}
 	})
 }

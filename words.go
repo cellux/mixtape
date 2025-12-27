@@ -132,14 +132,20 @@ func init() {
 	})
 
 	RegisterWord("set", func(vm *VM) error {
-		v := vm.Pop()
 		k := vm.Pop()
+		if sym, ok := k.(Sym); ok {
+			k = Str(sym)
+		}
+		v := vm.Pop()
 		vm.SetVal(k, v)
 		return nil
 	})
 
 	RegisterWord("get", func(vm *VM) error {
 		k := vm.Pop()
+		if sym, ok := k.(Sym); ok {
+			k = Str(sym)
+		}
 		v := vm.GetVal(k)
 		vm.Push(v)
 		return nil

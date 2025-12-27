@@ -41,7 +41,7 @@
 
 ; :name -> ":name" get
 ; @foo -> "foo" get
-; >foo -> "foo" swap set
+; >foo -> "foo" set
 ; 1s -> 1 seconds
 ; 1b -> 1 beats
 ; 1t -> 1 ticks
@@ -69,7 +69,7 @@
 ; ]: ( <xs> -- v ) collect items pushed since last stack mark, remove mark
 ; {: ( -- ) quote on
 ; }: ( -- v ) quote off
-; set: ( k x -- ) set env var named by key
+; set: ( x k -- ) set env var named by key
 ; get: ( k -- x ) fetch env var named by key
 ; eval: ( x -- <xs> ) evaluate x
 ; iter: ( I -- i ) obtain iterator from iterable
@@ -266,7 +266,7 @@
 0.5 >:pw
 
 ; f: ( n -- | SETS: :freq ) shorthand for setting :freq to n
-{ ":freq" swap set } >f
+{ ":freq" set } >f
 
 ;; filter parameters
 
@@ -350,10 +350,12 @@ false >:saturate
    :seq/syms { get iter } map >:seq/symiters
    {
      [:seq/syms :seq/symiters] zip {
-       dup 1 at ; symiter
-       swap 0 at ; sym
+       dup  ; [sym symiter]
+       0 at ; sym
        swap
-       eval dup nil? { break } if set
+       1 at ; symiter
+       eval dup nil? { break } if
+       swap set
      } each
      seq/body
    } loop

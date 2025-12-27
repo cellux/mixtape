@@ -13,19 +13,15 @@ func noiseStream(seed int) Stream {
 	if state == 0 {
 		state = 1
 	}
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		for {
-			// xorshift32
-			state ^= state << 13
-			state ^= state >> 17
-			state ^= state << 5
-			u := float64(state) / float64(^uint32(0))
-			out[0] = Smp(2*u - 1)
-			if !yield(out) {
-				return
-			}
-		}
+	out := make(Frame, 1)
+	return makeStream(1, 0, func() (Frame, bool) {
+		// xorshift32
+		state ^= state << 13
+		state ^= state >> 17
+		state ^= state << 5
+		u := float64(state) / float64(^uint32(0))
+		out[0] = Smp(2*u - 1)
+		return out, true
 	})
 }
 
@@ -54,24 +50,20 @@ func pinkStream(seed int) Stream {
 	}
 
 	counter := uint32(0)
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		for {
-			counter++
-			tz := bits.TrailingZeros32(counter)
-			if tz >= nrows {
-				tz = nrows - 1
-			}
-
-			newVal := nextWhite()
-			sum += newVal - rows[tz]
-			rows[tz] = newVal
-
-			out[0] = sum / Smp(nrows)
-			if !yield(out) {
-				return
-			}
+	out := make(Frame, 1)
+	return makeStream(1, 0, func() (Frame, bool) {
+		counter++
+		tz := bits.TrailingZeros32(counter)
+		if tz >= nrows {
+			tz = nrows - 1
 		}
+
+		newVal := nextWhite()
+		sum += newVal - rows[tz]
+		rows[tz] = newVal
+
+		out[0] = sum / Smp(nrows)
+		return out, true
 	})
 }
 
@@ -84,23 +76,19 @@ func brownStream(seed int, step Smp) Stream {
 	}
 
 	x := Smp(0)
-	return makeStream(1, 0, func(yield func(Frame) bool) {
-		out := make(Frame, 1)
-		for {
-			// xorshift32
-			state ^= state << 13
-			state ^= state >> 17
-			state ^= state << 5
-			u := float64(state) / float64(^uint32(0))
+	out := make(Frame, 1)
+	return makeStream(1, 0, func() (Frame, bool) {
+		// xorshift32
+		state ^= state << 13
+		state ^= state >> 17
+		state ^= state << 5
+		u := float64(state) / float64(^uint32(0))
 
-			x += step * Smp(2*u-1)
-			x = math.Min(1, math.Max(-1, x))
+		x += step * Smp(2*u-1)
+		x = math.Min(1, math.Max(-1, x))
 
-			out[0] = x
-			if !yield(out) {
-				return
-			}
-		}
+		out[0] = x
+		return out, true
 	})
 }
 
