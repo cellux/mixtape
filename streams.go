@@ -81,6 +81,30 @@ func makeRewindableStream(nchannels, nframes int, factory StepperFactory) Stream
 	}
 }
 
+// makeDelayedStream constructs a stream that conceptually prepends `extraFrames`
+// frames before the (possibly finite) input stream.
+//
+// For finite inputs (nframes > 0), the result length is input.nframes + extraFrames.
+// For inputs with unknown/infinite length (nframes == 0), the result length is left
+// as 0.
+//
+// The provided factory receives a cloned input stream and must implement the
+// actual delay behavior.
+func makeDelayedStream(input Stream, extraFrames int, factory func(Stream) Stepper) Stream {
+	if extraFrames < 0 {
+		extraFrames = 0
+	}
+
+	nframes := 0
+	if input.nframes > 0 {
+		nframes = input.nframes + extraFrames
+	}
+
+	return makeRewindableStream(input.nchannels, nframes, func() Stepper {
+		return factory(input.clone())
+	})
+}
+
 // makeTransformStream creates a stream which transforms N input streams into a single output stream.
 // The output stream:
 //   - has the same number of channels as the first input

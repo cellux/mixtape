@@ -236,9 +236,13 @@ func CombFilter(input Stream, delayFrames Stream, feedback float64) Stream {
 }
 
 func (s Stream) Delay(nframes int) Stream {
-	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
+	if nframes <= 0 {
+		return s.clone()
+	}
+
+	return makeDelayedStream(s, nframes, func(input Stream) Stepper {
 		out := make(Frame, s.nchannels)
-		next := inputs[0].Next
+		next := input.Next
 		remaining := nframes
 		return func() (Frame, bool) {
 			if remaining > 0 {
@@ -257,15 +261,9 @@ func (s Stream) Delay(nframes int) Stream {
 // The first output frame is the provided init; thereafter each output frame
 // is the previous input frame.
 func Z1(s Stream, init Frame) Stream {
-	var nframes int
-	if s.nframes == 0 {
-		nframes = 0
-	} else {
-		nframes = s.nframes + 1
-	}
 	nchannels := s.nchannels
-	return makeRewindableStream(nchannels, nframes, func() Stepper {
-		snext := s.clone().Next
+	return makeDelayedStream(s, 1, func(input Stream) Stepper {
+		snext := input.Next
 		prev := make(Frame, nchannels)
 		copy(prev, init)
 		out := make(Frame, nchannels)
