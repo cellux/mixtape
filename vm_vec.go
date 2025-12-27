@@ -23,8 +23,8 @@ func (v Vec) allNums() bool {
 
 func (v Vec) Stream() Stream {
 	if v.allNums() {
-		out := make(Frame, 1)
 		return makeRewindableStream(1, len(v), func() Stepper {
+			out := make(Frame, 1)
 			index := 0
 			return func() (Frame, bool) {
 				if index >= len(v) {
@@ -51,8 +51,8 @@ func (v Vec) Stream() Stream {
 			return makeEmptyStream(1)
 		}
 	}
-	out := make(Frame, nchannels)
 	return makeRewindableStream(nchannels, len(v), func() Stepper {
+		out := make(Frame, nchannels)
 		index := 0
 		return func() (Frame, bool) {
 			if index >= len(v) {

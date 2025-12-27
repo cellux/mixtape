@@ -146,8 +146,8 @@ func (n Num) String() string {
 }
 
 func (n Num) Stream() Stream {
-	out := Frame{Smp(n)}
 	return makeRewindableStream(1, 0, func() Stepper {
+		out := Frame{Smp(n)}
 		return func() (Frame, bool) {
 			return out, true
 		}

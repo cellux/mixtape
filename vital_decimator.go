@@ -69,23 +69,24 @@ func iirHalfbandStage(input Stream, tapsA, tapsB []float64) Stream {
 		nframes = input.nframes / 2
 	}
 
-	stage := newHalfbandStage(nchannels, tapsA, tapsB)
-
-	next := input.Next
-	out := make(Frame, nchannels)
-	return makeStream(nchannels, nframes, func() (Frame, bool) {
-		f0, ok := next()
-		if !ok {
-			return nil, false
+	return makeRewindableStream(nchannels, nframes, func() Stepper {
+		stage := newHalfbandStage(nchannels, tapsA, tapsB)
+		next := input.clone().Next
+		out := make(Frame, nchannels)
+		return func() (Frame, bool) {
+			f0, ok := next()
+			if !ok {
+				return nil, false
+			}
+			f1, ok := next()
+			if !ok {
+				return nil, false
+			}
+			for c := range nchannels {
+				out[c] = stage.step(c, f0[c], f1[c])
+			}
+			return out, true
 		}
-		f1, ok := next()
-		if !ok {
-			return nil, false
-		}
-		for c := range nchannels {
-			out[c] = stage.step(c, f0[c], f1[c])
-		}
-		return out, true
 	})
 }
 
@@ -102,7 +103,7 @@ func Decimate(input Stream, factor int, sharp bool) Stream {
 		stages++
 	}
 
-	out := input
+	out := input.clone()
 	for i := 0; i < stages; i++ {
 		last := i == stages-1
 		useSharp := sharp && last

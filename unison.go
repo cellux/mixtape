@@ -180,26 +180,47 @@ func init() {
 		}
 
 		// Mix voices into stereo
-		nexts := make([]Stepper, len(voiceStreams))
-		for i, vs := range voiceStreams {
-			nexts[i] = vs.Mono().Next
+		nframesMin := 0
+		nframesMax := 0
+		if len(voiceStreams) > 0 {
+			nframesMin = voiceStreams[0].nframes
+			nframesMax = voiceStreams[0].nframes
 		}
-		mix := makeStream(2, 0, func() (Frame, bool) {
-			out := make(Frame, 2)
-			norm := 1.0 / float64(len(voiceStreams))
-			var lsum, rsum Smp
-			for i := range voiceStreams {
-				frame, ok := nexts[i]()
-				if !ok {
-					return nil, false
-				}
-				s := frame[0]
-				lsum += s * panLR[i][0]
-				rsum += s * panLR[i][1]
+		for _, vs := range voiceStreams {
+			if vs.nframes > 0 && (nframesMin == 0 || vs.nframes < nframesMin) {
+				nframesMin = vs.nframes
 			}
-			out[0] = Smp(lsum * norm)
-			out[1] = Smp(rsum * norm)
-			return out, true
+			if vs.nframes > nframesMax {
+				nframesMax = vs.nframes
+			}
+		}
+		nframes := 0
+		if nframesMax > 0 {
+			nframes = nframesMin
+		}
+
+		mix := makeRewindableStream(2, nframes, func() Stepper {
+			nexts := make([]Stepper, len(voiceStreams))
+			for i, vs := range voiceStreams {
+				nexts[i] = vs.clone().Mono().Next
+			}
+			norm := 1.0 / float64(len(voiceStreams))
+			return func() (Frame, bool) {
+				out := make(Frame, 2)
+				var lsum, rsum Smp
+				for i := range voiceStreams {
+					frame, ok := nexts[i]()
+					if !ok {
+						return nil, false
+					}
+					s := frame[0]
+					lsum += s * panLR[i][0]
+					rsum += s * panLR[i][1]
+				}
+				out[0] = Smp(lsum * norm)
+				out[1] = Smp(rsum * norm)
+				return out, true
+			}
 		})
 
 		vm.Push(mix)
