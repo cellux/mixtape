@@ -126,9 +126,9 @@ stack len 0 = assert
 
 ; onepole
 
-{ [0 1 1 1] ~ 0 onepole 4 take frames [0 1 1 1] = } assert
-{ [0 1 1 1] ~ 1 onepole 4 take frames [0 0 0 0] = } assert
-{ [0 1 1 1] ~ 0.5 onepole 4 take frames [0 0.5 0.75 0.875] = } assert
+{ [0 1 1 1] 0 onepole 4 take frames [0 1 1 1] = } assert
+{ [0 1 1 1] 1 onepole 4 take frames [0 0 0 0] = } assert
+{ [0 1 1 1] 0.5 onepole 4 take frames [0 0.5 0.75 0.875] = } assert
 
 { 5.5 trunc 5 = } assert
 { 5.7 trunc 5 = } assert
@@ -385,7 +385,7 @@ drop
 { b-9 119 = } assert
 
 ; sample access
-{ 0.3 1s take 0 at 0.3 = } assert
+{ 0.3 1s take 0 at [0.3] = } assert
 { 0.3 stereo 1s take 0 at [0.3 0.3] = } assert
 
 ; decibels
@@ -394,7 +394,7 @@ drop
 { 20 db 10 = } assert
 { -20 db 0.1 = } assert
 
-{ 1 -20 gain 1s take 0 at 0.1 = } assert
+{ 1 -20 gain 1s take 0 at [0.1] = } assert
 
 ; clamp
 
@@ -402,33 +402,52 @@ drop
 { -5 0 10 clamp 0 = } assert
 { 15 0 10 clamp 10 = } assert
 
-{ 1.5 -1 1 clamp 1s take 0 at 1 = } assert
-{ -2 -1 1 clamp 1s take 0 at -1 = } assert
+{ 1.5 -1 1 clamp 1s take 0 at [1] = } assert
+{ -2 -1 1 clamp 1s take 0 at [-1] = } assert
 
 ; clip
 
 ; softclip
 
-{ 1 ~ 0 softclip 1s take 0 at 0.7615941559557649 = } assert
-{ 1 ~ 1 softclip 1s take 0 at 0.5 = } assert
-{ 0.5 ~ 2 softclip 1s take 0 at 0.4583333333333333 = } assert
-{ 2 ~ 3 softclip 1s take 0 at 0.6666666666666666 = } assert
+{ 1 ~ 0 softclip 1s take 0 at [0.7615941559557649] = } assert
+{ 1 ~ 1 softclip 1s take 0 at [0.5] = } assert
+{ 0.5 ~ 2 softclip 1s take 0 at [0.4583333333333333] = } assert
+{ 2 ~ 3 softclip 1s take 0 at [0.6666666666666666] = } assert
 
 
-{ 1.5 clip 1s take 0 at 1 = } assert
-{ -2 clip 1s take 0 at -1 = } assert
+{ 1.5 clip 1s take 0 at [1] = } assert
+{ -2 clip 1s take 0 at [-1] = } assert
 
 ; mix
 
-{ [1 ~ 0 ~] 0 mix 1s take 0 at 1 = } assert
-{ [1 ~ 0 ~] 1 mix 1s take 0 at 0 = } assert
-{ [1 ~ 0 ~] 0.25 mix 1s take 0 at 0.75 = } assert
-{ [1 ~ 0 ~ 0.5 ~] 0.5 mix 1s take 0 at 0 = } assert
-{ [1 ~ 0 ~ 0.5 ~] 0.75 mix 1s take 0 at 0.25 = } assert
+{ [1 ~ 0 ~] 0 mix 1s take 0 at [1] = } assert
+{ [1 ~ 0 ~] 1 mix 1s take 0 at [0] = } assert
+{ [1 ~ 0 ~] 0.25 mix 1s take 0 at [0.75] = } assert
+{ [1 ~ 0 ~ 0.5 ~] 0.5 mix 1s take 0 at [0] = } assert
+{ [1 ~ 0 ~ 0.5 ~] 0.75 mix 1s take 0 at [0.25] = } assert
 
 ; avg
 
 { [2 5 8] avg 5 = } assert
+
+; tapes
+
+{ [1 2 3 4] tape 1 shift frames [2 3 4 1] = } assert
+{ [1 2 3 4] tape 0.5 shift frames [3 4 1 2] = } assert
+{ [1 2 3 4] tape -1 shift frames [4 1 2 3] = } assert
+
+{ [10 20 30] tape 1 at [20] = } assert
+
+{ [1 2 3 4] tape 1 3 slice frames [2 3] = } assert
+
+{ [1 2 3] tape [10 20] tape 1 +@ frames [1 12 23] = } assert
+{ [1 2] tape [3 4 5] tape 1 +@ frames [1 5 4 5] = } assert
+
+{ 4 tape/square frames [1 -1 -1 1] = } assert
+{ 4 tape/triangle frames [0 1 0 -1] = } assert
+{ 4 tape/pulse frames [1 1 -1 -1] = } assert
+{ ( 0.25 >:pw 4 tape/pulse ) frames [1 -1 -1 -1] = } assert
+{ 4 tape/saw frames [0 0.5 -1 -0.5] = } assert
 
 ; utilities
 
@@ -446,7 +465,6 @@ drop
 { [[1 2]] ~ z1 2 take frames [[0 0] [1 2]] = } assert
 
 { 2 9 7 nip * 14 = } assert
-
 
 ; peak
 

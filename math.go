@@ -129,23 +129,23 @@ func DivOp() SmpBinOp {
 }
 
 func ModOp() SmpBinOp {
-	return func(x, y Smp) Smp { return math.Mod(float64(x), float64(y)) }
+	return func(x, y Smp) Smp { return math.Mod(x, y) }
 }
 
 func RemOp() SmpBinOp {
-	return func(x, y Smp) Smp { return math.Remainder(float64(x), float64(y)) }
+	return func(x, y Smp) Smp { return math.Remainder(x, y) }
 }
 
 func PowOp() SmpBinOp {
-	return func(x, y Smp) Smp { return math.Pow(float64(x), float64(y)) }
+	return func(x, y Smp) Smp { return math.Pow(x, y) }
 }
 
 func Atan2Op() SmpBinOp {
-	return func(y, x Smp) Smp { return math.Atan2(float64(y), float64(x)) }
+	return func(y, x Smp) Smp { return math.Atan2(y, x) }
 }
 
 func HypotOp() SmpBinOp {
-	return func(x, y Smp) Smp { return math.Hypot(float64(x), float64(y)) }
+	return func(x, y Smp) Smp { return math.Hypot(x, y) }
 }
 
 func MinOp() SmpBinOp {

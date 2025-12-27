@@ -94,7 +94,7 @@ func brownStream(seed int, step Smp) Stream {
 			u := float64(state) / float64(^uint32(0))
 
 			x += step * Smp(2*u-1)
-			x = Smp(math.Min(1, math.Max(-1, float64(x))))
+			x = math.Min(1, math.Max(-1, x))
 
 			out[0] = x
 			if !yield(out) {

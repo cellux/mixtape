@@ -114,15 +114,15 @@ func (v Vec) Partition(size, step int) Vec {
 	return out
 }
 
-// Treat a flat numeric vector as one wave.
-func (v Vec) Wave() Wave {
-	wave := make(Wave, len(v))
+// Treat a flat numeric vector as a single-channel tape.
+func (v Vec) Tape() *Tape {
+	t := makeTape(1, len(v))
 	for i, item := range v {
 		if n, ok := item.(Num); ok {
-			wave[i] = Smp(n)
+			t.samples[i] = Smp(n)
 		}
 	}
-	return wave
+	return t
 }
 
 func init() {
@@ -262,21 +262,6 @@ func init() {
 		step := int(stepNum)
 		size := int(sizeNum)
 		vm.Push(v.Partition(size, step))
-		return nil
-	})
-	RegisterMethod[Vec]("tape", 1, func(vm *VM) error {
-		v, err := Pop[Vec](vm)
-		if err != nil {
-			return err
-		}
-		t := pushTape(vm, 1, len(v))
-		for i, item := range v {
-			if n, ok := item.(Num); ok {
-				t.samples[i] = Smp(n)
-			} else {
-				return fmt.Errorf("Vec.tape: expected numeric items, got %T", item)
-			}
-		}
 		return nil
 	})
 	RegisterWord("vdup", func(vm *VM) error {

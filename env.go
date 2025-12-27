@@ -53,7 +53,7 @@ func envseg(start, end float64, nframes int, shape func(float64) float64) *Tape 
 	var x float64
 	incr := 1.0 / float64(nframes)
 	for i := range nframes {
-		t.samples[i] = start + float64(end-start)*shape(x)
+		t.samples[i] = start + (end-start)*shape(x)
 		x += incr
 	}
 	return t

@@ -27,7 +27,7 @@ func svfMix(blend Smp) (low, band, high Smp) {
 		blend = 1
 	}
 	// Band amount follows a circular crossfade to keep unity energy.
-	band = Smp(math.Sqrt(math.Max(0, 1-math.Pow(float64(blend), 2))))
+	band = math.Sqrt(math.Max(0, 1-math.Pow(blend, 2)))
 	if blend < 0 {
 		low = -blend
 		high = 0
@@ -148,7 +148,7 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) St
 
 				y := lowAmt*lp + bandAmt*bp + highAmt*hp
 				if saturate {
-					y = Smp(math.Tanh(float64(y)))
+					y = math.Tanh(y)
 				}
 				out[c] = y
 			}

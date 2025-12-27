@@ -8,8 +8,8 @@ import (
 
 const MaxMipLevel = 8
 
-// Waveset is an array of waves at a given level of a wavetable
-type Waveset []Wave
+// Waveset is an array of single-channel tapes at a given level of a wavetable
+type Waveset []*Tape
 
 // Wavetable represents a collection of single-cycle waves with optional wave morphing.
 // Level 0 contains the base waves; additional mip levels are built lazily on demand.
@@ -21,15 +21,15 @@ func newWavetableFromWaveset(baseWaves Waveset) (*Wavetable, error) {
 	if len(baseWaves) == 0 {
 		return nil, fmt.Errorf("wavetable: no waves")
 	}
-	baseWaveSize := len(baseWaves[0])
+	baseWaveSize := baseWaves[0].nframes
 	if baseWaveSize == 0 {
 		return nil, fmt.Errorf("wavetable: empty wave")
 	}
-	for i, w := range baseWaves {
-		if len(w) != baseWaveSize {
-			return nil, fmt.Errorf("wavetable: wave %d has size %d, expected %d", i, len(w), baseWaveSize)
+	for i, t := range baseWaves {
+		if t.nframes != baseWaveSize {
+			return nil, fmt.Errorf("wavetable: wave %d has size %d, expected %d", i, t.nframes, baseWaveSize)
 		}
-		w.removeDCInPlace()
+		t.removeDCInPlace()
 	}
 	wt := &Wavetable{}
 	wt.mips = make([]Waveset, 0, MaxMipLevel)
@@ -37,7 +37,7 @@ func newWavetableFromWaveset(baseWaves Waveset) (*Wavetable, error) {
 	return wt, nil
 }
 
-func newWavetableFromWave(baseWave Wave) (*Wavetable, error) {
+func newWavetableFromWave(baseWave *Tape) (*Wavetable, error) {
 	return newWavetableFromWaveset(Waveset{baseWave})
 }
 
@@ -50,13 +50,13 @@ func (wt *Wavetable) String() string {
 	if levels > 0 {
 		waves = len(wt.mips[0])
 		if waves > 0 {
-			size = len(wt.mips[0][0])
+			size = wt.mips[0][0].nframes
 		}
 	}
 	return fmt.Sprintf("Wavetable(waves=%d size=%d levels=%d)", waves, size, levels)
 }
 
-func (wt *Wavetable) Wave() Wave {
+func (wt *Wavetable) Tape() *Tape {
 	if len(wt.mips) == 0 {
 		return nil
 	}
@@ -82,13 +82,13 @@ func (wt *Wavetable) ensureLevel(l int) {
 		return
 	}
 	prev := wt.mips[l-1]
-	size := len(prev[0])
+	size := prev[0].nframes
 	if size <= 16 {
 		wt.mips[l] = prev
 		return
 	}
 
-	next := make([]Wave, len(prev))
+	next := make(Waveset, len(prev))
 	for i, wave := range prev {
 		nextWave := wave.buildFFTLowpass()
 		nextWave.removeDCInPlace()
@@ -121,7 +121,9 @@ func (wt *Wavetable) sampleWaveAtLevel(level int, phase, morph Smp) Smp {
 		return 0
 	}
 	if len(waves) == 1 {
-		return waves[0].sampleAt(phase)
+		out := Frame{0}
+		waves[0].GetInterpolatedFrame(float64(phase), out)
+		return out[0]
 	}
 	m := float64(morph)
 	if m < 0 {
@@ -138,18 +140,22 @@ func (wt *Wavetable) sampleWaveAtLevel(level int, phase, morph Smp) Smp {
 		i1 = len(waves) - 1
 		frac = 0
 	}
-	s0 := waves[i0].sampleAt(phase)
-	s1 := waves[i1].sampleAt(phase)
-	return Smp(float64(s0)*(1.0-frac) + float64(s1)*frac)
+	f0 := Frame{0}
+	f1 := Frame{0}
+	waves[i0].GetInterpolatedFrame(float64(phase), f0)
+	waves[i1].GetInterpolatedFrame(float64(phase), f1)
+	s0 := f0[0]
+	s1 := f1[0]
+	return s0*(1.0-frac) + s1*frac
 }
 
 // SampleMip samples using mip levels chosen from freq; crossfades between adjacent levels.
-func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
-	if wt == nil || len(wt.mips) == 0 || len(wt.mips[0]) == 0 || len(wt.mips[0][0]) == 0 {
+func (wt *Wavetable) SampleMip(phase, morph, freq float64, sr float64) Smp {
+	if wt == nil || len(wt.mips) == 0 || len(wt.mips[0]) == 0 || wt.mips[0][0].nframes == 0 {
 		return 0
 	}
 	baseWaves := wt.mips[0]
-	baseWaveSize := len(baseWaves[0])
+	baseWaveSize := baseWaves[0].nframes
 	lvl := min(selectMipLevel(float64(freq), sr, baseWaveSize), MaxMipLevel)
 	wt.ensureLevel(lvl)
 	// choose second level for crossfade if available
@@ -175,31 +181,31 @@ func (wt *Wavetable) SampleMip(phase, morph, freq Smp, sr float64) Smp {
 		return s0
 	}
 	s1 := wt.sampleWaveAtLevel(lvl2, phase, morph)
-	return Smp((1-fade)*float64(s0) + fade*float64(s1))
+	return (1-fade)*s0 + fade*s1
 }
 
 func wtSin() (*Wavetable, error) {
-	return newWavetableFromWave(sinWave(0))
+	return newWavetableFromWave(sinTape(0))
 }
 
 func wtTanh() (*Wavetable, error) {
-	return newWavetableFromWave(tanhWave(0))
+	return newWavetableFromWave(tanhTape(0))
 }
 
 func wtTriangle() (*Wavetable, error) {
-	return newWavetableFromWave(triangleWave(0))
+	return newWavetableFromWave(triangleTape(0))
 }
 
 func wtSquare() (*Wavetable, error) {
-	return newWavetableFromWave(squareWave(0))
+	return newWavetableFromWave(squareTape(0))
 }
 
 func wtPulse(pw float64) (*Wavetable, error) {
-	return newWavetableFromWave(pulseWave(0, pw))
+	return newWavetableFromWave(pulseTape(0, pw))
 }
 
 func wtSaw() (*Wavetable, error) {
-	return newWavetableFromWave(sawWave(0))
+	return newWavetableFromWave(sawTape(0))
 }
 
 func wavetableFromVal(v Val) (*Wavetable, error) {
@@ -212,23 +218,23 @@ func wavetableFromVal(v Val) (*Wavetable, error) {
 		}
 		// If elements can provide waves, build wavetable from waveset, otherwise single wave.
 		switch x[0].(type) {
-		case WaveProvider:
+		case TapeProvider:
 			waves := make(Waveset, 0, len(x))
 			for i, item := range x {
-				if wp, ok := x[i].(WaveProvider); ok {
-					waves = append(waves, wp.Wave())
+				if wp, ok := x[i].(TapeProvider); ok {
+					waves = append(waves, wp.Tape())
 				} else {
 					return nil, fmt.Errorf("wavetable: unsupported wave type %T at index %d", item, i)
 				}
 			}
 			return newWavetableFromWaveset(waves)
 		case Num:
-			return newWavetableFromWave(x.Wave())
+			return newWavetableFromWave(x.Tape())
 		default:
 			return nil, fmt.Errorf("wavetable: cannot create wave from Vec of %T", x[0])
 		}
-	case WaveProvider:
-		return newWavetableFromWave(x.Wave())
+	case TapeProvider:
+		return newWavetableFromWave(x.Tape())
 	case Streamable:
 		s := x.Stream()
 		if s.nframes == 0 {

@@ -17,8 +17,7 @@
 ; n : Num
 ; b : Num interpreted as a boolean: 0=false, anything else is true
 ; v : Vec
-; w : Wave
-; S : Streamable (Num, Vec, Wave, Tape, Stream)
+; S : Streamable (Num, Vec, Tape, Stream)
 ; s : Stream
 ; t : Tape
 ; I : Iterable
@@ -157,10 +156,16 @@
 
 ; tape1: ( n -- t ) allocate mono tape
 ; tape2: ( n -- t ) allocate stereo tape
+; tape/sin: ( n -- t ) sine wave (single-cycle)
+; tape/tanh: ( n -- t ) tanh-shaped wave (single-cycle)
+; tape/triangle: ( n -- t ) triangle wave (single-cycle)
+; tape/square: ( n -- t ) square wave (single-cycle)
+; tape/pulse: ( ENV: :pw | n -- t ) pulse wave using env pulse width (single-cycle)
+; tape/saw: ( n -- t ) saw wave (single-cycle)
 ; Tape.shift: ( t amount -- t ) rotate samples by amount, mutates t
 ; Tape.resample: ( t converter ratio -- t ) resample tape
 ; Tape.at: ( t frame -- n|[ns] ) fetch frame
-; Tape.slice: ( t start end -- t ) tape with frames between [start,end), mutates t
+; Tape.slice: ( t start end -- t ) tape with frames of t between [start,end)
 ; Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset, mutates t
 
 ;; stream generators
@@ -168,6 +173,7 @@
 ; ~: ( S -- s ) coerce to stream
 ; ~empty: ( n -- s ) empty stream of n channels
 ; ~impulse: ( ENV: :freq :phase | -- s ) band-limited impulse train
+; ~phasor: ( ENV: :freq :phase | -- s ) phase-accumulating oscillator with output in range [0,1(
 
 ;; stream transformers
 
@@ -204,14 +210,6 @@
 ; ~brown: ( ENV: :seed | step -- s ) brown noise with step size
 
 ;; waves and wavetables
-
-; wave/sin: ( n -- w ) sine wave (single-cycle)
-; wave/tanh: ( n -- w ) tanh-shaped wave (single-cycle)
-; wave/triangle: ( n -- w ) triangle wave (single-cycle)
-; wave/square: ( n -- w ) square wave (single-cycle)
-; wave/pulse: ( ENV: :pw | n -- w ) pulse wave using env pulse width (single-cycle)
-; wave/saw: ( n -- w ) saw wave (single-cycle)
-; phasor: ( ENV: :freq :phase | w -- s ) phase-accumulating oscillator using env freq/phase
 
 ; wt: ( x -- wt ) coerce to wavetable
 ; wt/sin: ( -- wt ) sine wavetable
@@ -438,66 +436,25 @@ false >:saturate
    env
 )} >perc
 
-;; default waves (single-cycle waveforms)
-;; size = 0 means use hard-coded default size
-
-; w/sin: ( -- w )
-{ 0 wave/sin } >w/sin
-
-; w/tanh: ( -- w )
-{ 0 wave/tanh } >w/tanh
-
-; w/triangle: ( -- w )
-{ 0 wave/triangle } >w/triangle
-
-; w/square: ( -- w )
-{ 0 wave/square } >w/square
-
-; w/pulse: ( ENV: :pw | -- w )
-{ 0 wave/pulse } >w/pulse
-
-; w/saw: ( -- w )
-{ 0 wave/saw } >w/saw
-
-;; wave phasors
+;; oscillators
 
 ; ~sin: ( ENV: :freq :phase | -- s )
-{ w/sin phasor } >~sin
+{ 0 tape/sin ~phasor at/phase } >~sin
 
 ; ~tanh: ( ENV: :freq :phase | -- s )
-{ w/tanh phasor } >~tanh
+{ ~sin tanh } >~tanh
 
 ; ~triangle: ( ENV: :freq :phase | -- s )
-{ w/triangle phasor } >~triangle
+{ 0 tape/triangle ~phasor at/phase } >~triangle
 
 ; ~square: ( ENV: :freq :phase | -- s )
-{ w/square phasor } >~square
+{ 0 tape/square ~phasor at/phase } >~square
 
 ; ~pulse: ( ENV: :freq :phase :pw | -- s )
-{ w/pulse phasor } >~pulse
+{ 0 tape/pulse ~phasor at/phase } >~pulse
 
 ; ~saw: ( ENV: :freq :phase | -- s )
-{ w/saw phasor } >~saw
-
-;; lfo
-
-; ~lfo/sin: ( ENV: :freq :phase | -- s )
-{ ~sin } >~lfo/sin
-
-; ~lfo/tanh: ( ENV: :freq :phase | -- s )
-{ ~tanh } >~lfo/tanh
-
-; ~lfo/triangle: ( ENV: :freq :phase | -- s )
-{ ~triangle 0.25p skip } >~lfo/triangle
-
-; ~lfo/square: ( ENV: :freq :phase | -- s )
-{ ~square 0.26p skip } >~lfo/square
-
-; ~lfo/pulse: ( ENV: :freq :phase :pw | -- s )
-{ ~pulse :pw 0.01 + periods skip } >~lfo/pulse
-
-; ~lfo/saw: ( ENV: :freq :phase | -- s )
-{ ~saw 0.76p skip } >~lfo/saw
+{ 0 tape/saw ~phasor at/phase } >~saw
 
 ;; dsp
 

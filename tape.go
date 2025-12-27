@@ -10,6 +10,7 @@ import (
 	mgl "github.com/go-gl/mathgl/mgl32"
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/mitchellh/go-homedir"
+	"github.com/mjibson/go-dsp/fft"
 	"io"
 	"math"
 	"os"
@@ -17,10 +18,35 @@ import (
 	"unsafe"
 )
 
+// DefaultWaveSize defines the size of builtin single-cycle waveforms
+const DefaultWaveSize = 8192
+
 type Tape struct {
 	nchannels int
 	nframes   int
 	samples   []Smp
+}
+
+type TapeProvider interface {
+	Val
+	Tape() *Tape
+}
+
+func (t *Tape) Tape() *Tape { return t }
+
+func makeTape(nchannels, nframes int) *Tape {
+	samples := make([]Smp, nchannels*nframes)
+	return &Tape{
+		nchannels: nchannels,
+		nframes:   nframes,
+		samples:   samples,
+	}
+}
+
+func pushTape(vm *VM, nchannels, nframes int) *Tape {
+	tape := makeTape(nchannels, nframes)
+	vm.Push(tape)
+	return tape
 }
 
 func (t *Tape) getVal() Val { return t }
@@ -41,11 +67,220 @@ func (t *Tape) Stream() Stream {
 	})
 }
 
-func (t *Tape) Wave() Wave {
-	wave := make(Wave, t.nframes)
-	tapeMix := t.Stream().Mono().Take(nil, t.nframes)
-	copy(wave, tapeMix.samples)
-	return wave
+// removeDCInPlace subtracts the mean from each channel of the tape to center channels at 0.
+func (t *Tape) removeDCInPlace() {
+	nf := t.nframes
+	if nf == 0 {
+		return
+	}
+	nc := t.nchannels
+	smps := t.samples
+	sum := make(Frame, nc)
+	readIndex := 0
+	for range nf {
+		for ch := range nc {
+			sum[ch] += smps[readIndex]
+			readIndex++
+		}
+	}
+	for ch := range nc {
+		mean := sum[ch] / Smp(nf)
+		if math.Abs(float64(mean)) < 1e-12 {
+			continue
+		}
+		writeIndex := ch
+		for range nf {
+			smps[writeIndex] -= mean
+			writeIndex += nc
+		}
+	}
+}
+
+// GetInterpolatedFrame writes the frame at the given fractional `index` to `out`.
+// Uses 4-point Lagrange (Catmull-Rom) interpolation when possible; falls back to linear for very short tapes.
+// Writes zeroes to `out` if index is out of range.
+func (t *Tape) GetInterpolatedFrame(index float64, out Frame) {
+	nc := t.nchannels
+	nf := t.nframes
+	smps := t.samples
+
+	if index < 0 || index >= float64(nf) {
+		for ch := range nc {
+			out[ch] = 0
+		}
+		return
+	}
+
+	i0 := int(index) % nf
+	frac := Smp(index) - Smp(i0)
+
+	// For tiny waves, just do linear.
+	if nf < 4 {
+		i1 := (i0 + 1) % nf
+		for ch := range nc {
+			out[ch] = smps[nc*i0+ch]*(1.0-frac) + smps[nc*i1+ch]*frac
+		}
+	} else {
+		// 4-point Catmull-Rom (equivalent to cubic Lagrange with uniform parameterization).
+		im1 := (i0 - 1 + nf) % nf
+		i1 := (i0 + 1) % nf
+		i2 := (i0 + 2) % nf
+		t := frac
+		for ch := range nc {
+			a0 := -0.5*smps[nc*im1+ch] + 1.5*smps[nc*i0+ch] - 1.5*smps[nc*i1+ch] + 0.5*smps[nc*i2+ch]
+			a1 := smps[nc*im1+ch] - 2.5*smps[nc*i0+ch] + 2.0*smps[nc*i1+ch] - 0.5*smps[nc*i2+ch]
+			a2 := -0.5*smps[nc*im1+ch] + 0.5*smps[nc*i1+ch]
+			a3 := smps[nc*i0+ch]
+			out[ch] = ((a0*t+a1)*t+a2)*t + a3
+		}
+	}
+}
+
+// AtPhase returns a stream of frames interpolated at fractional phase [0,1).
+func (t *Tape) AtPhase(phase Stream) Stream {
+	nc := t.nchannels
+	nf := t.nframes
+	return makeStream(nc, nf, func(yield func(Frame) bool) {
+		if nf == 0 {
+			return
+		}
+		out := make(Frame, nc)
+		for frame := range phase.seq {
+			p := math.Mod(float64(frame[0]), 1.0)
+			if p < 0 {
+				p += 1.0
+			}
+			index := p * float64(nf)
+			t.GetInterpolatedFrame(index, out)
+			if !yield(out) {
+				return
+			}
+		}
+	})
+}
+
+// buildFFTLowpass takes a single-channel tape and returns a
+// half-size, lowpassed version using FFT bin masking.  It zeroess
+// bins above half the Nyquist and downsamples by 2.
+// if t is not single-channel or its frame count <=1, returns t.
+func (t *Tape) buildFFTLowpass() *Tape {
+	if t.nchannels != 1 || t.nframes <= 1 {
+		return t
+	}
+	nf := t.nframes
+	// FFT expects complex input.
+	x := make([]complex128, nf)
+	for i, v := range t.samples {
+		x[i] = complex(Num(v), 0)
+	}
+	X := fft.FFT(x)
+
+	// Zero upper half of bins (simple brickwall at N/4 of original
+	// sample rate, since we will downsample by 2).
+	for k := nf/4 + 1; k < nf-(nf/4); k++ {
+		X[k] = 0
+	}
+
+	// IFFT back.
+	xt := fft.IFFT(X)
+	// Downsample by 2 with implicit box filter from lowpass.
+	nextN := nf / 2
+	out := makeTape(1, nextN)
+	for i := range nextN {
+		// fft.IFFT divides by N; xt[2*i] has that scaling already.
+		out.samples[i] = Smp(real(xt[2*i]))
+	}
+	out.removeDCInPlace()
+	return out
+}
+
+func sinTape(size int) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	t := makeTape(1, size)
+	for i := range size {
+		t.samples[i] = math.Sin(2 * math.Pi * float64(i) / float64(size))
+	}
+	return t
+}
+
+func tanhTape(size int) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	t := sinTape(size)
+	for i := range t.nframes {
+		t.samples[i] = math.Tanh(t.samples[i])
+	}
+	return t
+}
+
+func triangleTape(size int) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	t := makeTape(1, size)
+	quarter := size / 4
+	for i := range quarter {
+		t0 := Smp(i) / Smp(quarter)
+		t.samples[i+0*quarter] = t0
+		t.samples[i+1*quarter] = 1 - t0
+		t.samples[i+2*quarter] = -t0
+		t.samples[i+3*quarter] = t0 - 1
+	}
+	return t
+}
+
+func squareTape(size int) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	t := makeTape(1, size)
+	quarter := size / 4
+	for i := range quarter {
+		t.samples[i] = 1
+		t.samples[i+quarter] = -1
+		t.samples[i+2*quarter] = -1
+		t.samples[i+3*quarter] = 1
+	}
+	return t
+}
+
+func pulseTape(size int, pw float64) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	if pw < 0 {
+		pw = 0
+	}
+	if pw > 1 {
+		pw = 1
+	}
+	onSamples := int(math.Round(pw * float64(size)))
+	t := makeTape(1, size)
+	for i := range size {
+		if i < onSamples {
+			t.samples[i] = 1
+		} else {
+			t.samples[i] = -1
+		}
+	}
+	return t
+}
+
+func sawTape(size int) *Tape {
+	if size == 0 {
+		size = DefaultWaveSize
+	}
+	t := makeTape(1, size)
+	half := size / 2
+	for i := range half {
+		t0 := Smp(i) / Smp(half)
+		t.samples[i%size] = t0
+		t.samples[(i+half)%size] = t0 - 1
+	}
+	return t
 }
 
 func (t *Tape) Slice(start, end int) *Tape {
@@ -276,12 +511,12 @@ func loadAndPushTape(vm *VM, path string) error {
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, nchannels, nframes)
 			for i := range nsamples {
-				tape.samples[i] = float64(resampledBuf[i])
+				tape.samples[i] = Smp(resampledBuf[i])
 			}
 		} else {
 			tape := pushTape(vm, nchannels, nframes)
 			for i := 0; i < len(floatBuf.Data); i++ {
-				tape.samples[i] = floatBuf.Data[i] / factor
+				tape.samples[i] = Smp(floatBuf.Data[i] / factor)
 			}
 		}
 	case ".mp3":
@@ -325,7 +560,7 @@ func loadAndPushTape(vm *VM, path string) error {
 			nframes := nsamples / nchannels
 			tape := pushTape(vm, nchannels, nframes)
 			for i := range nsamples {
-				tape.samples[i] = float64(resampledBuf[i])
+				tape.samples[i] = Smp(resampledBuf[i])
 			}
 		} else {
 			var startTime float64
@@ -341,7 +576,7 @@ func loadAndPushTape(vm *VM, path string) error {
 				if err != nil {
 					return err
 				}
-				tape.samples[i] = float64(sample) / 32768
+				tape.samples[i] = Smp(sample) / 32768
 			}
 			logger.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 		}
@@ -469,8 +704,97 @@ func MakeTapeReader(tape *Tape, nchannels int) *TapeReader {
 }
 
 func init() {
+	RegisterMethod[TapeProvider]("tape", 1, func(vm *VM) error {
+		tp, err := Pop[TapeProvider](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(tp.Tape())
+		return nil
+	})
+
+	RegisterWord("tape1", func(vm *VM) error {
+		nframesNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pushTape(vm, 1, int(nframesNum))
+		return nil
+	})
+
+	RegisterWord("tape2", func(vm *VM) error {
+		nframesNum, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pushTape(vm, 2, int(nframesNum))
+		return nil
+	})
+
+	RegisterWord("tape/sin", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(sinTape(int(size)))
+		return nil
+	})
+
+	RegisterWord("tape/tanh", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(tanhTape(int(size)))
+		return nil
+	})
+
+	RegisterWord("tape/triangle", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(triangleTape(int(size)))
+		return nil
+	})
+
+	RegisterWord("tape/square", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(squareTape(int(size)))
+		return nil
+	})
+
+	RegisterWord("tape/pulse", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		pw := 0.5
+		if pwVal := vm.GetVal(":pw"); pwVal != nil {
+			if pwNum, ok := pwVal.(Num); ok {
+				pw = float64(pwNum)
+			} else {
+				return fmt.Errorf("tape/pulse: :pw must be number")
+			}
+		}
+		vm.Push(pulseTape(int(size), pw))
+		return nil
+	})
+
+	RegisterWord("tape/saw", func(vm *VM) error {
+		size, err := Pop[Num](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(sawTape(int(size)))
+		return nil
+	})
+
 	RegisterMethod[*Tape]("at", 2, func(vm *VM) error {
-		frameNum, err := Pop[Num](vm)
+		indexNum, err := Pop[Num](vm)
 		if err != nil {
 			return err
 		}
@@ -478,24 +802,34 @@ func init() {
 		if err != nil {
 			return err
 		}
-		frame := int(frameNum)
-		if frame < 0 || frame >= t.nframes {
-			return vm.Errorf("Tape.at: invalid frame index: %d", frame)
+		index := int(indexNum)
+		if index < 0 || index >= t.nframes {
+			return vm.Errorf("Tape.at: invalid frame index: %d", index)
 		}
-		sampleOffset := frame * t.nchannels
-		if t.nchannels == 1 {
-			vm.Push(Num(t.samples[sampleOffset]))
-		} else {
-			v := make(Vec, t.nchannels)
-			for ch := range t.nchannels {
-				v[ch] = Num(t.samples[sampleOffset+ch])
-			}
-			vm.Push(v)
+		f := make(Frame, t.nchannels)
+		t.GetInterpolatedFrame(float64(indexNum), f)
+		out := make(Vec, t.nchannels)
+		for ch := range t.nchannels {
+			out[ch] = Num(f[ch])
 		}
+		vm.Push(out)
 		return nil
 	})
 
-	RegisterMethod[*Tape]("slice", 2, func(vm *VM) error {
+	RegisterMethod[*Tape]("at/phase", 2, func(vm *VM) error {
+		phase, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		t, err := Pop[*Tape](vm)
+		if err != nil {
+			return err
+		}
+		vm.Push(t.AtPhase(phase))
+		return nil
+	})
+
+	RegisterMethod[*Tape]("slice", 3, func(vm *VM) error {
 		endNum, err := Pop[Num](vm)
 		if err != nil {
 			return err
@@ -504,7 +838,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		t, err := Top[*Tape](vm)
+		t, err := Pop[*Tape](vm)
 		if err != nil {
 			return err
 		}
@@ -545,40 +879,7 @@ func init() {
 	})
 }
 
-func makeTape(nchannels, nframes int) *Tape {
-	samples := make([]Smp, nchannels*nframes)
-	return &Tape{
-		nchannels: nchannels,
-		nframes:   nframes,
-		samples:   samples,
-	}
-}
-
-func pushTape(vm *VM, nchannels, nframes int) *Tape {
-	tape := makeTape(nchannels, nframes)
-	vm.Push(tape)
-	return tape
-}
-
-func init() {
-	RegisterWord("tape1", func(vm *VM) error {
-		nframesNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
-		pushTape(vm, 1, int(nframesNum))
-		return nil
-	})
-
-	RegisterWord("tape2", func(vm *VM) error {
-		nframesNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
-		pushTape(vm, 2, int(nframesNum))
-		return nil
-	})
-}
+// TapeDisplay
 
 const (
 	pointVertexShader = `
@@ -666,7 +967,7 @@ func (td *TapeDisplay) Render(tape *Tape, pixelRect Rect, windowSize int, window
 			maxVal := math.Inf(-1)
 			base := ch
 			for i := i0; i < i1; i++ {
-				smp := tape.samples[base+i*tape.nchannels]
+				smp := float64(tape.samples[base+i*tape.nchannels])
 				if smp < minVal {
 					minVal = smp
 				}

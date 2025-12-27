@@ -6,6 +6,35 @@ import (
 	"math"
 )
 
+func Phasor(freq Stream, phase float64) Stream {
+	return makeStream(1, 0, func(yield func(Frame) bool) {
+		out := make(Frame, 1)
+		fnext, fstop := iter.Pull(freq.Mono().seq)
+		defer fstop()
+		if phase < 0.0 || phase >= 1.0 {
+			phase = 0.0
+		}
+		p := Smp(phase)
+		sr := Smp(SampleRate())
+		for {
+			out[0] = p
+			if !yield(out) {
+				return
+			}
+			f, ok := fnext()
+			if !ok {
+				return
+			}
+			periodSamples := sr / f[0]
+			if periodSamples == 0 {
+				return
+			}
+			incr := 1.0 / periodSamples
+			p = math.Mod(p+incr, 1.0)
+		}
+	})
+}
+
 // impulseStream produces a mono infinite stream of impulses (value 1) at the
 // provided frequency. Output is 0 elsewhere. Phase is in [0,1).
 func impulseStream(freq Stream, phase float64) Stream {
@@ -32,7 +61,7 @@ func impulseStream(freq Stream, phase float64) Stream {
 			} else {
 				p += inc
 				if p >= 1 {
-					p = Smp(math.Mod(float64(p), 1.0))
+					p = math.Mod(p, 1.0)
 					out[0] = 1
 				} else {
 					out[0] = 0
@@ -49,33 +78,7 @@ func impulseStream(freq Stream, phase float64) Stream {
 // DCMeanCenter subtracts the per-channel mean for finite streams.
 func DCMeanCenter(s Stream) Stream {
 	t := s.Take(nil, s.nframes)
-
-	sums := make([]float64, t.nchannels)
-	readIndex := 0
-	for range t.nframes {
-		for ch := range t.nchannels {
-			sums[ch] += t.samples[readIndex]
-			readIndex++
-		}
-	}
-
-	means := make([]Smp, t.nchannels)
-	for ch := range t.nchannels {
-		mean := sums[ch] / float64(t.nframes)
-		if math.Abs(mean) < 1e-12 {
-			mean = 0
-		}
-		means[ch] = Smp(mean)
-	}
-
-	writeIndex := 0
-	for range t.nframes {
-		for ch := range t.nchannels {
-			t.samples[writeIndex] -= means[ch]
-			writeIndex++
-		}
-	}
-
+	t.removeDCInPlace()
 	return t.Stream()
 }
 
@@ -339,7 +342,7 @@ func SampleHold(input Stream, rate Stream) Stream {
 
 			p += inc
 			if p >= 1 {
-				p = Smp(math.Mod(float64(p), 1.0))
+				p = math.Mod(p, 1.0)
 				copy(held, frame)
 			}
 
@@ -443,6 +446,19 @@ func Mix(ss []Stream, ratio Stream) Stream {
 }
 
 func init() {
+	RegisterWord("~phasor", func(vm *VM) error {
+		freq, err := vm.GetStream(":freq")
+		if err != nil {
+			return err
+		}
+		phase, err := vm.GetFloat(":phase")
+		if err != nil {
+			return err
+		}
+		vm.Push(Phasor(freq, phase))
+		return nil
+	})
+
 	RegisterWord("~impulse", func(vm *VM) error {
 		freq, err := vm.GetStream(":freq")
 		if err != nil {
@@ -532,7 +548,7 @@ func init() {
 			return applySmpUnOp(vm, TanhOp())
 		case 1: // atan (scaled to [-1,1])
 			return applySmpUnOp(vm, func(x Smp) Smp {
-				return Smp((2.0 / math.Pi) * math.Atan(float64(x)))
+				return (2.0 / math.Pi) * math.Atan(x)
 			})
 		case 2: // cubic soft clip
 			return applySmpUnOp(vm, func(x Smp) Smp {
@@ -546,7 +562,7 @@ func init() {
 			})
 		case 3: // softsign
 			return applySmpUnOp(vm, func(x Smp) Smp {
-				return x / (1 + Smp(math.Abs(float64(x))))
+				return x / (1 + math.Abs(x))
 			})
 		default:
 			return vm.Errorf("softclip: invalid mode (%d)", mode)
