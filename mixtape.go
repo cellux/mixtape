@@ -6,7 +6,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"runtime/pprof"
 	"slices"
 	"strings"
 
@@ -23,6 +25,7 @@ var flags struct {
 	TPB        int
 	EvalFile   string
 	EvalScript string
+	Prof       string
 }
 
 func SampleRate() int {
@@ -561,32 +564,60 @@ func setDefaults(vm *VM) {
 	vm.SetVal(":nf", int(framesPerBeat))
 }
 
+func withProfileIfNeeded(fn func() error) error {
+	if flags.Prof == "" {
+		return fn()
+	}
+	cpuFile, err := os.Create(flags.Prof + ".cpu")
+	if err != nil {
+		return err
+	}
+	if err := pprof.StartCPUProfile(cpuFile); err != nil {
+		cpuFile.Close()
+		return err
+	}
+	defer func() {
+		pprof.StopCPUProfile()
+		cpuFile.Close()
+	}()
+
+	err = fn()
+
+	if memFile, memErr := os.Create(flags.Prof + ".mem"); memErr == nil {
+		pprof.WriteHeapProfile(memFile)
+		memFile.Close()
+	}
+
+	return err
+}
+
+func evalAndReport(vm *VM, r io.Reader, name string) error {
+	err := vm.ParseAndEval(r, name)
+	if vm.evalResult != nil {
+		fmt.Println(vm.evalResult)
+	}
+	if vm.errResult != nil {
+		fmt.Fprintln(os.Stderr, vm.errResult)
+	}
+	return err
+}
+
 func runWithArgs(vm *VM, args []string) error {
 	openFiles := make(map[string]string)
 	currentFile := ""
 	if flags.EvalScript != "" {
-		err := vm.ParseAndEval(strings.NewReader(flags.EvalScript), "<script>")
-		if vm.evalResult != nil {
-			fmt.Println(vm.evalResult)
-		}
-		if vm.errResult != nil {
-			fmt.Fprintln(os.Stderr, vm.errResult)
-		}
-		return err
+		return withProfileIfNeeded(func() error {
+			return evalAndReport(vm, strings.NewReader(flags.EvalScript), "<script>")
+		})
 	}
 	if flags.EvalFile != "" {
 		data, err := os.ReadFile(flags.EvalFile)
 		if err != nil {
 			return err
 		}
-		err = vm.ParseAndEval(bytes.NewReader(data), flags.EvalFile)
-		if vm.evalResult != nil {
-			fmt.Println(vm.evalResult)
-		}
-		if vm.errResult != nil {
-			fmt.Fprintln(os.Stderr, vm.errResult)
-		}
-		return err
+		return withProfileIfNeeded(func() error {
+			return evalAndReport(vm, bytes.NewReader(data), flags.EvalFile)
+		})
 	}
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
@@ -608,6 +639,7 @@ func main() {
 	flag.IntVar(&flags.TPB, "tpb", 96, "Ticks per beat")
 	flag.StringVar(&flags.EvalFile, "f", "", "File to evaluate")
 	flag.StringVar(&flags.EvalScript, "e", "", "Script to evaluate")
+	flag.StringVar(&flags.Prof, "prof", "", "Profile output file prefix (writes <prefix>.cpu and <prefix>.mem)")
 	flag.Parse()
 	if err := InitLogger(flags.LogLevel); err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err)
