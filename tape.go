@@ -96,16 +96,15 @@ func (t *Tape) removeDCInPlace() {
 	}
 }
 
-// GetInterpolatedFrame writes the frame at the given fractional `index` to `out`.
+// GetInterpolatedFrameAtIndex writes the frame at the given fractional `index` to `out`.
 // Uses 4-point Lagrange (Catmull-Rom) interpolation when possible; falls back to linear for very short tapes.
-// Writes zeroes to `out` if index is out of range.
-func (t *Tape) GetInterpolatedFrame(index float64, out Frame) {
+// Writes zeroes to `out` if index is out of range or the number of channels in `out` does not match the tape.
+func (t *Tape) GetInterpolatedFrameAtIndex(index float64, out Frame) {
 	nc := t.nchannels
 	nf := t.nframes
-	smps := t.samples
 
-	if index < 0 || index >= float64(nf) {
-		for ch := range nc {
+	if len(out) != nc || index < 0 || index >= float64(nf) {
+		for ch := range out {
 			out[ch] = 0
 		}
 		return
@@ -113,6 +112,8 @@ func (t *Tape) GetInterpolatedFrame(index float64, out Frame) {
 
 	i0 := int(index) % nf
 	frac := Smp(index) - Smp(i0)
+
+	smps := t.samples
 
 	// For tiny waves, just do linear.
 	if nf < 4 {
@@ -136,22 +137,29 @@ func (t *Tape) GetInterpolatedFrame(index float64, out Frame) {
 	}
 }
 
+// GetInterpolatedFrameAtPhase writes the frame at the given fractional `phase` to `out`.
+// Uses 4-point Lagrange (Catmull-Rom) interpolation when possible; falls back to linear for very short tapes.
+// Phase should be in the range [0,1). Writes zeroes to `out` if phase is out of range or the number of channels in out does not match the tape.
+func (t *Tape) GetInterpolatedFrameAtPhase(phase float64, out Frame) {
+	index := phase * float64(t.nframes)
+	t.GetInterpolatedFrameAtIndex(index, out)
+}
+
 // AtPhase returns a stream of frames interpolated at fractional phase [0,1).
 func (t *Tape) AtPhase(phase Stream) Stream {
 	nc := t.nchannels
 	nf := t.nframes
-	return makeStream(nc, nf, func(yield func(Frame) bool) {
-		if nf == 0 {
-			return
-		}
+	if nf == 0 {
+		return makeEmptyStream(nc)
+	}
+	return makeStream(nc, 0, func(yield func(Frame) bool) {
 		out := make(Frame, nc)
 		for frame := range phase.seq {
 			p := math.Mod(float64(frame[0]), 1.0)
 			if p < 0 {
 				p += 1.0
 			}
-			index := p * float64(nf)
-			t.GetInterpolatedFrame(index, out)
+			t.GetInterpolatedFrameAtPhase(p, out)
 			if !yield(out) {
 				return
 			}
@@ -807,7 +815,7 @@ func init() {
 			return vm.Errorf("Tape.at: invalid frame index: %d", index)
 		}
 		f := make(Frame, t.nchannels)
-		t.GetInterpolatedFrame(float64(indexNum), f)
+		t.GetInterpolatedFrameAtIndex(float64(indexNum), f)
 		out := make(Vec, t.nchannels)
 		for ch := range t.nchannels {
 			out[ch] = Num(f[ch])

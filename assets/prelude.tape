@@ -212,13 +212,6 @@
 ;; waves and wavetables
 
 ; wt: ( x -- wt ) coerce to wavetable
-; wt/sin: ( -- wt ) sine wavetable
-; wt/tanh: ( -- wt ) tanh wavetable
-; wt/triangle: ( -- wt ) triangle wavetable
-; wt/square: ( -- wt ) square wavetable
-; wt/pulse: ( ENV: :pw | -- wt ) pulse wavetable using env pulse width
-; wt/saw: ( -- wt ) saw wavetable
-
 ; ~wt: ( ENV: :freq :phase :morph | wt -- s ) wavetable oscillator with env freq/phase/morph
 ; ~fm: ( ENV: :freq :mod :index :phase | wt -- s ) wavetable FM oscillator with env controls
 
@@ -455,6 +448,24 @@ false >:saturate
 
 ; ~saw: ( ENV: :freq :phase | -- s )
 { 0 tape/saw ~phasor at/phase } >~saw
+
+; wt/sin: ( -- wt ) sine wavetable
+{ 0 tape/sin wt } >wt/sin
+
+; wt/tanh: ( -- wt ) tanh wavetable
+{ 0 tape/tanh wt } >wt/tanh
+
+; wt/triangle: ( -- wt ) triangle wavetable
+{ 0 tape/triangle wt } >wt/triangle
+
+; wt/square: ( -- wt ) square wavetable
+{ 0 tape/square wt } >wt/square
+
+; wt/pulse: ( -- wt ) pulse wavetable
+{ 0 tape/pulse wt } >wt/pulse
+
+; wt/saw: ( -- wt ) saw wavetable
+{ 0 tape/saw wt } >wt/saw
 
 ;; dsp
 

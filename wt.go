@@ -122,7 +122,7 @@ func (wt *Wavetable) sampleWaveAtLevel(level int, phase, morph Smp) Smp {
 	}
 	if len(waves) == 1 {
 		out := Frame{0}
-		waves[0].GetInterpolatedFrame(float64(phase), out)
+		waves[0].GetInterpolatedFrameAtPhase(float64(phase), out)
 		return out[0]
 	}
 	m := float64(morph)
@@ -142,8 +142,8 @@ func (wt *Wavetable) sampleWaveAtLevel(level int, phase, morph Smp) Smp {
 	}
 	f0 := Frame{0}
 	f1 := Frame{0}
-	waves[i0].GetInterpolatedFrame(float64(phase), f0)
-	waves[i1].GetInterpolatedFrame(float64(phase), f1)
+	waves[i0].GetInterpolatedFrameAtPhase(float64(phase), f0)
+	waves[i1].GetInterpolatedFrameAtPhase(float64(phase), f1)
 	s0 := f0[0]
 	s1 := f1[0]
 	return s0*(1.0-frac) + s1*frac
@@ -182,30 +182,6 @@ func (wt *Wavetable) SampleMip(phase, morph, freq float64, sr float64) Smp {
 	}
 	s1 := wt.sampleWaveAtLevel(lvl2, phase, morph)
 	return (1-fade)*s0 + fade*s1
-}
-
-func wtSin() (*Wavetable, error) {
-	return newWavetableFromWave(sinTape(0))
-}
-
-func wtTanh() (*Wavetable, error) {
-	return newWavetableFromWave(tanhTape(0))
-}
-
-func wtTriangle() (*Wavetable, error) {
-	return newWavetableFromWave(triangleTape(0))
-}
-
-func wtSquare() (*Wavetable, error) {
-	return newWavetableFromWave(squareTape(0))
-}
-
-func wtPulse(pw float64) (*Wavetable, error) {
-	return newWavetableFromWave(pulseTape(0, pw))
-}
-
-func wtSaw() (*Wavetable, error) {
-	return newWavetableFromWave(sawTape(0))
 }
 
 func wavetableFromVal(v Val) (*Wavetable, error) {
@@ -327,68 +303,6 @@ func init() {
 	RegisterWord("wt", func(vm *VM) error {
 		v := vm.Pop()
 		wt, err := wavetableFromVal(v)
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/sin", func(vm *VM) error {
-		wt, err := wtSin()
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/tanh", func(vm *VM) error {
-		wt, err := wtTanh()
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/triangle", func(vm *VM) error {
-		wt, err := wtTriangle()
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/square", func(vm *VM) error {
-		wt, err := wtSquare()
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/pulse", func(vm *VM) error {
-		pw := 0.5
-		if pval := vm.GetVal(":pw"); pval != nil {
-			if pnum, ok := pval.(Num); ok {
-				pw = float64(pnum)
-			} else {
-				return fmt.Errorf("wt/pulse: :pw must be number")
-			}
-		}
-		wt, err := wtPulse(pw)
-		if err != nil {
-			return err
-		}
-		vm.Push(wt)
-		return nil
-	})
-
-	RegisterWord("wt/saw", func(vm *VM) error {
-		wt, err := wtSaw()
 		if err != nil {
 			return err
 		}
