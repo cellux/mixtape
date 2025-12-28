@@ -776,10 +776,9 @@ See `examples/unison*.tape`.
 - `sharp` non-zero enables a sharper final stage.
 
 ### `vital/svf`
-`( ENV: :cutoff :q :drive :blend :saturate | S -- s )` — state-variable filter.
+`( ENV: :cutoff :q :drive :blend | S -- s )` — state-variable filter.
 
 - `:blend` in `[-1,1]` maps lowpass(-1) → bandpass(0) → highpass(+1).
-- `:saturate` toggles tanh output saturation.
 
 See `examples/vital_svf_demo.tape`.
 

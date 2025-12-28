@@ -92,8 +92,8 @@
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
       1.8 >:drive
       -1  >:blend
-      1   >:saturate
       vital/svf
+      tanh
 
       :pad/env ~ *
       0.22 *
@@ -116,8 +116,8 @@
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
       1.8 >:drive
       -1  >:blend
-      1   >:saturate
       vital/svf
+      tanh
 
       :pad/env ~ *
       0.22 *
@@ -140,7 +140,6 @@
       0.9  >:q
       1.6  >:drive
       -1   >:blend
-      0    >:saturate
       vital/svf
 
       :bass/env ~ *
@@ -165,8 +164,8 @@
       (0.07 >:freq ~sin 0.25 * 1.1 +) >:q
       2.2 >:drive
       0   >:blend
-      1   >:saturate
       vital/svf
+      tanh
 
       :lead/env ~ *
       0.18 *

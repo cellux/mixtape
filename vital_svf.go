@@ -58,8 +58,7 @@ func svfCoefficient(cutoffHz Smp) Smp {
 //	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
 //	drive:     input drive multiplier.
 //	blend:     blend in [-1,1], mapping lowpass(-1) -> bandpass(0) -> highpass(+1).
-//	saturate:  if true, applies tanh saturation to the output.
-func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) Stream {
+func DigitalSVF(input, cutoff, resonance, drive, blend Stream) Stream {
 	nchannels := input.nchannels
 
 	// Let makeTransformStream compute nframes as the shortest among inputs.
@@ -141,9 +140,6 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) St
 				hp := x - k*bp - lp
 
 				y := lowAmt*lp + bandAmt*bp + highAmt*hp
-				if saturate {
-					y = math.Tanh(y)
-				}
 				out[c] = y
 			}
 
@@ -154,10 +150,6 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream, saturate bool) St
 
 func init() {
 	RegisterWord("vital/svf", func(vm *VM) error {
-		satNum, err := vm.GetNum(":saturate")
-		if err != nil {
-			return err
-		}
 		blend, err := vm.GetStream(":blend")
 		if err != nil {
 			return err
@@ -178,7 +170,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(DigitalSVF(input, cutoff, resonance, drive, blend, satNum != 0))
+		vm.Push(DigitalSVF(input, cutoff, resonance, drive, blend))
 		return nil
 	})
 }

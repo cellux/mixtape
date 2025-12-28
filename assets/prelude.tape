@@ -222,7 +222,7 @@
 ;; ports
 
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
-; vital/svf: ( ENV: :cutoff :q :drive :blend :saturate | S -- s ) state-variable filter
+; vital/svf: ( ENV: :cutoff :q :drive :blend | S -- s ) state-variable filter
 
 ;; misc
 
@@ -282,8 +282,6 @@
 1.0   >:drive
 ; :blend: ( -- n ) blend
 0.0   >:blend
-; :saturate: ( -- b ) saturation toggle
-false >:saturate
 
 ;; FM parameters
 
@@ -483,11 +481,11 @@ false >:saturate
 
 ;; filters
 
-; lp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole lowpass (TPT SVF)
+; lp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole lowpass (TPT SVF)
 {( -1 >:blend vital/svf )} >lp2
 
-; bp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole bandpass (TPT SVF)
+; bp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole bandpass (TPT SVF)
 {( 0 >:blend vital/svf )} >bp2
 
-; hp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole highpass (TPT SVF)
+; hp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole highpass (TPT SVF)
 {( 1 >:blend vital/svf )} >hp2
