@@ -517,6 +517,40 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 	}
 }
 
+// Notch2 applies a 2-pole notch derived from the digital SVF core.
+// Parameters are streams to allow modulation:
+//
+//	input:     audio input (N channels)
+//	cutoff:    cutoff frequency in Hz (mono stream)
+//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
+//	drive:     input drive multiplier.
+func Notch2(input, cutoff, resonance, drive Stream) Stream {
+	nchannels := input.nchannels
+
+	return makeTransformStream([]Stream{input, cutoff, resonance, drive}, func(inputs []Stream) Stepper {
+		sInput := inputs[0]
+		sCutoff := inputs[1].Mono()
+		sResonance := inputs[2].Mono()
+		sDrive := inputs[3].Mono()
+		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
+
+		out := make(Frame, nchannels)
+
+		return func() (Frame, bool) {
+			lp, _, hp, ok := step()
+			if !ok {
+				return nil, false
+			}
+
+			for c := range nchannels {
+				out[c] = lp[c] + hp[c]
+			}
+
+			return out, true
+		}
+	})
+}
+
 // DigitalSVF applies a Vital-inspired digital state-variable filter.
 // Parameters are streams to allow modulation:
 //
@@ -700,6 +734,27 @@ func init() {
 			return err
 		}
 		vm.Push(DigitalSVF(input, cutoff, resonance, drive, blend))
+		return nil
+	})
+
+	RegisterWord("notch2", func(vm *VM) error {
+		drive, err := vm.GetStream(":drive")
+		if err != nil {
+			return err
+		}
+		resonance, err := vm.GetStream(":q")
+		if err != nil {
+			return err
+		}
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(Notch2(input, cutoff, resonance, drive))
 		return nil
 	})
 }

@@ -185,6 +185,7 @@
 ; ap1: ( ENV: :cutoff | S -- s ) first-order allpass, phase rotate around cutoff Hz
 ; ap2: ( ENV: :cutoff :q | S -- s ) second-order biquad allpass, phase rotate with controllable Q
 ; svf: ( ENV: :cutoff :q :drive :blend | S -- s ) state-variable filter
+; notch2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole notch (derived from SVF core)
 ; peak: ( S -- s ) max(abs(x) for x in frame)
 ; sh: ( S rate -- s ) sample-and-hold input at rate
 ; comb: ( S delay fb -- s ) feedback comb filter
