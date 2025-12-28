@@ -770,7 +770,7 @@ See `examples/unison*.tape`.
 ## 15) Vital-inspired ports
 
 ### `svf`
-`( ENV: :cutoff :q :drive :blend | S -- s )` — state-variable filter.
+`( ENV: :cutoff :q :blend | S -- s )` — state-variable filter.
 
 - `:blend` in `[-1,1]` maps lowpass(-1) → bandpass(0) → highpass(+1).
 

@@ -440,13 +440,12 @@ func svfCoefficient(cutoffHz Smp) Smp {
 // svfStepper returns a stepper that yields the LP/BP/HP outputs of the TPT SVF.
 // It also returns k = 1/Q (where Q is the resonance stream), which is useful for
 // derived responses like notch/peak.
-func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Frame, k Smp, valid bool) {
+func svfStepper(input, cutoff, resonance Stream) func() (lpf, bpf, hpf Frame, k Smp, valid bool) {
 	nchannels := input.nchannels
 
 	inNext := input.Next
 	cNext := cutoff.Next
 	rNext := resonance.Next
-	dNext := drive.Next
 
 	state := newDigitalSVFState(nchannels)
 	lp := make(Frame, nchannels)
@@ -466,14 +465,9 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 		if !ok {
 			return nil, nil, nil, 0, false
 		}
-		dFrame, ok := dNext()
-		if !ok {
-			return nil, nil, nil, 0, false
-		}
 
 		cut := cFrame[0]
 		res := rFrame[0]
-		drv := dFrame[0]
 
 		// Clamp resonance to avoid division by zero.
 		if res < 1e-6 {
@@ -492,7 +486,7 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 		a2 := g * a1         // a3
 
 		for c := range nchannels {
-			x := drv * inFrame[c]
+			x := inFrame[c]
 
 			// Topology-preserving transform (TPT) SVF (Simper):
 			//
@@ -525,16 +519,14 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 //	input:     audio input (N channels)
 //	cutoff:    cutoff frequency in Hz (mono stream)
 //	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-//	drive:     input drive multiplier.
-func Notch2(input, cutoff, resonance, drive Stream) Stream {
+func Notch2(input, cutoff, resonance Stream) Stream {
 	nchannels := input.nchannels
 
-	return makeTransformStream([]Stream{input, cutoff, resonance, drive}, func(inputs []Stream) Stepper {
+	return makeTransformStream([]Stream{input, cutoff, resonance}, func(inputs []Stream) Stepper {
 		sInput := inputs[0]
 		sCutoff := inputs[1].Mono()
 		sResonance := inputs[2].Mono()
-		sDrive := inputs[3].Mono()
-		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
+		step := svfStepper(sInput, sCutoff, sResonance)
 
 		out := make(Frame, nchannels)
 
@@ -563,19 +555,17 @@ func Notch2(input, cutoff, resonance, drive Stream) Stream {
 //	input:     audio input (N channels)
 //	cutoff:    cutoff/center frequency in Hz (mono stream)
 //	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-//	drive:     input drive multiplier.
 //	gain:      linear gain multiplier (mono stream). A=1 is neutral; >1 boosts; <1 cuts.
-func Peak2(input, cutoff, resonance, drive, gain Stream) Stream {
+func Peak2(input, cutoff, resonance, gain Stream) Stream {
 	nchannels := input.nchannels
 
-	return makeTransformStream([]Stream{input, cutoff, resonance, drive, gain}, func(inputs []Stream) Stepper {
+	return makeTransformStream([]Stream{input, cutoff, resonance, gain}, func(inputs []Stream) Stepper {
 		sInput := inputs[0]
 		sCutoff := inputs[1].Mono()
 		sResonance := inputs[2].Mono()
-		sDrive := inputs[3].Mono()
-		sGain := inputs[4].Mono()
+		sGain := inputs[3].Mono()
 
-		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
+		step := svfStepper(sInput, sCutoff, sResonance)
 		gNext := sGain.Next
 
 		out := make(Frame, nchannels)
@@ -613,20 +603,18 @@ func Peak2(input, cutoff, resonance, drive, gain Stream) Stream {
 //	input:     audio input (N channels)
 //	cutoff:    cutoff frequency in Hz (mono stream)
 //	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-//	drive:     input drive multiplier.
 //	blend:     blend in [-1,1], mapping lowpass(-1) -> bandpass(0) -> highpass(+1).
-func DigitalSVF(input, cutoff, resonance, drive, blend Stream) Stream {
+func DigitalSVF(input, cutoff, resonance, blend Stream) Stream {
 	nchannels := input.nchannels
 
 	// Let makeTransformStream compute nframes as the shortest among inputs.
-	return makeTransformStream([]Stream{input, cutoff, resonance, drive, blend}, func(inputs []Stream) Stepper {
+	return makeTransformStream([]Stream{input, cutoff, resonance, blend}, func(inputs []Stream) Stepper {
 		sInput := inputs[0]
 		sCutoff := inputs[1].Mono()
 		sResonance := inputs[2].Mono()
-		sDrive := inputs[3].Mono()
-		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
+		step := svfStepper(sInput, sCutoff, sResonance)
 
-		sBlend := inputs[4].Mono()
+		sBlend := inputs[3].Mono()
 		bNext := sBlend.Next
 
 		out := make(Frame, nchannels)
@@ -773,10 +761,6 @@ func init() {
 		if err != nil {
 			return err
 		}
-		drive, err := vm.GetStream(":drive")
-		if err != nil {
-			return err
-		}
 		resonance, err := vm.GetStream(":q")
 		if err != nil {
 			return err
@@ -789,15 +773,11 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(DigitalSVF(input, cutoff, resonance, drive, blend))
+		vm.Push(DigitalSVF(input, cutoff, resonance, blend))
 		return nil
 	})
 
 	RegisterWord("notch2", func(vm *VM) error {
-		drive, err := vm.GetStream(":drive")
-		if err != nil {
-			return err
-		}
 		resonance, err := vm.GetStream(":q")
 		if err != nil {
 			return err
@@ -810,7 +790,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(Notch2(input, cutoff, resonance, drive))
+		vm.Push(Notch2(input, cutoff, resonance))
 		return nil
 	})
 
@@ -819,10 +799,6 @@ func init() {
 		if err != nil {
 			return err
 		}
-		drive, err := vm.GetStream(":drive")
-		if err != nil {
-			return err
-		}
 		resonance, err := vm.GetStream(":q")
 		if err != nil {
 			return err
@@ -835,7 +811,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		vm.Push(Peak2(input, cutoff, resonance, drive, gain))
+		vm.Push(Peak2(input, cutoff, resonance, gain))
 		return nil
 	})
 }

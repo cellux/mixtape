@@ -90,8 +90,8 @@
       ; Slow-ish lowpass movement + soft saturation
       (0.04 >:freq ~triangle -0.5 * 0.5 + 3200 * 250 +) >:cutoff
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
-      1.8 >:drive
       -1  >:blend
+      1.8 * ;drive
       svf
       tanh
 
@@ -114,8 +114,8 @@
 
       (0.04 >:freq ~triangle -0.5 * 0.5 + 3200 * 250 +) >:cutoff
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
-      1.8 >:drive
       -1  >:blend
+      1.8 * ;drive
       svf
       tanh
 
@@ -138,8 +138,8 @@
 
       220  >:cutoff
       0.9  >:q
-      1.6  >:drive
       -1   >:blend
+      1.6 * ;drive
       svf
 
       :bass/env ~ *
@@ -162,8 +162,8 @@
       ; bright band-ish tone (blend≈0 => bandpass)
       (0.12 >:freq ~triangle -0.5 * 0.5 + 2500 * 400 +) >:cutoff
       (0.07 >:freq ~sin 0.25 * 1.1 +) >:q
-      2.2 >:drive
       0   >:blend
+      2.2 * ;drive
       svf
       tanh
 

@@ -1,16 +1,16 @@
-; Vital-inspired SVF demo: three clips that stress cutoff/Q/drive/blend.
-; Each clip sets :cutoff, :q, :drive, :blend in the env; only the
+; Vital-inspired SVF demo: three clips that stress cutoff/Q/blend.
+; Each clip sets :cutoff, :q, :blend in the env; only the
 ; input stream sits on the stack before calling svf.
 [
 (
   ; 1) Lush low-pass sweep with gentle tremolo and soft saturation
   (0.08 >:freq ~triangle -0.5 * 0.5 + 4800 * 200 +) >:cutoff  ; 200..5000 Hz sweep
   (0.12 >:freq ~sin 0.15 * 0.75 +) >:q                        ; Q ~0.75..0.9
-  1.5 >:drive
   -1  >:blend                                                 ; pure low-pass
 
   110 >:freq ~saw
   (0.05 >:freq ~sin 0.1 * 0.9 +) *                            ; gentle tremolo pre-filter
+  1.5 *                                                       ; drive
   svf
   tanh
   8b take 0.28 *
@@ -19,10 +19,10 @@
   ; 2) Acidic band-pass wobble with hot drive and tanh
   (0.6 >:freq ~triangle -0.5 * 0.5 + 2200 * 300 +) >:cutoff    ; ~300..2500 Hz
   (0.5 >:freq ~sin 0.6 * 1.2 +) >:q                            ; Q ~0.6..1.8
-  3.0 >:drive
   0   >:blend                                                  ; band-pass
 
   110 >:freq ~saw 2 *                                          ; extra harmonics
+  3.0 *                                                        ; drive
   svf
   tanh
   8b take 0.22 *
@@ -31,10 +31,10 @@
   ; 3) Morphing LP->BP->HP blend with moderate drive, no saturation
   (0.18 >:freq ~triangle -0.5 * 0.5 + 4000 * 150 +) >:cutoff   ; 150..4150 Hz
   (0.08 >:freq ~sin 0.2 * 0.8 +) >:q                           ; Q ~0.8..1.0
-  1.8 >:drive
   (1 >:freq ~sin) >:blend                                      ; blend swings -1..+1
 
   110 >:freq ~triangle
+  1.8 *                                                        ; drive
   svf
   8b take 0.26 *
 )
