@@ -437,6 +437,86 @@ func svfCoefficient(cutoffHz Smp) Smp {
 	return Smp(math.Tan(math.Pi * ratio))
 }
 
+// svfStepper returns a stepper that yields the LP/BP/HP outputs of the TPT SVF.
+func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Frame, valid bool) {
+	nchannels := input.nchannels
+
+	inNext := input.Next
+	cNext := cutoff.Next
+	rNext := resonance.Next
+	dNext := drive.Next
+
+	state := newDigitalSVFState(nchannels)
+	lp := make(Frame, nchannels)
+	bp := make(Frame, nchannels)
+	hp := make(Frame, nchannels)
+
+	return func() (Frame, Frame, Frame, bool) {
+		inFrame, ok := inNext()
+		if !ok {
+			return nil, nil, nil, false
+		}
+		cFrame, ok := cNext()
+		if !ok {
+			return nil, nil, nil, false
+		}
+		rFrame, ok := rNext()
+		if !ok {
+			return nil, nil, nil, false
+		}
+		dFrame, ok := dNext()
+		if !ok {
+			return nil, nil, nil, false
+		}
+
+		cut := cFrame[0]
+		res := rFrame[0]
+		drv := dFrame[0]
+
+		// Clamp resonance to avoid division by zero.
+		if res < 1e-6 {
+			res = 1e-6
+		}
+		k := Smp(1) / res
+		g := svfCoefficient(cut)
+
+		// TPT SVF coefficients
+		denom := Smp(1) + g*(g+k)
+		if denom == 0 {
+			denom = 1e-9
+		}
+		a0 := Smp(1) / denom // a1 in Simper paper
+		a1 := g * a0         // a2
+		a2 := g * a1         // a3
+
+		for c := range nchannels {
+			x := drv * inFrame[c]
+
+			// Topology-preserving transform (TPT) SVF (Simper):
+			//
+			// a1 = 1/(1 + g*(g+k))
+			// a2 = g*a1
+			// a3 = g*a2
+			// v3 = x - ic2eq
+			// v1 = a1*ic1eq + a2*v3
+			// v2 = ic2eq + a2*ic1eq + a3*v3
+			// ic1eq = 2*v1 - ic1eq
+			// ic2eq = 2*v2 - ic2eq
+			v3 := x - state.ic2eq[c]
+			v1 := a0*state.ic1eq[c] + a1*v3
+			v2 := state.ic2eq[c] + a1*state.ic1eq[c] + a2*v3
+			state.ic1eq[c] = 2*v1 - state.ic1eq[c]
+			state.ic2eq[c] = 2*v2 - state.ic2eq[c]
+
+			lp[c] = v2
+			bp[c] = v1
+			hp[c] = x - k*bp[c] - lp[c]
+		}
+
+		return lp, bp, hp, true
+	}
+}
+
 // DigitalSVF applies a Vital-inspired digital state-variable filter.
 // Parameters are streams to allow modulation:
 //
@@ -450,29 +530,19 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream) Stream {
 
 	// Let makeTransformStream compute nframes as the shortest among inputs.
 	return makeTransformStream([]Stream{input, cutoff, resonance, drive, blend}, func(inputs []Stream) Stepper {
-		inNext := inputs[0].WithNChannels(nchannels).Next
-		cNext := inputs[1].Mono().Next
-		rNext := inputs[2].Mono().Next
-		dNext := inputs[3].Mono().Next
-		bNext := inputs[4].Mono().Next
+		sInput := inputs[0]
+		sCutoff := inputs[1].Mono()
+		sResonance := inputs[2].Mono()
+		sDrive := inputs[3].Mono()
+		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
 
-		state := newDigitalSVFState(nchannels)
+		sBlend := inputs[4].Mono()
+		bNext := sBlend.Next
+
 		out := make(Frame, nchannels)
 
 		return func() (Frame, bool) {
-			inFrame, ok := inNext()
-			if !ok {
-				return nil, false
-			}
-			cFrame, ok := cNext()
-			if !ok {
-				return nil, false
-			}
-			rFrame, ok := rNext()
-			if !ok {
-				return nil, false
-			}
-			dFrame, ok := dNext()
+			lp, bp, hp, ok := step()
 			if !ok {
 				return nil, false
 			}
@@ -481,52 +551,11 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream) Stream {
 				return nil, false
 			}
 
-			cut := cFrame[0]
-			res := rFrame[0]
-			drv := dFrame[0]
 			blendVal := bFrame[0]
 			lowAmt, bandAmt, highAmt := svfMix(blendVal)
 
-			// Clamp resonance to avoid division by zero.
-			if res < 1e-6 {
-				res = 1e-6
-			}
-			k := Smp(1) / res
-			g := svfCoefficient(cut)
-
-			// TPT SVF coefficients
-			denom := Smp(1) + g*(g+k)
-			if denom == 0 {
-				denom = 1e-9
-			}
-			a0 := Smp(1) / denom // a1 in Simper paper
-			a1 := g * a0         // a2
-			a2 := g * a1         // a3
-
 			for c := range nchannels {
-				x := drv * inFrame[c]
-
-				// Topology-preserving transform (TPT) SVF (Simper):
-				//
-				// a1 = 1/(1 + g*(g+k))
-				// a2 = g*a1
-				// a3 = g*a2
-				// v3 = x - ic2eq
-				// v1 = a1*ic1eq + a2*v3
-				// v2 = ic2eq + a2*ic1eq + a3*v3
-				// ic1eq = 2*v1 - ic1eq
-				// ic2eq = 2*v2 - ic2eq
-				v3 := x - state.ic2eq[c]
-				v1 := a0*state.ic1eq[c] + a1*v3
-				v2 := state.ic2eq[c] + a1*state.ic1eq[c] + a2*v3
-				state.ic1eq[c] = 2*v1 - state.ic1eq[c]
-				state.ic2eq[c] = 2*v2 - state.ic2eq[c]
-
-				lp := v2
-				bp := v1
-				hp := x - k*bp - lp
-
-				y := lowAmt*lp + bandAmt*bp + highAmt*hp
+				y := lowAmt*lp[c] + bandAmt*bp[c] + highAmt*hp[c]
 				out[c] = y
 			}
 
