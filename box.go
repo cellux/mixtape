@@ -20,3 +20,9 @@ func (box *Box[T]) Set(v T) {
 	defer box.mu.Unlock()
 	box.v = v
 }
+
+func (box *Box[T]) Update(fn func(T) T) {
+	box.mu.Lock()
+	defer box.mu.Unlock()
+	box.v = fn(box.v)
+}

@@ -13,7 +13,7 @@ This README documents:
 
 > Source of truth for most word docs: `assets/prelude.tape`.
 
-> Working examples/tests: `test.tape` and `examples/*.tape`.
+> Working examples/tests: `tests/*.tape` and `examples/*.tape`.
 
 ---
 
@@ -57,7 +57,7 @@ From `./mixtape -h`:
 Evaluate a file:
 
 ```sh
-./mixtape -f test.tape
+./mixtape -f tests/seq.tape
 ```
 
 Evaluate a one-liner:
@@ -815,7 +815,7 @@ See `examples/seq.tape` for the full pattern; `seq` is a helper for iterating mu
 ## Notes for LLMs / tooling
 
 - `assets/prelude.tape` is effectively the “stdlib” and includes doc comments with stack effects.
-- `test.tape` is a comprehensive executable specification of many words.
+- `tests/*.tape` files contain comprehensive executable specifications of many words.
 - Parsing expands syntactic sugar (`:name`, `@foo`, `>foo`, and time suffixes) *at parse time*.
 - Many operators (`+`, `*`, `sin`, …) are overloaded to work on both numbers and streams (sample-wise).
 - Streams are lazy; converting to a `Tape` is done with `take` (or automatically in the GUI when the eval result is finite).

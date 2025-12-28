@@ -83,11 +83,12 @@ func RegisterWord(name string, fun Fun) {
 // VM
 
 type VM struct {
-	valStack    Vec   // values
-	envStack    []Map // environments
-	markerStack []int // [ indices in valStack
-	quoteBuffer Vec   // quoted code
-	quoteDepth  int   // nesting level {... {.. {..} ..} ...}
+	valStack    Vec           // values
+	envStack    []Map         // environments
+	markerStack []int         // [ indices in valStack
+	quoteBuffer Vec           // quoted code
+	quoteDepth  int           // nesting level {... {.. {..} ..} ...}
+	tokenStack  Box[[]*Token] // call stack of currently executing tokens
 
 	// Evaluation lifecycle
 	//
@@ -101,9 +102,8 @@ type VM struct {
 	cancelCh     chan struct{}
 	doneCh       chan struct{}
 
-	evalResult           Val         // top of stack after a successful evaluation
-	errResult            error       // last evaluation error
-	currentToken         Box[*Token] // currently executing token of the script
+	evalResult           Val   // top of stack after a successful evaluation
+	errResult            error // last evaluation error
 	tapeProgressCallback func(t *Tape, nftotal, nfdone int)
 }
 
@@ -148,8 +148,8 @@ func (vm *VM) Reset() {
 	vm.markerStack = vm.markerStack[:0]
 	vm.quoteBuffer = nil
 	vm.quoteDepth = 0
+	vm.tokenStack.Set(nil)
 	vm.isEvaluating.Set(false)
-	vm.currentToken.Set(nil)
 
 	// Do not close doneCh/cancelCh here: those are lifecycle signals managed by ParseAndEval.
 }
@@ -401,9 +401,34 @@ func (t *Token) getVal() Val {
 	return t.v
 }
 
+func (vm *VM) pushToken(t *Token) {
+	vm.tokenStack.Update(func(stack []*Token) []*Token {
+		return append(stack, t)
+	})
+}
+
+func (vm *VM) popToken() {
+	vm.tokenStack.Update(func(stack []*Token) []*Token {
+		if len(stack) == 0 {
+			return stack
+		}
+		return stack[:len(stack)-1]
+	})
+}
+
+func (vm *VM) CurrentToken() *Token {
+	stack := vm.tokenStack.Get()
+	if len(stack) == 0 {
+		return nil
+	}
+	return stack[len(stack)-1]
+}
+
 func (t *Token) Eval(vm *VM) error {
-	vm.currentToken.Set(t)
-	return vm.Eval(t.getVal())
+	vm.pushToken(t)
+	err := vm.Eval(t.getVal())
+	vm.popToken()
+	return err
 }
 
 func (t *Token) String() string {
@@ -541,17 +566,27 @@ func (vm *VM) FindMethod(name string) Fun {
 func (vm *VM) Err(err error) error {
 	var maybeErr Err
 	if errors.As(err, &maybeErr) {
+		// Preserve existing position information if already wrapped.
 		return maybeErr
 	}
-	var maybeThrowValue ThrowValue
-	if errors.As(err, &maybeThrowValue) {
-		return maybeThrowValue
+	// Prefer the most recent non-prelude token on the stack (i.e., a user call
+	// site), falling back to the innermost token that raised the error.
+	var fallback *Token
+	stack := vm.tokenStack.Get()
+	for i := len(stack) - 1; i >= 0; i-- {
+		if tok := stack[i]; tok != nil {
+			if tok.pos.Filename != "<prelude>" {
+				return Err{Pos: tok.pos, Err: err}
+			}
+			if fallback == nil {
+				fallback = tok
+			}
+		}
 	}
-	if currentToken := vm.currentToken.Get(); currentToken != nil {
-		return Err{Pos: currentToken.pos, Err: err}
-	} else {
-		return Err{Err: err}
+	if fallback != nil {
+		return Err{Pos: fallback.pos, Err: err}
 	}
+	return Err{Err: err}
 }
 
 func (vm *VM) Errorf(format string, a ...any) error {

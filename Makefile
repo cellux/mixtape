@@ -3,7 +3,7 @@ mixtape: $(wildcard *.go) go.mod go.sum assets/prelude.tape
 
 .PHONY: test
 test: mixtape
-	./mixtape -f test.tape
+	@./runtests.sh
 
 .PHONY: clean
 clean:

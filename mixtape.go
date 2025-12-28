@@ -18,14 +18,43 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
+type EvalTargetKind int
+
+const (
+	evalTargetScript = 's'
+	evalTargetFile   = 'f'
+)
+
+type EvalTarget struct {
+	Kind  EvalTargetKind
+	Value string
+}
+
 var flags struct {
-	LogLevel   string
-	SampleRate int
-	BPM        float64
-	TPB        int
-	EvalFile   string
-	EvalScript string
-	Prof       string
+	LogLevel    string
+	SampleRate  int
+	BPM         float64
+	TPB         int
+	EvalTargets []EvalTarget
+	Prof        string
+}
+
+type EvalTargetFlag struct {
+	Kind   EvalTargetKind
+	Values []string
+}
+
+func (f EvalTargetFlag) String() string {
+	if f.Values == nil {
+		return ""
+	}
+	return strings.Join(f.Values, ",")
+}
+
+func (f EvalTargetFlag) Set(val string) error {
+	f.Values = append(f.Values, val)
+	flags.EvalTargets = append(flags.EvalTargets, EvalTarget{f.Kind, val})
+	return nil
 }
 
 func SampleRate() int {
@@ -427,7 +456,7 @@ func (app *App) Render() error {
 	}
 
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-	currentToken := app.vm.currentToken.Get()
+	currentToken := app.vm.CurrentToken()
 	app.editor.Render(editorBufferPane, currentToken)
 	app.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
 
@@ -596,27 +625,31 @@ func evalAndReport(vm *VM, r io.Reader, name string) error {
 	if vm.evalResult != nil {
 		fmt.Println(vm.evalResult)
 	}
-	if vm.errResult != nil {
-		fmt.Fprintln(os.Stderr, vm.errResult)
-	}
 	return err
 }
 
 func runWithArgs(vm *VM, args []string) error {
 	openFiles := make(map[string]string)
 	currentFile := ""
-	if flags.EvalScript != "" {
+	if len(flags.EvalTargets) > 0 {
 		return withProfileIfNeeded(func() error {
-			return evalAndReport(vm, strings.NewReader(flags.EvalScript), "<script>")
-		})
-	}
-	if flags.EvalFile != "" {
-		data, err := os.ReadFile(flags.EvalFile)
-		if err != nil {
-			return err
-		}
-		return withProfileIfNeeded(func() error {
-			return evalAndReport(vm, bytes.NewReader(data), flags.EvalFile)
+			for _, target := range flags.EvalTargets {
+				switch target.Kind {
+				case evalTargetScript:
+					if err := evalAndReport(vm, strings.NewReader(target.Value), "<script>"); err != nil {
+						return err
+					}
+				case evalTargetFile:
+					data, err := os.ReadFile(target.Value)
+					if err != nil {
+						return err
+					}
+					if err := evalAndReport(vm, bytes.NewReader(data), target.Value); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		})
 	}
 	for _, arg := range args {
@@ -637,33 +670,33 @@ func main() {
 	flag.IntVar(&flags.SampleRate, "sr", 48000, "Sample rate")
 	flag.Float64Var(&flags.BPM, "bpm", 120, "Beats per minute")
 	flag.IntVar(&flags.TPB, "tpb", 96, "Ticks per beat")
-	flag.StringVar(&flags.EvalFile, "f", "", "File to evaluate")
-	flag.StringVar(&flags.EvalScript, "e", "", "Script to evaluate")
+	flag.Var(&EvalTargetFlag{Kind: evalTargetFile}, "f", "File to evaluate")
+	flag.Var(&EvalTargetFlag{Kind: evalTargetScript}, "e", "Script to evaluate")
 	flag.StringVar(&flags.Prof, "prof", "", "Profile output file prefix (writes <prefix>.cpu and <prefix>.mem)")
 	flag.Parse()
 	if err := InitLogger(flags.LogLevel); err != nil {
-		fmt.Fprintf(os.Stderr, "%s", err)
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 	vm, err = CreateVM()
 	if err != nil {
-		logger.Error("vm initialization error", "err", err)
+		fmt.Fprintf(os.Stderr, "vm initialization error: %s", err)
 		os.Exit(1)
 	}
 	setDefaults(vm)
 	prelude, err := assets.ReadFile("assets/prelude.tape")
 	if err != nil {
-		logger.Error("cannot load prelude from embed.FS", "err", err)
+		fmt.Fprintf(os.Stderr, "cannot load prelude from embed.FS: %s", err)
 		os.Exit(1)
 	}
 	err = vm.ParseAndEval(bytes.NewReader(prelude), "<prelude>")
 	if err != nil {
-		logger.Error("error while parsing the prelude", "err", err)
+		fmt.Fprintf(os.Stderr, "error while parsing the prelude: %s", err)
 		os.Exit(1)
 	}
 	err = runWithArgs(vm, flag.Args())
 	if err != nil {
-		logger.Error("vm error", "err", err)
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 }

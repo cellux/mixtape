@@ -10,7 +10,7 @@
 ;;
 ;; Simple major mode for editing Mixtape .tape files.
 ;; Highlighting is driven purely by regular expressions derived from
-;; the language syntax described in README.md, assets/prelude.tape and test.tape.
+;; the language syntax described in README.md, assets/prelude.tape and tests/*.tape.
 ;; No built-in word lists are used.
 
 ;;; Code:
