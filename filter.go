@@ -3,8 +3,14 @@ package main
 import "math"
 
 // DCBlock applies a simple one-pole high-pass filter to remove DC offset.
-// alpha controls the cutoff; typical small value like 0.995.
+// alpha controls the cutoff; typical value is close to 1.0, e.g. 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
+	if alpha < 0 {
+		alpha = 0
+	}
+	if alpha >= 1.0 {
+		alpha = 0.999
+	}
 	if s.nframes != 0 {
 		// finite streams handled specially
 		t := s.Take(nil, s.nframes)
@@ -16,10 +22,20 @@ func DCBlock(s Stream, alpha float64) Stream {
 		prevIn := make([]Smp, s.nchannels)
 		prevOut := make([]Smp, s.nchannels)
 		next := inputs[0].Next
+		initialized := false
 		return func() (Frame, bool) {
 			frame, ok := next()
 			if !ok {
 				return nil, false
+			}
+			if !initialized {
+				copy(prevIn, frame)
+				for c := range s.nchannels {
+					prevOut[c] = 0
+					out[c] = 0
+				}
+				initialized = true
+				return out, true
 			}
 			for c := range s.nchannels {
 				y := frame[c] - prevIn[c] + Smp(alpha)*prevOut[c]
