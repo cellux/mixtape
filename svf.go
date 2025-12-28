@@ -471,7 +471,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("lshelf2", func(vm *VM) error {
+	RegisterWord("ls2", func(vm *VM) error {
 		gain, err := vm.GetStream(":gain")
 		if err != nil {
 			return err
@@ -492,7 +492,7 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("hshelf2", func(vm *VM) error {
+	RegisterWord("hs2", func(vm *VM) error {
 		gain, err := vm.GetStream(":gain")
 		if err != nil {
 			return err

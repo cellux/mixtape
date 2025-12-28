@@ -183,8 +183,8 @@
 ; hp1: ( ENV: :cutoff | S -- s ) first-order highpass, cutoff in Hz
 ; ap1: ( ENV: :cutoff | S -- s ) first-order allpass, phase rotate around cutoff Hz
 ; ap2: ( ENV: :cutoff :q | S -- s ) second-order biquad allpass, phase rotate with controllable Q
-; lshelf2: ( ENV: :cutoff :q :gain | S -- s ) 2-pole low-shelf (TPT SVF + gain)
-; hshelf2: ( ENV: :cutoff :q :gain | S -- s ) 2-pole high-shelf (TPT SVF + gain)
+; ls2: ( ENV: :cutoff :q :gain | S -- s ) 2-pole low-shelf (TPT SVF + gain)
+; hs2: ( ENV: :cutoff :q :gain | S -- s ) 2-pole high-shelf (TPT SVF + gain)
 ; svf: ( ENV: :cutoff :q :blend | S -- s ) state-variable filter
 ; notch2: ( ENV: :cutoff :q | S -- s ) 2-pole notch (derived from SVF core)
 ; peak2: ( ENV: :cutoff :q :gain | S -- s ) 2-pole peaking/bell EQ (SVF-derived)
