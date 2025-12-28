@@ -169,6 +169,60 @@ func HP1(input, cutoff Stream) Stream {
 	})
 }
 
+func ap1Coefficient(cutoff float64) float64 {
+	if cutoff < 0 {
+		cutoff = 0
+	}
+	sr := float64(SampleRate())
+	if sr <= 0 {
+		return 0
+	}
+	ratio := cutoff / sr
+	if ratio > 0.499 {
+		ratio = 0.499
+	}
+	k := math.Tan(math.Pi * ratio)
+	return (1 - k) / (1 + k)
+}
+
+// AP1 applies a first-order allpass with cutoff in Hz.
+func AP1(input, cutoff Stream) Stream {
+	nchannels := input.nchannels
+	return makeTransformStream([]Stream{input, cutoff}, func(inputs []Stream) Stepper {
+		inNext := inputs[0].Next
+		cNext := inputs[1].Mono().Next
+		xPrev := make(Frame, nchannels)
+		yPrev := make(Frame, nchannels)
+		out := make(Frame, nchannels)
+		initialized := false
+		return func() (Frame, bool) {
+			inFrame, ok := inNext()
+			if !ok {
+				return nil, false
+			}
+			cFrame, ok := cNext()
+			if !ok {
+				return nil, false
+			}
+			coef := ap1Coefficient(float64(cFrame[0]))
+			if !initialized {
+				copy(xPrev, inFrame)
+				copy(yPrev, inFrame)
+				copy(out, inFrame)
+				initialized = true
+				return out, true
+			}
+			for ch := range nchannels {
+				y := Smp(coef)*inFrame[ch] + xPrev[ch] - Smp(coef)*yPrev[ch]
+				xPrev[ch] = inFrame[ch]
+				yPrev[ch] = y
+				out[ch] = y
+			}
+			return out, true
+		}
+	})
+}
+
 // CombFilter applies a simple feedback comb filter to the input stream.
 // delayFrames is a (potentially varying) stream specifying the delay in samples.
 // feedback controls the amount of fed-back signal (-1..1 is stable).
@@ -296,6 +350,19 @@ func init() {
 			return err
 		}
 		vm.Push(HP1(input, cutoff))
+		return nil
+	})
+
+	RegisterWord("ap1", func(vm *VM) error {
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(AP1(input, cutoff))
 		return nil
 	})
 
