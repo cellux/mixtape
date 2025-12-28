@@ -220,10 +220,6 @@
 ; ~wt: ( ENV: :freq :phase :morph | wt -- s ) wavetable oscillator with env freq/phase/morph
 ; ~fm: ( ENV: :freq :mod :index :phase | wt -- s ) wavetable FM oscillator with env controls
 
-;; ports
-
-; vital/decimate: ( S factor sharp -- s ) multistage decimator
-
 ;; misc
 
 ; sr: ( -- n ) push global sample rate

@@ -769,12 +769,6 @@ See `examples/unison*.tape`.
 
 ## 15) Vital-inspired ports
 
-### `vital/decimate`
-`( S factor sharp -- s )` — multistage halfband decimator.
-
-- `factor` must be a power of two.
-- `sharp` non-zero enables a sharper final stage.
-
 ### `svf`
 `( ENV: :cutoff :q :drive :blend | S -- s )` — state-variable filter.
 
