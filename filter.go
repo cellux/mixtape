@@ -223,6 +223,107 @@ func AP1(input, cutoff Stream) Stream {
 	})
 }
 
+func ap2Coefficients(cutoffHz, q float64) (b0, b1, b2, a1, a2 float64) {
+	sr := float64(SampleRate())
+	if sr <= 0 {
+		// Identity.
+		return 1, 0, 0, 0, 0
+	}
+	if cutoffHz < 0 {
+		cutoffHz = 0
+	}
+	if q < 1e-6 {
+		q = 1e-6
+	}
+
+	ratio := cutoffHz / sr
+	// Avoid degenerate sin(0)=0 / sin(pi)=0 cases.
+	if ratio < 1e-6 {
+		ratio = 1e-6
+	}
+	if ratio > 0.499 {
+		ratio = 0.499
+	}
+
+	w0 := 2 * math.Pi * ratio
+	cosw0 := math.Cos(w0)
+	sinw0 := math.Sin(w0)
+	alpha := sinw0 / (2 * q)
+
+	// RBJ cookbook allpass biquad.
+	bb0 := 1 - alpha
+	bb1 := -2 * cosw0
+	bb2 := 1 + alpha
+	aa0 := 1 + alpha
+	aa1 := -2 * cosw0
+	aa2 := 1 - alpha
+
+	b0 = bb0 / aa0
+	b1 = bb1 / aa0
+	b2 = bb2 / aa0
+	a1 = aa1 / aa0
+	a2 = aa2 / aa0
+	return
+}
+
+// AP2 applies a second-order allpass (biquad) with cutoff in Hz and Q.
+func AP2(input, cutoff, q Stream) Stream {
+	nchannels := input.nchannels
+	return makeTransformStream([]Stream{input, cutoff, q}, func(inputs []Stream) Stepper {
+		inNext := inputs[0].Next
+		cNext := inputs[1].Mono().Next
+		qNext := inputs[2].Mono().Next
+
+		x1 := make([]Smp, nchannels)
+		x2 := make([]Smp, nchannels)
+		y1 := make([]Smp, nchannels)
+		y2 := make([]Smp, nchannels)
+		out := make(Frame, nchannels)
+		initialized := false
+
+		return func() (Frame, bool) {
+			inFrame, ok := inNext()
+			if !ok {
+				return nil, false
+			}
+			cFrame, ok := cNext()
+			if !ok {
+				return nil, false
+			}
+			qFrame, ok := qNext()
+			if !ok {
+				return nil, false
+			}
+
+			if !initialized {
+				// Initialize history so constant signals pass through unchanged.
+				// (Also matches AP1's first-sample passthrough behavior.)
+				for ch := range nchannels {
+					x1[ch] = inFrame[ch]
+					x2[ch] = inFrame[ch]
+					y1[ch] = inFrame[ch]
+					y2[ch] = inFrame[ch]
+					out[ch] = inFrame[ch]
+				}
+				initialized = true
+				return out, true
+			}
+
+			b0, b1, b2, a1, a2 := ap2Coefficients(float64(cFrame[0]), float64(qFrame[0]))
+			for ch := range nchannels {
+				x := inFrame[ch]
+				y := Smp(b0)*x + Smp(b1)*x1[ch] + Smp(b2)*x2[ch] - Smp(a1)*y1[ch] - Smp(a2)*y2[ch]
+				x2[ch] = x1[ch]
+				x1[ch] = x
+				y2[ch] = y1[ch]
+				y1[ch] = y
+				out[ch] = y
+			}
+			return out, true
+		}
+	})
+}
+
 // CombFilter applies a simple feedback comb filter to the input stream.
 // delayFrames is a (potentially varying) stream specifying the delay in samples.
 // feedback controls the amount of fed-back signal (-1..1 is stable).
@@ -363,6 +464,23 @@ func init() {
 			return err
 		}
 		vm.Push(AP1(input, cutoff))
+		return nil
+	})
+
+	RegisterWord("ap2", func(vm *VM) error {
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		q, err := vm.GetStream(":q")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(AP2(input, cutoff, q))
 		return nil
 	})
 

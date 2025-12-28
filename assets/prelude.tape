@@ -183,6 +183,7 @@
 ; lp1: ( ENV: :cutoff | S -- s ) first-order lowpass, cutoff in Hz
 ; hp1: ( ENV: :cutoff | S -- s ) first-order highpass, cutoff in Hz
 ; ap1: ( ENV: :cutoff | S -- s ) first-order allpass, phase rotate around cutoff Hz
+; ap2: ( ENV: :cutoff :q | S -- s ) second-order biquad allpass, phase rotate with controllable Q
 ; peak: ( S -- s ) max(abs(x) for x in frame)
 ; sh: ( S rate -- s ) sample-and-hold input at rate
 ; comb: ( S delay fb -- s ) feedback comb filter
