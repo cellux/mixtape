@@ -438,7 +438,9 @@ func svfCoefficient(cutoffHz Smp) Smp {
 }
 
 // svfStepper returns a stepper that yields the LP/BP/HP outputs of the TPT SVF.
-func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Frame, valid bool) {
+// It also returns k = 1/Q (where Q is the resonance stream), which is useful for
+// derived responses like notch/peak.
+func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Frame, k Smp, valid bool) {
 	nchannels := input.nchannels
 
 	inNext := input.Next
@@ -451,22 +453,22 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 	bp := make(Frame, nchannels)
 	hp := make(Frame, nchannels)
 
-	return func() (Frame, Frame, Frame, bool) {
+	return func() (Frame, Frame, Frame, Smp, bool) {
 		inFrame, ok := inNext()
 		if !ok {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 		cFrame, ok := cNext()
 		if !ok {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 		rFrame, ok := rNext()
 		if !ok {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 		dFrame, ok := dNext()
 		if !ok {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 
 		cut := cFrame[0]
@@ -513,7 +515,7 @@ func svfStepper(input, cutoff, resonance, drive Stream) func() (lpf, bpf, hpf Fr
 			hp[c] = x - k*bp[c] - lp[c]
 		}
 
-		return lp, bp, hp, true
+		return lp, bp, hp, k, true
 	}
 }
 
@@ -537,7 +539,7 @@ func Notch2(input, cutoff, resonance, drive Stream) Stream {
 		out := make(Frame, nchannels)
 
 		return func() (Frame, bool) {
-			lp, _, hp, ok := step()
+			lp, _, hp, _, ok := step()
 			if !ok {
 				return nil, false
 			}
@@ -546,6 +548,60 @@ func Notch2(input, cutoff, resonance, drive Stream) Stream {
 				out[c] = lp[c] + hp[c]
 			}
 
+			return out, true
+		}
+	})
+}
+
+// Peak2 applies a peaking (bell) EQ derived from the digital SVF core.
+//
+// This is implemented as: y = x + (A - 1) * (k * bp)
+// where A is a linear gain multiplier (typically db(:gain)), and k = 1/Q.
+//
+// Parameters are streams to allow modulation:
+//
+//	input:     audio input (N channels)
+//	cutoff:    cutoff/center frequency in Hz (mono stream)
+//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
+//	drive:     input drive multiplier.
+//	gain:      linear gain multiplier (mono stream). A=1 is neutral; >1 boosts; <1 cuts.
+func Peak2(input, cutoff, resonance, drive, gain Stream) Stream {
+	nchannels := input.nchannels
+
+	return makeTransformStream([]Stream{input, cutoff, resonance, drive, gain}, func(inputs []Stream) Stepper {
+		sInput := inputs[0]
+		sCutoff := inputs[1].Mono()
+		sResonance := inputs[2].Mono()
+		sDrive := inputs[3].Mono()
+		sGain := inputs[4].Mono()
+
+		step := svfStepper(sInput, sCutoff, sResonance, sDrive)
+		gNext := sGain.Next
+
+		out := make(Frame, nchannels)
+
+		return func() (Frame, bool) {
+			lp, bp, hp, k, ok := step()
+			if !ok {
+				return nil, false
+			}
+			gFrame, ok := gNext()
+			if !ok {
+				return nil, false
+			}
+
+			A := gFrame[0]
+			// Reasonable clamp: negative gains are phase inversions and can blow up
+			// expectations for an EQ-style control.
+			if A < 0 {
+				A = 0
+			}
+
+			// Neutral response from SVF core: notch = lp + hp.
+			for c := range nchannels {
+				notch := lp[c] + hp[c]
+				out[c] = notch + (A-1)*k*bp[c]
+			}
 			return out, true
 		}
 	})
@@ -576,7 +632,7 @@ func DigitalSVF(input, cutoff, resonance, drive, blend Stream) Stream {
 		out := make(Frame, nchannels)
 
 		return func() (Frame, bool) {
-			lp, bp, hp, ok := step()
+			lp, bp, hp, _, ok := step()
 			if !ok {
 				return nil, false
 			}
@@ -755,6 +811,31 @@ func init() {
 			return err
 		}
 		vm.Push(Notch2(input, cutoff, resonance, drive))
+		return nil
+	})
+
+	RegisterWord("peak2", func(vm *VM) error {
+		gain, err := vm.GetStream(":gain")
+		if err != nil {
+			return err
+		}
+		drive, err := vm.GetStream(":drive")
+		if err != nil {
+			return err
+		}
+		resonance, err := vm.GetStream(":q")
+		if err != nil {
+			return err
+		}
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(Peak2(input, cutoff, resonance, drive, gain))
 		return nil
 	})
 }
