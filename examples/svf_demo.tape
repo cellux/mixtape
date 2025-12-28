@@ -1,6 +1,6 @@
 ; Vital-inspired SVF demo: three clips that stress cutoff/Q/drive/blend.
 ; Each clip sets :cutoff, :q, :drive, :blend in the env; only the
-; input stream sits on the stack before calling vital/svf.
+; input stream sits on the stack before calling svf.
 [
 (
   ; 1) Lush low-pass sweep with gentle tremolo and soft saturation
@@ -11,7 +11,7 @@
 
   110 >:freq ~saw
   (0.05 >:freq ~sin 0.1 * 0.9 +) *                            ; gentle tremolo pre-filter
-  vital/svf
+  svf
   tanh
   8b take 0.28 *
 )
@@ -23,7 +23,7 @@
   0   >:blend                                                  ; band-pass
 
   110 >:freq ~saw 2 *                                          ; extra harmonics
-  vital/svf
+  svf
   tanh
   8b take 0.22 *
 )
@@ -35,7 +35,7 @@
   (1 >:freq ~sin) >:blend                                      ; blend swings -1..+1
 
   110 >:freq ~triangle
-  vital/svf
+  svf
   8b take 0.26 *
 )
 ] cat

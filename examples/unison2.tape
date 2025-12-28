@@ -1,7 +1,7 @@
 ; unison2.tape * Detuned chord machine + bass + FM lead
 ;
 ; A small 4-bar sketch built almost entirely around `unison`.
-; - Pad: 8-voice unison "supersaw-ish" chord stack through Vital SVF.
+; - Pad: 8-voice unison "supersaw-ish" chord stack through SVF.
 ; - Bass: 3-voice unison low stack.
 ; - Lead: 5-voice unison FM plucks.
 ;
@@ -92,7 +92,7 @@
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
       1.8 >:drive
       -1  >:blend
-      vital/svf
+      svf
       tanh
 
       :pad/env ~ *
@@ -116,7 +116,7 @@
       (0.06 >:freq ~sin 0.20 * 0.75 +) >:q
       1.8 >:drive
       -1  >:blend
-      vital/svf
+      svf
       tanh
 
       :pad/env ~ *
@@ -140,7 +140,7 @@
       0.9  >:q
       1.6  >:drive
       -1   >:blend
-      vital/svf
+      svf
 
       :bass/env ~ *
       0.26 *
@@ -164,7 +164,7 @@
       (0.07 >:freq ~sin 0.25 * 1.1 +) >:q
       2.2 >:drive
       0   >:blend
-      vital/svf
+      svf
       tanh
 
       :lead/env ~ *

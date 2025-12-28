@@ -184,6 +184,7 @@
 ; hp1: ( ENV: :cutoff | S -- s ) first-order highpass, cutoff in Hz
 ; ap1: ( ENV: :cutoff | S -- s ) first-order allpass, phase rotate around cutoff Hz
 ; ap2: ( ENV: :cutoff :q | S -- s ) second-order biquad allpass, phase rotate with controllable Q
+; svf: ( ENV: :cutoff :q :drive :blend | S -- s ) state-variable filter
 ; peak: ( S -- s ) max(abs(x) for x in frame)
 ; sh: ( S rate -- s ) sample-and-hold input at rate
 ; comb: ( S delay fb -- s ) feedback comb filter
@@ -222,7 +223,6 @@
 ;; ports
 
 ; vital/decimate: ( S factor sharp -- s ) multistage decimator
-; vital/svf: ( ENV: :cutoff :q :drive :blend | S -- s ) state-variable filter
 
 ;; misc
 
@@ -482,10 +482,10 @@
 ;; filters
 
 ; lp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole lowpass (TPT SVF)
-{( -1 >:blend vital/svf )} >lp2
+{( -1 >:blend svf )} >lp2
 
 ; bp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole bandpass (TPT SVF)
-{( 0 >:blend vital/svf )} >bp2
+{( 0 >:blend svf )} >bp2
 
 ; hp2: ( ENV: :cutoff :q :drive | S -- s ) 2-pole highpass (TPT SVF)
-{( 1 >:blend vital/svf )} >hp2
+{( 1 >:blend svf )} >hp2

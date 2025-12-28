@@ -775,12 +775,12 @@ See `examples/unison*.tape`.
 - `factor` must be a power of two.
 - `sharp` non-zero enables a sharper final stage.
 
-### `vital/svf`
+### `svf`
 `( ENV: :cutoff :q :drive :blend | S -- s )` — state-variable filter.
 
 - `:blend` in `[-1,1]` maps lowpass(-1) → bandpass(0) → highpass(+1).
 
-See `examples/vital_svf_demo.tape`.
+See `examples/svf_demo.tape`.
 
 ---
 
