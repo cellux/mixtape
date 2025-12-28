@@ -2,18 +2,14 @@ package main
 
 import "math"
 
-// DCMeanCenter subtracts the per-channel mean for finite streams.
-func DCMeanCenter(s Stream) Stream {
-	t := s.Take(nil, s.nframes)
-	t.removeDCInPlace()
-	return t.Stream()
-}
-
 // DCBlock applies a simple one-pole high-pass filter to remove DC offset.
 // alpha controls the cutoff; typical small value like 0.995.
 func DCBlock(s Stream, alpha float64) Stream {
 	if s.nframes != 0 {
-		return DCMeanCenter(s)
+		// finite streams handled specially
+		t := s.Take(nil, s.nframes)
+		t.removeDCInPlace()
+		return t.Stream()
 	}
 	return makeTransformStream([]Stream{s}, func(inputs []Stream) Stepper {
 		out := make(Frame, s.nchannels)
@@ -34,13 +30,6 @@ func DCBlock(s Stream, alpha float64) Stream {
 			return out, true
 		}
 	})
-}
-
-// DCFilter implements Vital's dc_filter: y[n] = (x[n]-x[n-1]) + a*y[n-1]
-// with a = 1 - (1 / sampleRate). It's a very low cutoff (~0.16 Hz @ 48kHz).
-func DCFilter(s Stream) Stream {
-	alpha := 1.0 - 1.0/float64(SampleRate())
-	return DCBlock(s, alpha)
 }
 
 // OnePole applies a first-order IIR smoother: y[n] = a*y[n-1] + (1-a)*x[n]
@@ -223,107 +212,6 @@ func AP1(input, cutoff Stream) Stream {
 	})
 }
 
-func ap2Coefficients(cutoffHz, q float64) (b0, b1, b2, a1, a2 float64) {
-	sr := float64(SampleRate())
-	if sr <= 0 {
-		// Identity.
-		return 1, 0, 0, 0, 0
-	}
-	if cutoffHz < 0 {
-		cutoffHz = 0
-	}
-	if q < 1e-6 {
-		q = 1e-6
-	}
-
-	ratio := cutoffHz / sr
-	// Avoid degenerate sin(0)=0 / sin(pi)=0 cases.
-	if ratio < 1e-6 {
-		ratio = 1e-6
-	}
-	if ratio > 0.499 {
-		ratio = 0.499
-	}
-
-	w0 := 2 * math.Pi * ratio
-	cosw0 := math.Cos(w0)
-	sinw0 := math.Sin(w0)
-	alpha := sinw0 / (2 * q)
-
-	// RBJ cookbook allpass biquad.
-	bb0 := 1 - alpha
-	bb1 := -2 * cosw0
-	bb2 := 1 + alpha
-	aa0 := 1 + alpha
-	aa1 := -2 * cosw0
-	aa2 := 1 - alpha
-
-	b0 = bb0 / aa0
-	b1 = bb1 / aa0
-	b2 = bb2 / aa0
-	a1 = aa1 / aa0
-	a2 = aa2 / aa0
-	return
-}
-
-// AP2 applies a second-order allpass (biquad) with cutoff in Hz and Q.
-func AP2(input, cutoff, q Stream) Stream {
-	nchannels := input.nchannels
-	return makeTransformStream([]Stream{input, cutoff, q}, func(inputs []Stream) Stepper {
-		inNext := inputs[0].Next
-		cNext := inputs[1].Mono().Next
-		qNext := inputs[2].Mono().Next
-
-		x1 := make([]Smp, nchannels)
-		x2 := make([]Smp, nchannels)
-		y1 := make([]Smp, nchannels)
-		y2 := make([]Smp, nchannels)
-		out := make(Frame, nchannels)
-		initialized := false
-
-		return func() (Frame, bool) {
-			inFrame, ok := inNext()
-			if !ok {
-				return nil, false
-			}
-			cFrame, ok := cNext()
-			if !ok {
-				return nil, false
-			}
-			qFrame, ok := qNext()
-			if !ok {
-				return nil, false
-			}
-
-			if !initialized {
-				// Initialize history so constant signals pass through unchanged.
-				// (Also matches AP1's first-sample passthrough behavior.)
-				for ch := range nchannels {
-					x1[ch] = inFrame[ch]
-					x2[ch] = inFrame[ch]
-					y1[ch] = inFrame[ch]
-					y2[ch] = inFrame[ch]
-					out[ch] = inFrame[ch]
-				}
-				initialized = true
-				return out, true
-			}
-
-			b0, b1, b2, a1, a2 := ap2Coefficients(float64(cFrame[0]), float64(qFrame[0]))
-			for ch := range nchannels {
-				x := inFrame[ch]
-				y := Smp(b0)*x + Smp(b1)*x1[ch] + Smp(b2)*x2[ch] - Smp(a1)*y1[ch] - Smp(a2)*y2[ch]
-				x2[ch] = x1[ch]
-				x1[ch] = x
-				y2[ch] = y1[ch]
-				y1[ch] = y
-				out[ch] = y
-			}
-			return out, true
-		}
-	})
-}
-
 // CombFilter applies a simple feedback comb filter to the input stream.
 // delayFrames is a (potentially varying) stream specifying the delay in samples.
 // feedback controls the amount of fed-back signal (-1..1 is stable).
@@ -391,257 +279,6 @@ func CombFilter(input Stream, delayFrames Stream, feedback float64) Stream {
 	})
 }
 
-// digitalSVFState holds per-channel integrator state for the SVF.
-type digitalSVFState struct {
-	ic1eq []Smp
-	ic2eq []Smp
-}
-
-func newDigitalSVFState(nchannels int) *digitalSVFState {
-	return &digitalSVFState{
-		ic1eq: make([]Smp, nchannels),
-		ic2eq: make([]Smp, nchannels),
-	}
-}
-
-// svfMix maps a blend in [-1,1] to low/band/high amounts
-// blend < 0 favours lowpass, > 0 favours highpass, 0 gives bandpass.
-func svfMix(blend Smp) (low, band, high Smp) {
-	if blend < -1 {
-		blend = -1
-	} else if blend > 1 {
-		blend = 1
-	}
-	// Band amount follows a circular crossfade to keep unity energy.
-	band = math.Sqrt(math.Max(0, 1-math.Pow(blend, 2)))
-	if blend < 0 {
-		low = -blend
-		high = 0
-	} else {
-		low = 0
-		high = blend
-	}
-	return
-}
-
-// svfCoefficient computes the one-pole SVF coefficient: tan(pi * min(0.499, f/sr)).
-func svfCoefficient(cutoffHz Smp) Smp {
-	sr := float64(SampleRate())
-	ratio := float64(cutoffHz) / sr
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 0.499 {
-		ratio = 0.499
-	}
-	return Smp(math.Tan(math.Pi * ratio))
-}
-
-// svfStepper returns a stepper that yields the LP/BP/HP outputs of the TPT SVF.
-// It also returns k = 1/Q (where Q is the resonance stream), which is useful for
-// derived responses like notch/peak.
-func svfStepper(input, cutoff, resonance Stream) func() (lpf, bpf, hpf Frame, k Smp, valid bool) {
-	nchannels := input.nchannels
-
-	inNext := input.Next
-	cNext := cutoff.Next
-	rNext := resonance.Next
-
-	state := newDigitalSVFState(nchannels)
-	lp := make(Frame, nchannels)
-	bp := make(Frame, nchannels)
-	hp := make(Frame, nchannels)
-
-	return func() (Frame, Frame, Frame, Smp, bool) {
-		inFrame, ok := inNext()
-		if !ok {
-			return nil, nil, nil, 0, false
-		}
-		cFrame, ok := cNext()
-		if !ok {
-			return nil, nil, nil, 0, false
-		}
-		rFrame, ok := rNext()
-		if !ok {
-			return nil, nil, nil, 0, false
-		}
-
-		cut := cFrame[0]
-		res := rFrame[0]
-
-		// Clamp resonance to avoid division by zero.
-		if res < 1e-6 {
-			res = 1e-6
-		}
-		k := Smp(1) / res
-		g := svfCoefficient(cut)
-
-		// TPT SVF coefficients
-		denom := Smp(1) + g*(g+k)
-		if denom == 0 {
-			denom = 1e-9
-		}
-		a0 := Smp(1) / denom // a1 in Simper paper
-		a1 := g * a0         // a2
-		a2 := g * a1         // a3
-
-		for c := range nchannels {
-			x := inFrame[c]
-
-			// Topology-preserving transform (TPT) SVF (Simper):
-			//
-			// a1 = 1/(1 + g*(g+k))
-			// a2 = g*a1
-			// a3 = g*a2
-			// v3 = x - ic2eq
-			// v1 = a1*ic1eq + a2*v3
-			// v2 = ic2eq + a2*ic1eq + a3*v3
-			// ic1eq = 2*v1 - ic1eq
-			// ic2eq = 2*v2 - ic2eq
-			v3 := x - state.ic2eq[c]
-			v1 := a0*state.ic1eq[c] + a1*v3
-			v2 := state.ic2eq[c] + a1*state.ic1eq[c] + a2*v3
-			state.ic1eq[c] = 2*v1 - state.ic1eq[c]
-			state.ic2eq[c] = 2*v2 - state.ic2eq[c]
-
-			lp[c] = v2
-			bp[c] = v1
-			hp[c] = x - k*bp[c] - lp[c]
-		}
-
-		return lp, bp, hp, k, true
-	}
-}
-
-// Notch2 applies a 2-pole notch derived from the digital SVF core.
-// Parameters are streams to allow modulation:
-//
-//	input:     audio input (N channels)
-//	cutoff:    cutoff frequency in Hz (mono stream)
-//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-func Notch2(input, cutoff, resonance Stream) Stream {
-	nchannels := input.nchannels
-
-	return makeTransformStream([]Stream{input, cutoff, resonance}, func(inputs []Stream) Stepper {
-		sInput := inputs[0]
-		sCutoff := inputs[1].Mono()
-		sResonance := inputs[2].Mono()
-		step := svfStepper(sInput, sCutoff, sResonance)
-
-		out := make(Frame, nchannels)
-
-		return func() (Frame, bool) {
-			lp, _, hp, _, ok := step()
-			if !ok {
-				return nil, false
-			}
-
-			for c := range nchannels {
-				out[c] = lp[c] + hp[c]
-			}
-
-			return out, true
-		}
-	})
-}
-
-// Peak2 applies a peaking (bell) EQ derived from the digital SVF core.
-//
-// This is implemented as: y = x + (A - 1) * (k * bp)
-// where A is a linear gain multiplier (typically db(:gain)), and k = 1/Q.
-//
-// Parameters are streams to allow modulation:
-//
-//	input:     audio input (N channels)
-//	cutoff:    cutoff/center frequency in Hz (mono stream)
-//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-//	gain:      linear gain multiplier (mono stream). A=1 is neutral; >1 boosts; <1 cuts.
-func Peak2(input, cutoff, resonance, gain Stream) Stream {
-	nchannels := input.nchannels
-
-	return makeTransformStream([]Stream{input, cutoff, resonance, gain}, func(inputs []Stream) Stepper {
-		sInput := inputs[0]
-		sCutoff := inputs[1].Mono()
-		sResonance := inputs[2].Mono()
-		sGain := inputs[3].Mono()
-
-		step := svfStepper(sInput, sCutoff, sResonance)
-		gNext := sGain.Next
-
-		out := make(Frame, nchannels)
-
-		return func() (Frame, bool) {
-			lp, bp, hp, k, ok := step()
-			if !ok {
-				return nil, false
-			}
-			gFrame, ok := gNext()
-			if !ok {
-				return nil, false
-			}
-
-			A := gFrame[0]
-			// Reasonable clamp: negative gains are phase inversions and can blow up
-			// expectations for an EQ-style control.
-			if A < 0 {
-				A = 0
-			}
-
-			// Neutral response from SVF core: notch = lp + hp.
-			for c := range nchannels {
-				notch := lp[c] + hp[c]
-				out[c] = notch + (A-1)*k*bp[c]
-			}
-			return out, true
-		}
-	})
-}
-
-// DigitalSVF applies a Vital-inspired digital state-variable filter.
-// Parameters are streams to allow modulation:
-//
-//	input:     audio input (N channels)
-//	cutoff:    cutoff frequency in Hz (mono stream)
-//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
-//	blend:     blend in [-1,1], mapping lowpass(-1) -> bandpass(0) -> highpass(+1).
-func DigitalSVF(input, cutoff, resonance, blend Stream) Stream {
-	nchannels := input.nchannels
-
-	// Let makeTransformStream compute nframes as the shortest among inputs.
-	return makeTransformStream([]Stream{input, cutoff, resonance, blend}, func(inputs []Stream) Stepper {
-		sInput := inputs[0]
-		sCutoff := inputs[1].Mono()
-		sResonance := inputs[2].Mono()
-		step := svfStepper(sInput, sCutoff, sResonance)
-
-		sBlend := inputs[3].Mono()
-		bNext := sBlend.Next
-
-		out := make(Frame, nchannels)
-
-		return func() (Frame, bool) {
-			lp, bp, hp, _, ok := step()
-			if !ok {
-				return nil, false
-			}
-			bFrame, ok := bNext()
-			if !ok {
-				return nil, false
-			}
-
-			blendVal := bFrame[0]
-			lowAmt, bandAmt, highAmt := svfMix(blendVal)
-
-			for c := range nchannels {
-				y := lowAmt*lp[c] + bandAmt*bp[c] + highAmt*hp[c]
-				out[c] = y
-			}
-
-			return out, true
-		}
-	})
-}
-
 func init() {
 	RegisterWord("dc*", func(vm *VM) error {
 		alphaNum, err := Pop[Num](vm)
@@ -654,15 +291,6 @@ func init() {
 		}
 		alpha := float64(alphaNum)
 		vm.Push(DCBlock(stream, alpha))
-		return nil
-	})
-
-	RegisterWord("dc", func(vm *VM) error {
-		stream, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(DCFilter(stream))
 		return nil
 	})
 
@@ -718,23 +346,6 @@ func init() {
 		return nil
 	})
 
-	RegisterWord("ap2", func(vm *VM) error {
-		cutoff, err := vm.GetStream(":cutoff")
-		if err != nil {
-			return err
-		}
-		q, err := vm.GetStream(":q")
-		if err != nil {
-			return err
-		}
-		input, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(AP2(input, cutoff, q))
-		return nil
-	})
-
 	RegisterWord("comb", func(vm *VM) error {
 		fb, err := Pop[Num](vm)
 		if err != nil {
@@ -753,65 +364,6 @@ func init() {
 		}
 
 		vm.Push(CombFilter(inputStream, delayStream, float64(fb)))
-		return nil
-	})
-
-	RegisterWord("svf", func(vm *VM) error {
-		blend, err := vm.GetStream(":blend")
-		if err != nil {
-			return err
-		}
-		resonance, err := vm.GetStream(":q")
-		if err != nil {
-			return err
-		}
-		cutoff, err := vm.GetStream(":cutoff")
-		if err != nil {
-			return err
-		}
-		input, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(DigitalSVF(input, cutoff, resonance, blend))
-		return nil
-	})
-
-	RegisterWord("notch2", func(vm *VM) error {
-		resonance, err := vm.GetStream(":q")
-		if err != nil {
-			return err
-		}
-		cutoff, err := vm.GetStream(":cutoff")
-		if err != nil {
-			return err
-		}
-		input, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(Notch2(input, cutoff, resonance))
-		return nil
-	})
-
-	RegisterWord("peak2", func(vm *VM) error {
-		gain, err := vm.GetStream(":gain")
-		if err != nil {
-			return err
-		}
-		resonance, err := vm.GetStream(":q")
-		if err != nil {
-			return err
-		}
-		cutoff, err := vm.GetStream(":cutoff")
-		if err != nil {
-			return err
-		}
-		input, err := streamFromVal(vm.Pop())
-		if err != nil {
-			return err
-		}
-		vm.Push(Peak2(input, cutoff, resonance, gain))
 		return nil
 	})
 }

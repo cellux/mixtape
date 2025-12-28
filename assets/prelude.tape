@@ -178,7 +178,6 @@
 ;; stream transformers
 
 ; dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
-; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
 ; onepole: ( S alpha -- s ) first-order IIR smoother; higher alpha = more smoothing
 ; lp1: ( ENV: :cutoff | S -- s ) first-order lowpass, cutoff in Hz
 ; hp1: ( ENV: :cutoff | S -- s ) first-order highpass, cutoff in Hz
@@ -468,6 +467,9 @@
 { 0 tape/saw wt } >wt/saw
 
 ;; dsp
+
+; dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
+{ 1 1 sr / - dc* } >dc
 
 ; z1: ( s -- s ) one-sample delay with zero init
 { 0 z1* } >z1
