@@ -478,3 +478,14 @@ false >:saturate
 
 ; stretch: ( S factor -- s )
 { SRC_LINEAR swap resample } >stretch
+
+;; filters
+
+; lp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole lowpass (TPT SVF)
+{( -1 >:blend vital/svf )} >lp2
+
+; bp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole bandpass (TPT SVF)
+{( 0 >:blend vital/svf )} >bp2
+
+; hp2: ( ENV: :cutoff :q :drive :saturate | S -- s ) 2-pole highpass (TPT SVF)
+{( 1 >:blend vital/svf )} >hp2
