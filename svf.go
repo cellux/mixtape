@@ -257,6 +257,98 @@ func Peak2(input, cutoff, resonance, gain Stream) Stream {
 	})
 }
 
+// LShelf2 applies a 2-pole low-shelf EQ derived from the digital SVF core.
+//
+// Implemented as: y = A*lp + hp, where A is a linear gain multiplier.
+// Parameters are streams to allow modulation:
+//
+//	input:     audio input (N channels)
+//	cutoff:    pivot frequency in Hz (mono stream)
+//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
+//	gain:      linear gain multiplier (mono stream). A=1 is neutral; >1 boosts lows; <1 cuts lows.
+func LShelf2(input, cutoff, resonance, gain Stream) Stream {
+	nchannels := input.nchannels
+
+	return makeTransformStream([]Stream{input, cutoff, resonance, gain}, func(inputs []Stream) Stepper {
+		sInput := inputs[0]
+		sCutoff := inputs[1].Mono()
+		sResonance := inputs[2].Mono()
+		sGain := inputs[3].Mono()
+
+		step := svfStepper(sInput, sCutoff, sResonance, nil)
+		gNext := sGain.Next
+
+		out := make(Frame, nchannels)
+
+		return func() (Frame, bool) {
+			lp, _, hp, _, ok := step()
+			if !ok {
+				return nil, false
+			}
+			gFrame, ok := gNext()
+			if !ok {
+				return nil, false
+			}
+
+			A := gFrame[0]
+			if A < 0 {
+				A = 0
+			}
+
+			for c := range nchannels {
+				out[c] = A*lp[c] + hp[c]
+			}
+			return out, true
+		}
+	})
+}
+
+// HShelf2 applies a 2-pole high-shelf EQ derived from the digital SVF core.
+//
+// Implemented as: y = lp + A*hp, where A is a linear gain multiplier.
+// Parameters are streams to allow modulation:
+//
+//	input:     audio input (N channels)
+//	cutoff:    pivot frequency in Hz (mono stream)
+//	resonance: resonance (Q). Values <= 0 are clamped to a small epsilon.
+//	gain:      linear gain multiplier (mono stream). A=1 is neutral; >1 boosts highs; <1 cuts highs.
+func HShelf2(input, cutoff, resonance, gain Stream) Stream {
+	nchannels := input.nchannels
+
+	return makeTransformStream([]Stream{input, cutoff, resonance, gain}, func(inputs []Stream) Stepper {
+		sInput := inputs[0]
+		sCutoff := inputs[1].Mono()
+		sResonance := inputs[2].Mono()
+		sGain := inputs[3].Mono()
+
+		step := svfStepper(sInput, sCutoff, sResonance, nil)
+		gNext := sGain.Next
+
+		out := make(Frame, nchannels)
+
+		return func() (Frame, bool) {
+			lp, _, hp, _, ok := step()
+			if !ok {
+				return nil, false
+			}
+			gFrame, ok := gNext()
+			if !ok {
+				return nil, false
+			}
+
+			A := gFrame[0]
+			if A < 0 {
+				A = 0
+			}
+
+			for c := range nchannels {
+				out[c] = lp[c] + A*hp[c]
+			}
+			return out, true
+		}
+	})
+}
+
 // DigitalSVF applies a Vital-inspired digital state-variable filter.
 // Parameters are streams to allow modulation:
 //
@@ -376,6 +468,48 @@ func init() {
 			return err
 		}
 		vm.Push(Peak2(input, cutoff, resonance, gain))
+		return nil
+	})
+
+	RegisterWord("lshelf2", func(vm *VM) error {
+		gain, err := vm.GetStream(":gain")
+		if err != nil {
+			return err
+		}
+		resonance, err := vm.GetStream(":q")
+		if err != nil {
+			return err
+		}
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(LShelf2(input, cutoff, resonance, gain))
+		return nil
+	})
+
+	RegisterWord("hshelf2", func(vm *VM) error {
+		gain, err := vm.GetStream(":gain")
+		if err != nil {
+			return err
+		}
+		resonance, err := vm.GetStream(":q")
+		if err != nil {
+			return err
+		}
+		cutoff, err := vm.GetStream(":cutoff")
+		if err != nil {
+			return err
+		}
+		input, err := streamFromVal(vm.Pop())
+		if err != nil {
+			return err
+		}
+		vm.Push(HShelf2(input, cutoff, resonance, gain))
 		return nil
 	})
 }
