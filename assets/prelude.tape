@@ -487,3 +487,21 @@
 
 ; hp2: ( ENV: :cutoff :q | S -- s ) 2-pole highpass (TPT SVF)
 {( 1 >:blend svf )} >hp2
+
+; lp4: ( ENV: :cutoff :q | S -- s ) 4-pole lowpass (TPT SVF)
+{ lp2 lp2 } >lp4
+
+; bp4: ( ENV: :cutoff :q | S -- s ) 4-pole bandpass (TPT SVF)
+{ bp2 bp2 } >bp4
+
+; hp4: ( ENV: :cutoff :q | S -- s ) 4-pole highpass (TPT SVF)
+{ hp2 hp2 } >hp4
+
+; ap4: ( ENV: :cutoff :q | S -- s ) 4-pole allpass (TPT SVF)
+{ ap2 ap2 } >ap4
+
+; notch4: ( ENV: :cutoff :q | S -- s ) 4-pole notch (TPT SVF)
+{ notch2 notch2 } >notch4
+
+; peak4: ( ENV: :cutoff :q :gain | S -- s ) 4-pole peak (TPT SVF)
+{ peak2 peak2 } >peak4
