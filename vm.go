@@ -679,7 +679,14 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 		}
 		return err
 	}
-	vm.evalResult = vm.Top()
+	result := vm.Top()
+	if streamable, ok := result.(Streamable); ok {
+		stream := streamable.Stream()
+		if stream.nframes > 0 {
+			result = stream.Take(nil, stream.nframes)
+		}
+	}
+	vm.evalResult = result
 	return nil
 }
 

@@ -3,7 +3,7 @@
 [{9 /exp} {-3 /exp} {/line} {-3 /exp}]
 env >:env
 
-[ :env ( 220 >:freq ~sin ) *
-  :env ( 440 >:freq ~triangle ) *
-  :env ( 110 >:freq ~sin ) *
+[ :env ( a-4 mtof >:freq ~sin ) *
+  :env ( a-5 mtof >:freq ~triangle ) *
+  :env ( a-3 mtof >:freq ~sin ) *
 ] cat

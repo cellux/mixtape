@@ -456,54 +456,56 @@ func resolveTapePath(path string) (string, error) {
 	return "", fmt.Errorf("tape not found: %s", path)
 }
 
-func loadTape(vm *VM, path string) error {
+func loadTape(vm *VM, path string) (*Tape, error) {
 	tapeInfo, err := os.Stat(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	wavPath := fmt.Sprintf("%s.wav", strings.TrimSuffix(path, ".tape"))
 	if wavInfo, err := os.Stat(wavPath); err == nil {
 		if wavInfo.ModTime().After(tapeInfo.ModTime()) {
-			return loadAndPushTape(vm, wavPath)
+			return loadWav(wavPath)
 		}
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
 	if err := vm.ParseAndEval(f, path); err != nil {
-		return err
+		return nil, err
 	}
-	if tape, ok := vm.Top().(*Tape); ok {
-		if err := tape.WriteToWav(wavPath); err != nil {
-			return err
-		}
+	tape, ok := vm.evalResult.(*Tape)
+	if !ok {
+		return nil, fmt.Errorf("tape script did not produce a tape: %s", path)
 	}
-	return nil
+	if err := tape.WriteToWav(wavPath); err != nil {
+		return nil, err
+	}
+	return tape, nil
 }
 
-func loadWav(vm *VM, path string) error {
+func loadWav(path string) (*Tape, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
 	sr := SampleRate()
 	decoder := wav.NewDecoder(f)
 	if !decoder.IsValidFile() {
-		return fmt.Errorf("invalid WAV file: %s", path)
+		return nil, fmt.Errorf("invalid WAV file: %s", path)
 	}
 	if err := decoder.FwdToPCM(); err != nil {
-		return err
+		return nil, err
 	}
 	format := decoder.Format()
 	bitDepth := int(decoder.SampleBitDepth())
 	if bitDepth == 0 {
-		return fmt.Errorf("unknown bit depth for WAV file: %s", path)
+		return nil, fmt.Errorf("unknown bit depth for WAV file: %s", path)
 	}
 	bytesPerSample := (bitDepth-1)/8 + 1
 	nbytes := int(decoder.PCMLen())
@@ -528,7 +530,7 @@ func loadWav(vm *VM, path string) error {
 	}
 	bytesDecoded, err := decoder.PCMBuffer(buf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	logger.Debug("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
 	floatBuf := buf.AsFloatBuffer()
@@ -543,40 +545,40 @@ func loadWav(vm *VM, path string) error {
 		startTime = GetTime()
 		resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(wavSR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		logger.Debug("resampled wav data", "path", path, "seconds", GetTime()-startTime)
 		nsamples := len(resampledBuf)
 		nframes := nsamples / nchannels
-		tape := pushTape(vm, nchannels, nframes)
+		tape := makeTape(nchannels, nframes)
 		for i := range nsamples {
 			tape.samples[i] = Smp(resampledBuf[i])
 		}
-		return nil
+		return tape, nil
 	}
 
-	tape := pushTape(vm, nchannels, nframes)
+	tape := makeTape(nchannels, nframes)
 	for i := 0; i < len(floatBuf.Data); i++ {
 		tape.samples[i] = Smp(floatBuf.Data[i] / factor)
 	}
-	return nil
+	return tape, nil
 }
 
-func loadMP3(vm *VM, path string) error {
+func loadMP3(path string) (*Tape, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
 	sr := SampleRate()
 	decoder, err := mp3.NewDecoder(f)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	nbytes := decoder.Length()
 	if nbytes <= 0 {
-		return fmt.Errorf("cannot determine length of MP3 file: %s", path)
+		return nil, fmt.Errorf("cannot determine length of MP3 file: %s", path)
 	}
 	nchannels := 2
 	nsamples := int(nbytes / 2) // FormatSignedInt16LE
@@ -592,7 +594,7 @@ func loadMP3(vm *VM, path string) error {
 				if err == io.EOF {
 					break
 				}
-				return err
+				return nil, err
 			}
 			float32Buf[i] = float32(sample) / 32768
 		}
@@ -601,46 +603,70 @@ func loadMP3(vm *VM, path string) error {
 		logger.Debug("resampling mp3 data", "path", path)
 		resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(mp3SR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		logger.Debug("resampled mp3 data", "path", path, "seconds", GetTime()-startTime)
 		nsamples := len(resampledBuf)
 		nframes := nsamples / nchannels
-		tape := pushTape(vm, nchannels, nframes)
+		tape := makeTape(nchannels, nframes)
 		for i := range nsamples {
 			tape.samples[i] = Smp(resampledBuf[i])
 		}
-		return nil
+		return tape, nil
 	}
 
 	logger.Debug("decoding mp3 file", "path", path)
 	startTime := GetTime()
 	var sample int16
-	tape := pushTape(vm, nchannels, nframes)
+	tape := makeTape(nchannels, nframes)
 	for i := range nsamples {
 		if err := binary.Read(decoder, binary.LittleEndian, &sample); err != nil {
 			if err == io.EOF {
 				break
 			}
-			return err
+			return nil, err
 		}
 		tape.samples[i] = Smp(sample) / 32768
 	}
 	logger.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
-	return nil
+	return tape, nil
+}
+
+func loadSample(path string) (*Tape, error) {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".wav":
+		return loadWav(path)
+	case ".mp3":
+		return loadMP3(path)
+	default:
+		return nil, fmt.Errorf("cannot load sample: %s", path)
+	}
 }
 
 func loadAndPushTape(vm *VM, path string) error {
-	switch filepath.Ext(path) {
+	var (
+		tape *Tape
+		err  error
+	)
+	switch strings.ToLower(filepath.Ext(path)) {
 	case ".tape":
-		return loadTape(vm, path)
+		tape, err = loadTape(vm, path)
 	case ".wav":
-		return loadWav(vm, path)
+		tape, err = loadWav(path)
 	case ".mp3":
-		return loadMP3(vm, path)
+		tape, err = loadMP3(path)
 	default:
 		return fmt.Errorf("cannot load file: %s", path)
 	}
+	if err != nil {
+		return err
+	}
+	if tape == nil {
+		return fmt.Errorf("cannot load file: %s", path)
+	}
+	vm.Push(tape)
+	vm.evalResult = tape
+	return nil
 }
 
 func init() {

@@ -29,6 +29,10 @@ type FileScreen struct {
 	lastHeight int
 	lastErr    error
 	searchText string
+
+	lastPlayedPath string
+	lastTape       *Tape
+	tapeDisplay    *TapeDisplay
 }
 
 func CreateFileScreen(app *App, parent KeyMap) (*FileScreen, error) {
@@ -37,9 +41,14 @@ func CreateFileScreen(app *App, parent KeyMap) (*FileScreen, error) {
 		return nil, err
 	}
 	keymap := CreateKeyMap(parent)
+	tapeDisplay, err := CreateTapeDisplay()
+	if err != nil {
+		return nil, err
+	}
 	fs := &FileScreen{
-		dir:    cwd,
-		keymap: keymap,
+		dir:         cwd,
+		keymap:      keymap,
+		tapeDisplay: tapeDisplay,
 	}
 
 	keymap.Bind("Up", func() { fs.moveBy(-1) })
@@ -51,6 +60,7 @@ func CreateFileScreen(app *App, parent KeyMap) (*FileScreen, error) {
 	keymap.Bind("Enter", func() { fs.enter() })
 	keymap.Bind("Backspace", func() { fs.handleBackspace() })
 	keymap.Bind("M-w", func() { fs.copyPath() })
+	keymap.Bind("C-p", func() { fs.playSelected(app) })
 
 	if err := fs.reload(); err != nil {
 		return nil, err
@@ -91,6 +101,9 @@ func (fs *FileScreen) reload() error {
 	slices.SortFunc(entries, func(a, b os.DirEntry) int {
 		return strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 	})
+
+	fs.lastPlayedPath = ""
+	fs.lastTape = nil
 
 	var result []fileEntry
 	if parent := filepath.Dir(fs.dir); parent != fs.dir {
@@ -224,6 +237,8 @@ func (fs *FileScreen) goParent() {
 	fs.index = 0
 	fs.top = 0
 	fs.searchText = ""
+	fs.lastPlayedPath = ""
+	fs.lastTape = nil
 	_ = fs.reload()
 }
 
@@ -297,6 +312,8 @@ func (fs *FileScreen) Keymap() KeyMap {
 func (fs *FileScreen) Reset() {
 	fs.lastErr = nil
 	fs.searchText = ""
+	fs.lastPlayedPath = ""
+	fs.lastTape = nil
 	_ = fs.reload()
 }
 
@@ -304,12 +321,28 @@ func (fs *FileScreen) Close() {}
 
 func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	pane := ts.GetPane()
-	header, listPane := pane.SplitY(1)
+	header, bodyPane := pane.SplitY(1)
 	header.DrawString(0, 0, fs.dir)
 	if fs.searchText != "" {
 		header.WithFgBg(ColorBlack, ColorWhite, func() {
 			header.DrawString(len(fs.dir)+1, 0, fmt.Sprintf("[%s]", fs.searchText))
 		})
+	}
+
+	var statusPane TilePane
+	if fs.lastErr != nil {
+		bodyPane, statusPane = bodyPane.SplitY(-1)
+	}
+
+	listPane := bodyPane
+	if fs.lastTape != nil {
+		var tapePane TilePane
+		listPane, tapePane = bodyPane.SplitY(-8)
+		playheadFrames := []int{}
+		for _, tp := range app.oto.GetTapePlayers(fs) {
+			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
+		}
+		fs.tapeDisplay.Render(fs.lastTape, tapePane.GetPixelRect(), fs.lastTape.nframes, 0, playheadFrames)
 	}
 
 	fs.lastHeight = listPane.Height()
@@ -385,8 +418,8 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	}
 
 	if fs.lastErr != nil {
-		listPane.WithFgBg(ColorWhite, ColorRed, func() {
-			listPane.DrawString(0, fs.lastHeight-1, fs.lastErr.Error())
+		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
+			statusPane.DrawString(0, 0, fs.lastErr.Error())
 		})
 	}
 }
@@ -397,4 +430,29 @@ func (fs *FileScreen) OnChar(app *App, char rune) {
 	}
 	fs.searchText += string(char)
 	fs.selectFiltered(0)
+}
+
+func (fs *FileScreen) playSelected(app *App) {
+	filtered := fs.filteredEntries()
+	if len(filtered) == 0 {
+		return
+	}
+	entry := filtered[fs.filteredSelectionIndex()]
+	if entry.isDir {
+		return
+	}
+	path := fs.canonicalPath(entry.path)
+	if path == fs.lastPlayedPath && fs.lastTape != nil {
+		app.oto.PlayTape(fs.lastTape, fs)
+		return
+	}
+	tape, err := loadSample(path)
+	if err != nil {
+		fs.lastErr = err
+		return
+	}
+	fs.lastErr = nil
+	fs.lastPlayedPath = path
+	fs.lastTape = tape
+	app.oto.PlayTape(tape, fs)
 }

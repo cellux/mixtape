@@ -8,6 +8,7 @@ import (
 type TapePlayer struct {
 	reader *TapeReader
 	player *oto.Player
+	owner  Screen
 }
 
 func (tp *TapePlayer) GetCurrentFrame() int {
@@ -39,14 +40,19 @@ func NewOtoState(sampleRate int) (*OtoState, error) {
 	return otoState, nil
 }
 
-func (os *OtoState) GetTapePlayers() []*TapePlayer {
+func (os *OtoState) GetTapePlayers(owner Screen) []*TapePlayer {
 	os.mu.Lock()
-	result := os.tapePlayers[:]
+	result := make([]*TapePlayer, 0, len(os.tapePlayers))
+	for _, tp := range os.tapePlayers {
+		if tp.owner == owner {
+			result = append(result, tp)
+		}
+	}
 	os.mu.Unlock()
 	return result
 }
 
-func (os *OtoState) PlayTape(x any) {
+func (os *OtoState) PlayTape(x any, owner Screen) {
 	if streamable, ok := x.(Streamable); ok {
 		stream := streamable.Stream()
 		if stream.nframes > 0 {
@@ -56,6 +62,7 @@ func (os *OtoState) PlayTape(x any) {
 			tapePlayer := &TapePlayer{
 				reader: reader,
 				player: player,
+				owner:  owner,
 			}
 			os.mu.Lock()
 			os.tapePlayers = append(os.tapePlayers, tapePlayer)

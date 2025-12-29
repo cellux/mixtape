@@ -100,10 +100,12 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 		if slices.Compare(editorScript, es.lastScript) != 0 {
 			app.evalEditorScript(editorScript, func() {
 				es.lastScript = editorScript
-				app.playEvalResult()
+				app.oto.PlayTape(app.vm.evalResult, es)
 			})
 		} else {
-			app.postEvent(app.playEvalResult, false)
+			app.postEvent(func() {
+				app.oto.PlayTape(app.vm.evalResult, es)
+			}, false)
 		}
 	})
 	keymap.Bind("C-Left", editor.WordLeft)
@@ -205,7 +207,7 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	case *Tape:
 		editorPane, tapeDisplayPane = screenPane.SplitY(-8)
 		var playheadFrames []int
-		for _, tp := range app.oto.GetTapePlayers() {
+		for _, tp := range app.oto.GetTapePlayers(es) {
 			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
 		}
 		es.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
