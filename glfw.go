@@ -28,7 +28,7 @@ type GlfwApp interface {
 	OnFramebufferSize(width, height int)
 	Render() error
 	Update() error
-	Close() error
+	Close()
 }
 
 func WithGL(windowTitle string, app GlfwApp) error {

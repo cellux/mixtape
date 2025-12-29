@@ -2,21 +2,13 @@ package main
 
 import (
 	"bytes"
-	"embed"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"runtime/pprof"
-	"slices"
 	"strings"
-
-	"github.com/go-gl/glfw/v3.3/glfw"
 )
-
-//go:embed assets/*
-var assets embed.FS
 
 type EvalTargetKind int
 
@@ -33,10 +25,14 @@ type EvalTarget struct {
 var flags struct {
 	LogLevel    string
 	SampleRate  int
-	BPM         float64
-	TPB         int
+	BPM         float64 // beats per minute
+	TPB         int     // ticks per beat
 	EvalTargets []EvalTarget
 	Prof        string
+}
+
+func SampleRate() int {
+	return flags.SampleRate
 }
 
 type EvalTargetFlag struct {
@@ -44,528 +40,16 @@ type EvalTargetFlag struct {
 	Values []string
 }
 
-func (f EvalTargetFlag) String() string {
+func (f *EvalTargetFlag) String() string {
 	if f.Values == nil {
 		return ""
 	}
 	return strings.Join(f.Values, ",")
 }
 
-func (f EvalTargetFlag) Set(val string) error {
+func (f *EvalTargetFlag) Set(val string) error {
 	f.Values = append(f.Values, val)
 	flags.EvalTargets = append(flags.EvalTargets, EvalTarget{f.Kind, val})
-	return nil
-}
-
-func SampleRate() int {
-	return flags.SampleRate
-}
-
-// Event is the type of callback functions sent to the app's events channel
-type Event func()
-
-type App struct {
-	vm          *VM
-	openFiles   map[string]string
-	currentFile string
-	shouldExit  bool
-	font        *Font
-	tm          *TileMap
-	ts          *TileScreen
-	editor      *Editor
-	lastScript  []byte
-	prevResult  Val
-	evalResult  Val
-	errResult   error
-	oto         *OtoState
-	tapeDisplay *TapeDisplay
-	// rTape points to the currently rendered tape
-	rTape        *Tape
-	rTotalFrames int
-	rDoneFrames  int
-	kmm          *KeyMapManager
-	editorKeyMap KeyMap
-	events       chan Event
-}
-
-func (app *App) postEvent(ev Event, dropIfFull bool) {
-	if dropIfFull {
-		select {
-		case app.events <- ev:
-		default:
-		}
-	} else {
-		app.events <- ev
-	}
-}
-
-func (app *App) Init() error {
-	logger.Debug("Init")
-	// Event queue used by background evaluation to post updates to the main thread.
-	if app.events == nil {
-		app.events = make(chan Event, 1024)
-	}
-	oto, err := NewOtoState(SampleRate())
-	if err != nil {
-		return err
-	}
-	app.oto = oto
-	fontBytes, err := assets.ReadFile("assets/DroidSansMono.ttf")
-	if err != nil {
-		return err
-	}
-	font, err := LoadFontFromBytes(fontBytes)
-	if err != nil {
-		return err
-	}
-	app.font = font
-	face, err := font.GetFace(14, contentScale)
-	if err != nil {
-		return err
-	}
-	sizeInTiles := Size{X: 16, Y: 32}
-	faceImage, err := font.GetFaceImage(face, sizeInTiles)
-	if err != nil {
-		return err
-	}
-	tm, err := CreateTileMap(faceImage, sizeInTiles)
-	if err != nil {
-		return err
-	}
-	app.tm = tm
-	ts, err := tm.CreateScreen()
-	if err != nil {
-		return err
-	}
-	app.ts = ts
-	tapeScript := ""
-	if app.currentFile != "" {
-		tapeScript = app.openFiles[app.currentFile]
-	}
-	app.editor = CreateEditor()
-	app.editor.SetText(tapeScript)
-	tapeDisplay, err := CreateTapeDisplay()
-	if err != nil {
-		return err
-	}
-	app.tapeDisplay = tapeDisplay
-	app.vm.tapeProgressCallback = func(t *Tape, nftotal, nfdone int) {
-		app.postEvent(func() {
-			if app.vm.IsEvaluating() {
-				app.rTape = t
-				app.rTotalFrames = nftotal
-				app.rDoneFrames = nfdone
-			}
-		}, true)
-	}
-
-	globalKeyMap := CreateKeyMap(nil)
-	globalKeyMap.Bind("C-g", app.Reset)
-	globalKeyMap.Bind("Escape", app.Reset)
-	globalKeyMap.Bind("C-z", UndoLastAction)
-	globalKeyMap.Bind("C-x u", UndoLastAction)
-	globalKeyMap.Bind("C-S--", UndoLastAction)
-	globalKeyMap.Bind("C-q", app.Quit)
-	globalKeyMap.Bind("C-p", func() {
-		app.evalEditorScriptIfChanged(true)
-	})
-
-	editorKeyMap := CreateKeyMap(globalKeyMap)
-	editorKeyMap.Bind("Enter", func() {
-		DispatchAction(func() UndoFunc {
-			app.editor.SplitLine()
-			return func() {
-				app.editor.AdvanceColumn(-1)
-				app.editor.DeleteRune()
-			}
-		})
-	})
-	editorKeyMap.Bind("Left", func() {
-		app.editor.AdvanceColumn(-1)
-	})
-	editorKeyMap.Bind("Right", func() {
-		app.editor.AdvanceColumn(1)
-	})
-	editorKeyMap.Bind("Up", func() {
-		app.editor.AdvanceLine(-1)
-	})
-	editorKeyMap.Bind("Down", func() {
-		app.editor.AdvanceLine(1)
-	})
-	editorKeyMap.Bind("PageUp", func() {
-		for range app.editor.height {
-			app.editor.AdvanceLine(-1)
-		}
-	})
-	editorKeyMap.Bind("PageDown", func() {
-		for range app.editor.height {
-			app.editor.AdvanceLine(1)
-		}
-	})
-	editorKeyMap.Bind("Delete", func() {
-		DispatchAction(func() UndoFunc {
-			deletedRune := app.editor.DeleteRune()
-			return func() {
-				if deletedRune != 0 {
-					app.editor.InsertRune(deletedRune)
-					app.editor.AdvanceColumn(-1)
-				}
-			}
-		})
-	})
-	editorKeyMap.Bind("Backspace", func() {
-		if app.editor.AtBOF() {
-			return
-		}
-		DispatchAction(func() UndoFunc {
-			app.editor.AdvanceColumn(-1)
-			deletedRune := app.editor.DeleteRune()
-			return func() {
-				if deletedRune != 0 {
-					app.editor.InsertRune(deletedRune)
-				}
-			}
-		})
-	})
-	editorKeyMap.Bind("Home", app.editor.MoveToBOL)
-	editorKeyMap.Bind("End", app.editor.MoveToEOL)
-	editorKeyMap.Bind("Tab", app.editor.InsertSpacesUntilNextTabStop)
-	editorKeyMap.Bind("C-Enter", func() {
-		app.evalEditorScriptIfChanged(false)
-	})
-	editorKeyMap.Bind("C-Left", app.editor.WordLeft)
-	editorKeyMap.Bind("C-Right", app.editor.WordRight)
-	editorKeyMap.Bind("C-a", app.editor.MoveToBOL)
-	editorKeyMap.Bind("C-e", app.editor.MoveToEOL)
-	editorKeyMap.Bind("C-Home", app.editor.MoveToBOF)
-	editorKeyMap.Bind("C-End", app.editor.MoveToEOF)
-	editorKeyMap.Bind("C-k", func() {
-		if app.editor.AtEOL() {
-			app.editor.DeleteRune()
-		} else {
-			for !app.editor.AtEOL() {
-				app.editor.DeleteRune()
-			}
-		}
-	})
-	editorKeyMap.Bind("C-Backspace", func() {
-		DispatchAction(func() UndoFunc {
-			app.editor.SetMark()
-			app.editor.WordLeft()
-			deletedRunes := app.editor.KillRegion()
-			return func() {
-				app.editor.InsertRunes(deletedRunes)
-			}
-		})
-	})
-	editorKeyMap.Bind("C-u", func() {
-		DispatchAction(func() UndoFunc {
-			app.editor.SetMark()
-			app.editor.MoveToBOL()
-			deletedRunes := app.editor.KillRegion()
-			return func() {
-				app.editor.InsertRunes(deletedRunes)
-			}
-		})
-	})
-	editorKeyMap.Bind("C-Space", app.editor.SetMark)
-	editorKeyMap.Bind("C-w", func() {
-		DispatchAction(func() UndoFunc {
-			p, _ := app.editor.PointAndMarkInOrder()
-			deletedRunes := app.editor.KillRegion()
-			return func() {
-				app.editor.SetPoint(p)
-				app.editor.InsertRunes(deletedRunes)
-			}
-		})
-	})
-	editorKeyMap.Bind("C-y", func() {
-		DispatchAction(func() UndoFunc {
-			p0 := app.editor.GetPoint()
-			app.editor.Paste()
-			p1 := app.editor.GetPoint()
-			return func() {
-				app.editor.KillBetween(p0, p1)
-			}
-		})
-	})
-	editorKeyMap.Bind("C-x C-s", func() {
-		if app.currentFile != "" {
-			os.WriteFile(app.currentFile, app.editor.GetBytes(), 0o644)
-		}
-	})
-	editorKeyMap.Bind("M-b", app.editor.WordLeft)
-	editorKeyMap.Bind("M-f", app.editor.WordRight)
-	editorKeyMap.Bind("M-w", app.editor.YankRegion)
-	editorKeyMap.Bind("M-Backspace", func() {
-		app.editor.SetMark()
-		app.editor.WordLeft()
-		app.editor.KillRegion()
-	})
-	app.editorKeyMap = editorKeyMap
-	app.kmm = CreateKeyMapManager()
-	app.kmm.SetCurrentKeyMap(editorKeyMap)
-	return nil
-}
-
-func (app *App) IsRunning() bool {
-	return !app.shouldExit
-}
-
-func (app *App) Quit() {
-	app.shouldExit = true
-}
-
-func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
-	//logger.Debug("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
-	if action != glfw.Press && action != glfw.Repeat {
-		return
-	}
-	var keyName string
-	switch key {
-	case glfw.KeyLeftShift, glfw.KeyLeftControl, glfw.KeyLeftAlt, glfw.KeyLeftSuper:
-		return
-	case glfw.KeyRightShift, glfw.KeyRightControl, glfw.KeyRightAlt, glfw.KeyRightSuper:
-		return
-	case glfw.KeySpace:
-		keyName = "Space"
-	case glfw.KeyEscape:
-		keyName = "Escape"
-	case glfw.KeyEnter:
-		keyName = "Enter"
-	case glfw.KeyTab:
-		keyName = "Tab"
-	case glfw.KeyBackspace:
-		keyName = "Backspace"
-	case glfw.KeyInsert:
-		keyName = "Insert"
-	case glfw.KeyDelete:
-		keyName = "Delete"
-	case glfw.KeyRight:
-		keyName = "Right"
-	case glfw.KeyLeft:
-		keyName = "Left"
-	case glfw.KeyDown:
-		keyName = "Down"
-	case glfw.KeyUp:
-		keyName = "Up"
-	case glfw.KeyPageUp:
-		keyName = "PageUp"
-	case glfw.KeyPageDown:
-		keyName = "PageDown"
-	case glfw.KeyHome:
-		keyName = "Home"
-	case glfw.KeyEnd:
-		keyName = "End"
-	case glfw.KeyF1:
-		keyName = "F1"
-	case glfw.KeyF2:
-		keyName = "F2"
-	case glfw.KeyF3:
-		keyName = "F3"
-	case glfw.KeyF4:
-		keyName = "F4"
-	case glfw.KeyF5:
-		keyName = "F5"
-	case glfw.KeyF6:
-		keyName = "F6"
-	case glfw.KeyF7:
-		keyName = "F7"
-	case glfw.KeyF8:
-		keyName = "F8"
-	case glfw.KeyF9:
-		keyName = "F9"
-	case glfw.KeyF10:
-		keyName = "F10"
-	case glfw.KeyF11:
-		keyName = "F11"
-	case glfw.KeyF12:
-		keyName = "F12"
-	default:
-		keyName = glfw.GetKeyName(key, scancode)
-	}
-	if modes&glfw.ModShift != 0 {
-		keyName = "S-" + keyName
-	}
-	if modes&glfw.ModAlt != 0 {
-		keyName = "M-" + keyName
-	}
-	if modes&glfw.ModControl != 0 {
-		keyName = "C-" + keyName
-	}
-	app.kmm.HandleKey(keyName)
-}
-
-func (app *App) OnChar(char rune) {
-	//logger.Debug("OnChar", "char", char)
-	if app.kmm.IsInsideKeySequence() {
-		return
-	}
-	DispatchAction(func() UndoFunc {
-		app.editor.InsertRune(char)
-		return func() {
-			app.editor.AdvanceColumn(-1)
-			app.editor.DeleteRune()
-		}
-	})
-}
-
-func (app *App) OnFramebufferSize(width, height int) {
-	logger.Debug("OnFramebufferSize", "width", width, "height", height)
-}
-
-func (app *App) Render() error {
-	ts := app.ts
-	ts.Clear()
-	screenPane := ts.GetPane()
-
-	var statusFile string
-	if app.currentFile == "" {
-		statusFile = "<no file>"
-	} else {
-		statusFile = app.currentFile
-	}
-
-	var editorPane TilePane
-	var tapeDisplayPane TilePane
-	var statusPane TilePane
-	var errorPane TilePane
-
-	if app.errResult != nil {
-		screenPane, errorPane = screenPane.SplitY(-1)
-		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
-			errorPane.DrawString(0, 0, app.errResult.Error())
-		})
-	}
-
-	switch result := app.evalResult.(type) {
-	case *Tape:
-		editorPane, tapeDisplayPane = screenPane.SplitY(-8)
-		var playheadFrames []int
-		for _, tp := range app.oto.GetTapePlayers() {
-			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
-		}
-		app.tapeDisplay.Render(result, tapeDisplayPane.GetPixelRect(), result.nframes, 0, playheadFrames)
-	default:
-		if result == nil {
-			editorPane = screenPane
-		} else {
-			editorPane, statusPane = screenPane.SplitY(-1)
-			statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
-		}
-	}
-
-	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
-	currentToken := app.vm.CurrentToken()
-	app.editor.Render(editorBufferPane, currentToken)
-	app.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
-
-	ts.Render()
-	return nil
-}
-
-func (app *App) drainEvents() {
-	for {
-		select {
-		case ev := <-app.events:
-			ev()
-		default:
-			return // nothing queued right now
-		}
-	}
-}
-
-func (app *App) Update() error {
-	app.drainEvents()
-	return nil
-}
-
-func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
-	editorScript := app.editor.GetBytes()
-	if slices.Compare(editorScript, app.lastScript) == 0 {
-		if wantPlay {
-			app.postEvent(app.playEvalResult, false)
-		}
-		return
-	}
-	prevResult := app.evalResult
-	app.Reset()
-	app.lastScript = editorScript
-	app.prevResult = prevResult
-	app.errResult = nil
-	tapePath := "<temp-tape>"
-	if app.currentFile != "" {
-		tapePath = app.currentFile
-	}
-	go func(script []byte, tapePath string, wantPlay bool) {
-		vm := app.vm
-		vm.DoPushEnv()
-		var result Val
-		err := vm.ParseAndEval(bytes.NewReader(script), tapePath)
-		if err != nil {
-			if errors.Is(err, ErrEvalCancelled) {
-				return
-			}
-			logger.Error("parse error", "err", err)
-			result = makeErr(err)
-		} else {
-			result = vm.evalResult
-			if streamable, ok := result.(Streamable); ok {
-				stream := streamable.Stream()
-				if stream.nframes > 0 {
-					result = stream.Take(nil, stream.nframes)
-				}
-			}
-		}
-		app.postEvent(func() {
-			app.errResult = nil
-			app.rTape = nil
-			app.rTotalFrames = 0
-			app.rDoneFrames = 0
-			if err != nil {
-				app.errResult = err
-				// Keep displaying the previous successful result alongside the error.
-				app.evalResult = app.prevResult
-			} else {
-				app.prevResult = app.evalResult
-				app.evalResult = result
-			}
-			if wantPlay && app.errResult == nil {
-				app.playEvalResult()
-			}
-		}, false)
-	}(editorScript, tapePath, wantPlay)
-}
-
-func (app *App) playEvalResult() {
-	app.oto.PlayTape(app.evalResult)
-}
-
-func (app *App) Reset() {
-	if app.vm.IsEvaluating() {
-		app.vm.CancelEvaluation()
-		if app.prevResult != nil {
-			app.evalResult = app.prevResult
-			app.prevResult = nil
-		}
-	}
-	app.errResult = nil
-	app.rTape = nil
-	app.rTotalFrames = 0
-	app.rDoneFrames = 0
-	app.drainEvents()
-	app.prevResult = nil
-	app.oto.StopAllPlayers()
-	app.editor.Reset()
-	app.kmm.Reset()
-}
-
-func (app *App) Close() error {
-	logger.Debug("Close")
-	app.Reset()
-	app.ts.Close()
-	app.tm.Close()
-	app.editor.Close()
 	return nil
 }
 
@@ -582,15 +66,6 @@ func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
 		windowTitle = "mixtape"
 	}
 	return WithGL(windowTitle, app)
-}
-
-func setDefaults(vm *VM) {
-	vm.SetVal(":bpm", flags.BPM)
-	vm.SetVal(":tpb", flags.TPB)
-
-	beatsPerSecond := flags.BPM / 60.0
-	framesPerBeat := float64(SampleRate()) / beatsPerSecond
-	vm.SetVal(":nf", int(framesPerBeat))
 }
 
 func withProfileIfNeeded(fn func() error) error {
@@ -661,6 +136,15 @@ func runWithArgs(vm *VM, args []string) error {
 		currentFile = arg
 	}
 	return runGui(vm, openFiles, currentFile)
+}
+
+func setDefaults(vm *VM) {
+	vm.SetVal(":bpm", flags.BPM)
+	vm.SetVal(":tpb", flags.TPB)
+
+	beatsPerSecond := flags.BPM / 60.0
+	framesPerBeat := float64(SampleRate()) / beatsPerSecond
+	vm.SetVal(":nf", int(framesPerBeat))
 }
 
 func main() {
