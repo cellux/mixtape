@@ -113,7 +113,13 @@ func (app *App) Init() error {
 	if err != nil {
 		return err
 	}
-	app.screens = []Screen{helpScreen, editScreen}
+
+	fileScreen, err := CreateFileScreen(app, globalKeyMap)
+	if err != nil {
+		return err
+	}
+
+	app.screens = []Screen{helpScreen, editScreen, fileScreen}
 	app.currentScreen = 1
 	app.kmm = CreateKeyMapManager()
 	app.kmm.SetCurrentKeyMap(app.CurrentScreen().Keymap())
