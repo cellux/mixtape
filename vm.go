@@ -680,8 +680,7 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 		return err
 	}
 	result := vm.Top()
-	if streamable, ok := result.(Streamable); ok {
-		stream := streamable.Stream()
+	if stream, ok := result.(Stream); ok {
 		if stream.nframes > 0 {
 			result = stream.Take(nil, stream.nframes)
 		}
