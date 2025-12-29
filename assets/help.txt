@@ -182,7 +182,6 @@ tapes
 - tape/pulse: ( ENV: :pw | n -- t ) pulse wave using env pulse width (single-cycle)
 - tape/saw: ( n -- t ) saw wave (single-cycle)
 - Tape.shift: ( t amount -- t ) rotate samples by amount, mutates t
-- Tape.resample: ( t converter ratio -- t ) resample tape
 - Tape.at: ( t frame -- n|[ns] ) fetch frame
 - Tape.slice: ( t start end -- t ) tape with frames of t between [start,end)
 - Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset, mutates t
@@ -217,6 +216,7 @@ stream transformers
 - unison: ( ENV: :freq :voices :spread :detune :phaseRand | body -- s ) detuned/positioned voices
 - mono: ( S -- s ) sum/convert to mono
 - stereo: ( S -- s ) ensure stereo
+- resample: ( S ratio -- S ) resample stream/tape/num/vec, ratio=dst_sr/sr
 
 stream renderers
 - frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
@@ -330,7 +330,6 @@ oscillators
 dsp
 - dc: ( S -- s ) remove DC offset with alpha = 1-1/SR
 - z1: ( s -- s ) one-sample delay with zero init
-- stretch: ( S factor -- s )
 
 filters
 - lp2: ( ENV: :cutoff :q | S -- s ) 2-pole lowpass (TPT SVF)

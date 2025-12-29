@@ -382,48 +382,6 @@ func init() {
 		return nil
 	})
 
-	RegisterNum("SRC_SINC_BEST_QUALITY", 0)
-	RegisterNum("SRC_SINC_MEDIUM_QUALITY", 1)
-	RegisterNum("SRC_SINC_FASTEST", 2)
-	RegisterNum("SRC_ZERO_ORDER_HOLD", 3)
-	RegisterNum("SRC_LINEAR", 4)
-
-	RegisterMethod[*Tape]("resample", 3, func(vm *VM) error {
-		ratioNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
-		ratio := float64(ratioNum)
-		if ratio <= 0 {
-			return fmt.Errorf("resample: invalid ratio: %f", ratio)
-		}
-		converterTypeNum, err := Pop[Num](vm)
-		if err != nil {
-			return err
-		}
-		converterType := int(converterTypeNum)
-		if converterType < 0 || converterType > 4 {
-			return fmt.Errorf("resample: invalid converterType: %d - must be between 0..4", converterType)
-		}
-		t, err := Pop[*Tape](vm)
-		if err != nil {
-			return err
-		}
-		tempBuf := make([]float32, t.nframes*t.nchannels)
-		for i, smp := range t.samples {
-			tempBuf[i] = float32(smp)
-		}
-		resampledBuf, err := gosamplerate.Simple(tempBuf, ratio, t.nchannels, converterType)
-		if err != nil {
-			return err
-		}
-		resampledFrames := len(resampledBuf) / t.nchannels
-		resampledTape := pushTape(vm, t.nchannels, resampledFrames)
-		for i, smp := range resampledBuf {
-			resampledTape.samples[i] = Smp(smp)
-		}
-		return nil
-	})
 }
 
 func expandPath(path string) (string, error) {

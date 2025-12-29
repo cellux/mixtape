@@ -613,7 +613,7 @@ Single-cycle wave generators (mono `Tape`; size 0 means default internal size):
 
 - `shift` `( t amount -- t )` — rotate samples in-place (mutates).
   - `amount < 1` is treated as a fraction of length.
-- `resample` `( t converter ratio -- t )` — resample.
+- `resample` `( t ratio -- t )` — resample. ratio=dst_sr/sr
   - converters: `SRC_SINC_BEST_QUALITY`, `SRC_SINC_MEDIUM_QUALITY`, `SRC_SINC_FASTEST`, `SRC_ZERO_ORDER_HOLD`, `SRC_LINEAR`.
 - `at` `( t frameIndex -- frame )` — get a frame (always returned as a `Vec` of channel samples).
 - `at/phase` `( t phaseStream -- s )` — sample a tape using a phase stream (wavetable-style).
@@ -727,7 +727,6 @@ Stdlib convenience:
 - `skip` `( S nframes -- s )` — drop first `nframes`.
 - `pan` `( S pan -- s )` — equal-power pan; pan in `[-1,1]`.
 - `mix` `( [Ss] ratio -- s )` — mix streams by ratio (clamped `[0,1]`).
-- `stretch` (stdlib) `( S factor -- s )` — resample/"time-stretch" using `SRC_LINEAR`.
 
 ---
 

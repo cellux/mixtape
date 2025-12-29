@@ -163,7 +163,6 @@
 ; tape/pulse: ( ENV: :pw | n -- t ) pulse wave using env pulse width (single-cycle)
 ; tape/saw: ( n -- t ) saw wave (single-cycle)
 ; Tape.shift: ( t amount -- t ) rotate samples by amount, mutates t
-; Tape.resample: ( t converter ratio -- t ) resample tape
 ; Tape.at: ( t frame -- n|[ns] ) fetch frame
 ; Tape.slice: ( t start end -- t ) tape with frames of t between [start,end)
 ; Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset, mutates t
@@ -200,6 +199,7 @@
 ; unison: ( ENV: :freq :voices :spread :detune :phaseRand | body -- s ) detuned/positioned voices
 ; mono: ( S -- s ) sum/convert to mono
 ; stereo: ( S -- s ) ensure stereo
+; resample: ( S ratio -- S ) resample stream/tape/num/vec, ratio=dst_sr/sr
 
 ; stream renderers
 
@@ -296,9 +296,9 @@
 
 ;; envelope parameters
 
-; start: ( -- n )
+; :start: ( -- n )
 0 >:start
-; end: ( -- n )
+; :end: ( -- n )
 1 >:end
 
 ;; utilities
@@ -478,9 +478,6 @@
 ; z1: ( s -- s ) one-sample delay with zero init
 { 0 z1* } >z1
 
-; stretch: ( S factor -- s )
-{ SRC_LINEAR swap resample } >stretch
-
 ;; filters
 
 ; lp2: ( ENV: :cutoff :q | S -- s ) 2-pole lowpass (TPT SVF)
@@ -509,3 +506,25 @@
 
 ; peak4: ( ENV: :cutoff :q :gain | S -- s ) 4-pole peak (TPT SVF)
 { peak2 peak2 } >peak4
+
+;; resample
+
+; :resample/SRC_SINC_BEST_QUALITY: ( -- n )
+0 >:resample/SRC_SINC_BEST_QUALITY
+
+; :resample/SRC_SINC_MEDIUM_QUALITY: ( -- n )
+1 >:resample/SRC_SINC_MEDIUM_QUALITY
+
+; :resample/SRC_SINC_FASTEST: ( -- n )
+2 >:resample/SRC_SINC_FASTEST
+
+; :resample/SRC_ZERO_ORDER_HOLD: ( -- n )
+3 >:resample/SRC_ZERO_ORDER_HOLD
+
+; :resample/SRC_LINEAR: ( -- n )
+4 >:resample/SRC_LINEAR
+
+:resample/SRC_LINEAR >:resample/converter
+
+; tune: ( S ratio -- s ) shifts pitch by ratio (freq multiplier)
+{ 1.0 swap / resample } >tune
