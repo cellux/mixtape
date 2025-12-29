@@ -15,6 +15,11 @@ Quit / undo:
 - C-q: quit
 - C-z / C-x u / C-S--: undo
 
+Font size:
+- C-+: increase
+- C-: decrease
+- C-0: reset to default
+
 Cursor movement:
 - Arrow keys: move
 - Home / End: line start/end

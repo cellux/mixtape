@@ -13,12 +13,20 @@ var assets embed.FS
 // Event is the type of callback functions sent to the app's events channel
 type Event func()
 
+const (
+	defaultFontSize FontSizeInPoints = 14
+	minFontSize     FontSizeInPoints = 8
+	maxFontSize     FontSizeInPoints = 72
+	fontSizeStep    FontSizeInPoints = 1
+)
+
 type App struct {
 	vm            *VM
 	openFiles     map[string]string
 	currentFile   string
 	shouldExit    bool
 	font          *Font
+	fontSize      FontSizeInPoints
 	tm            *TileMap
 	ts            *TileScreen
 	screens       []Screen
@@ -30,6 +38,65 @@ type App struct {
 	rDoneFrames  int
 	kmm          *KeyMapManager
 	events       chan Event
+}
+
+func (app *App) reloadFont() error {
+	face, err := app.font.GetFace(app.fontSize, contentScale)
+	if err != nil {
+		return err
+	}
+	sizeInTiles := Size{X: 16, Y: 32}
+	faceImage, err := app.font.GetFaceImage(face, sizeInTiles)
+	if err != nil {
+		return err
+	}
+	tm, err := CreateTileMap(faceImage, sizeInTiles)
+	if err != nil {
+		return err
+	}
+	ts, err := tm.CreateScreen()
+	if err != nil {
+		tm.Close()
+		return err
+	}
+	if app.ts != nil {
+		app.ts.Close()
+	}
+	if app.tm != nil {
+		app.tm.Close()
+	}
+	app.tm = tm
+	app.ts = ts
+	return nil
+}
+
+func (app *App) setFontSize(size FontSizeInPoints) {
+	clamped := size
+	if clamped < minFontSize {
+		clamped = minFontSize
+	}
+	if clamped > maxFontSize {
+		clamped = maxFontSize
+	}
+	if clamped == app.fontSize {
+		return
+	}
+	app.fontSize = clamped
+	if err := app.reloadFont(); err != nil {
+		logger.Debug("reloadFont error", "error", err)
+	}
+}
+
+func (app *App) IncreaseFontSize() {
+	app.setFontSize(app.fontSize + fontSizeStep)
+}
+
+func (app *App) DecreaseFontSize() {
+	app.setFontSize(app.fontSize - fontSizeStep)
+}
+
+func (app *App) ResetFontSize() {
+	app.setFontSize(defaultFontSize)
 }
 
 func (app *App) CurrentScreen() Screen {
@@ -66,25 +133,10 @@ func (app *App) Init() error {
 		return err
 	}
 	app.font = font
-	face, err := font.GetFace(14, contentScale)
-	if err != nil {
+	app.fontSize = defaultFontSize
+	if err := app.reloadFont(); err != nil {
 		return err
 	}
-	sizeInTiles := Size{X: 16, Y: 32}
-	faceImage, err := font.GetFaceImage(face, sizeInTiles)
-	if err != nil {
-		return err
-	}
-	tm, err := CreateTileMap(faceImage, sizeInTiles)
-	if err != nil {
-		return err
-	}
-	app.tm = tm
-	ts, err := tm.CreateScreen()
-	if err != nil {
-		return err
-	}
-	app.ts = ts
 	tapeScript := ""
 	if app.currentFile != "" {
 		tapeScript = app.openFiles[app.currentFile]
@@ -102,6 +154,9 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-x u", UndoLastAction)
 	globalKeyMap.Bind("C-S--", UndoLastAction)
 	globalKeyMap.Bind("C-q", app.Quit)
+	globalKeyMap.Bind("C-S-=", app.IncreaseFontSize)
+	globalKeyMap.Bind("C--", app.DecreaseFontSize)
+	globalKeyMap.Bind("C-0", app.ResetFontSize)
 
 	helpScreen, err := CreateHelpScreen(app, globalKeyMap, string(helpBytes))
 	if err != nil {

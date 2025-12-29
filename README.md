@@ -109,6 +109,12 @@ Evaluation happens in the background; progress is shown while rendering finite s
   - `C-x u`
   - `C-S--`
 
+### Font size
+
+- `C-+` — increase font size
+- `C--` — decrease font size
+- `C-0` — reset to default font size
+
 ### Cursor movement
 
 - Arrow keys — move by character/line.
