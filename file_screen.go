@@ -71,7 +71,7 @@ func (fs *FileScreen) copyPath() {
 		return
 	}
 	full := fs.fileBrowser.CanonicalPath(entry.path)
-	_ = clipboard.WriteAll(fmt.Sprintf("=\"%s\" load=", full))
+	_ = clipboard.WriteAll(fmt.Sprintf("\"%s\" load", full))
 }
 
 func (fs *FileScreen) Keymap() KeyMap {
