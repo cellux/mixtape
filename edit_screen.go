@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 )
 
 // EditScreen bundles the editor-related UI components.
 type EditScreen struct {
 	editor      *Editor
+	lastScript  []byte // last script successfully evaluated by VM
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
 }
@@ -21,6 +23,13 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 	}
 
 	keymap := CreateKeyMap(parent)
+
+	es := &EditScreen{
+		editor:      editor,
+		tapeDisplay: tapeDisplay,
+		keymap:      keymap,
+	}
+
 	keymap.Bind("Enter", func() {
 		DispatchAction(func() UndoFunc {
 			editor.SplitLine()
@@ -81,10 +90,21 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 	keymap.Bind("End", editor.MoveToEOL)
 	keymap.Bind("Tab", editor.InsertSpacesUntilNextTabStop)
 	keymap.Bind("C-Enter", func() {
-		app.evalEditorScriptIfChanged(false)
+		editorScript := editor.GetBytes()
+		app.evalEditorScript(editorScript, func() {
+			es.lastScript = editorScript
+		})
 	})
 	keymap.Bind("C-p", func() {
-		app.evalEditorScriptIfChanged(true)
+		editorScript := editor.GetBytes()
+		if slices.Compare(editorScript, es.lastScript) != 0 {
+			app.evalEditorScript(editorScript, func() {
+				es.lastScript = editorScript
+				app.playEvalResult()
+			})
+		} else {
+			app.postEvent(app.playEvalResult, false)
+		}
 	})
 	keymap.Bind("C-Left", editor.WordLeft)
 	keymap.Bind("C-Right", editor.WordRight)
@@ -156,11 +176,6 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 		editor.KillRegion()
 	})
 
-	es := &EditScreen{
-		editor:      editor,
-		tapeDisplay: tapeDisplay,
-		keymap:      keymap,
-	}
 	return es, nil
 }
 
@@ -179,14 +194,14 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	var statusPane TilePane
 	var errorPane TilePane
 
-	if app.errResult != nil {
+	if err := app.vm.errResult; err != nil {
 		screenPane, errorPane = screenPane.SplitY(-1)
 		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
-			errorPane.DrawString(0, 0, app.errResult.Error())
+			errorPane.DrawString(0, 0, err.Error())
 		})
 	}
 
-	switch result := app.evalResult.(type) {
+	switch result := app.vm.evalResult.(type) {
 	case *Tape:
 		editorPane, tapeDisplayPane = screenPane.SplitY(-8)
 		var playheadFrames []int

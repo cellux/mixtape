@@ -647,14 +647,12 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 	// Set up per-run cancellation + completion signals.
 	vm.evalMu.Lock()
 	vm.isEvaluating.Set(true)
+	// Keep previous eval result until eval success, but clear any errors
+	vm.errResult = nil
 	vm.cancelCh = make(chan struct{})
 	vm.doneCh = make(chan struct{})
 	doneCh := vm.doneCh
 	vm.evalMu.Unlock()
-
-	// Reset previous results at the start of a run.
-	vm.evalResult = nil
-	vm.errResult = nil
 
 	defer func() {
 		// Always mark evaluation complete and unblock any CancelEvaluation waiters.
@@ -676,7 +674,9 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
 	}
 	err = vm.Eval(code)
 	if err != nil {
-		vm.errResult = err
+		if !errors.Is(err, ErrEvalCancelled) {
+			vm.errResult = err
+		}
 		return err
 	}
 	vm.evalResult = vm.Top()

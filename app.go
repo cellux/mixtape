@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	"errors"
-	"slices"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
@@ -25,10 +24,6 @@ type App struct {
 	ts            *TileScreen
 	screens       []Screen
 	currentScreen int
-	lastScript    []byte
-	prevResult    Val
-	evalResult    Val
-	errResult     error
 	oto           *OtoState
 	// rTape points to the currently rendered tape
 	rTape        *Tape
@@ -241,32 +236,21 @@ func (app *App) Update() error {
 	return nil
 }
 
-func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
-	screen, ok := app.CurrentScreen().(*EditScreen)
+func (app *App) evalEditorScript(editorScript []byte, evalSuccessCallback func()) {
+	_, ok := app.CurrentScreen().(*EditScreen)
 	if !ok {
 		return
 	}
-	editorScript := screen.editor.GetBytes()
-	if slices.Compare(editorScript, app.lastScript) == 0 {
-		if wantPlay {
-			app.postEvent(app.playEvalResult, false)
-		}
-		return
-	}
-	prevResult := app.evalResult
 	app.Reset()
-	app.lastScript = editorScript
-	app.prevResult = prevResult
-	app.errResult = nil
 	tapePath := "<temp-tape>"
 	if app.currentFile != "" {
 		tapePath = app.currentFile
 	}
-	go func(script []byte, tapePath string, wantPlay bool) {
+	go func() {
 		vm := app.vm
 		vm.DoPushEnv()
 		var result Val
-		err := vm.ParseAndEval(bytes.NewReader(script), tapePath)
+		err := vm.ParseAndEval(bytes.NewReader(editorScript), tapePath)
 		if err != nil {
 			if errors.Is(err, ErrEvalCancelled) {
 				return
@@ -283,43 +267,31 @@ func (app *App) evalEditorScriptIfChanged(wantPlay bool) {
 			}
 		}
 		app.postEvent(func() {
-			app.errResult = nil
 			app.rTape = nil
 			app.rTotalFrames = 0
 			app.rDoneFrames = 0
 			if err != nil {
-				app.errResult = err
-				// Keep displaying the previous successful result alongside the error.
-				app.evalResult = app.prevResult
 			} else {
-				app.prevResult = app.evalResult
-				app.evalResult = result
-			}
-			if wantPlay && app.errResult == nil {
-				app.playEvalResult()
+				if evalSuccessCallback != nil {
+					evalSuccessCallback()
+				}
 			}
 		}, false)
-	}(editorScript, tapePath, wantPlay)
+	}()
 }
 
 func (app *App) playEvalResult() {
-	app.oto.PlayTape(app.evalResult)
+	app.oto.PlayTape(app.vm.evalResult)
 }
 
 func (app *App) Reset() {
 	if app.vm.IsEvaluating() {
 		app.vm.CancelEvaluation()
-		if app.prevResult != nil {
-			app.evalResult = app.prevResult
-			app.prevResult = nil
-		}
 	}
-	app.errResult = nil
 	app.rTape = nil
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
 	app.drainEvents()
-	app.prevResult = nil
 	app.oto.StopAllPlayers()
 	for _, screen := range app.screens {
 		screen.Reset()
