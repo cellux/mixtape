@@ -445,7 +445,7 @@ func resolveTapePath(path string) (string, error) {
 		return "", err
 	}
 	for _, ext := range []string{".tape", ".wav", ".mp3"} {
-		if filepath.Ext(p) == ext {
+		if strings.ToLower(filepath.Ext(p)) == ext {
 			return p, nil
 		}
 		pathWithExt := fmt.Sprintf("%s%s", p, ext)
