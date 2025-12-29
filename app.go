@@ -91,6 +91,11 @@ func (app *App) Init() error {
 		tapeScript = app.openFiles[app.currentFile]
 	}
 
+	helpBytes, err := assets.ReadFile("assets/help.txt")
+	if err != nil {
+		return err
+	}
+
 	globalKeyMap := CreateKeyMap(nil)
 	globalKeyMap.Bind("C-g", app.Reset)
 	globalKeyMap.Bind("Escape", app.Reset)
@@ -99,12 +104,17 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-S--", UndoLastAction)
 	globalKeyMap.Bind("C-q", app.Quit)
 
+	helpScreen, err := CreateHelpScreen(app, globalKeyMap, string(helpBytes))
+	if err != nil {
+		return err
+	}
+
 	editScreen, err := CreateEditScreen(app, globalKeyMap, tapeScript)
 	if err != nil {
 		return err
 	}
-	app.screens = []Screen{editScreen}
-	app.currentScreen = 0
+	app.screens = []Screen{helpScreen, editScreen}
+	app.currentScreen = 1
 	app.kmm = CreateKeyMapManager()
 	app.kmm.SetCurrentKeyMap(app.CurrentScreen().Keymap())
 

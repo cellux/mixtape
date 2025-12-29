@@ -31,6 +31,7 @@ type Editor struct {
 	top         int
 	left        int
 	height      int
+	readOnly    bool
 }
 
 func (e *Editor) setYankedRunes(rs []rune) {
@@ -40,6 +41,14 @@ func (e *Editor) setYankedRunes(rs []rune) {
 
 func CreateEditor() *Editor {
 	return &Editor{}
+}
+
+func (e *Editor) SetReadOnly(readOnly bool) {
+	e.readOnly = readOnly
+}
+
+func (e *Editor) ReadOnly() bool {
+	return e.readOnly
 }
 
 func (e *Editor) SetText(text string) {
@@ -319,6 +328,9 @@ func (e *Editor) Reset() {
 }
 
 func (e *Editor) InsertRune(r rune) {
+	if e.readOnly {
+		return
+	}
 	if r == '\n' {
 		e.SplitLine()
 	} else {
@@ -329,12 +341,18 @@ func (e *Editor) InsertRune(r rune) {
 }
 
 func (e *Editor) InsertRunes(rs []rune) {
+	if e.readOnly {
+		return
+	}
 	for _, r := range rs {
 		e.InsertRune(r)
 	}
 }
 
 func (e *Editor) InsertSpacesUntilNextTabStop() {
+	if e.readOnly {
+		return
+	}
 	e.InsertRune(' ')
 	for (e.point.column % TabWidth) != 0 {
 		e.InsertRune(' ')
@@ -342,6 +360,9 @@ func (e *Editor) InsertSpacesUntilNextTabStop() {
 }
 
 func (e *Editor) DeleteRune() (deletedRune rune) {
+	if e.readOnly {
+		return 0
+	}
 	p := e.point
 	if e.AtEOF() {
 		return 0
@@ -357,6 +378,9 @@ func (e *Editor) DeleteRune() (deletedRune rune) {
 }
 
 func (e *Editor) SplitLine() {
+	if e.readOnly {
+		return
+	}
 	p := &e.point
 	nextLine := slices.Clone(e.lines[p.line][p.column:])
 	e.lines = slices.Insert(e.lines, p.line+1, nextLine)
