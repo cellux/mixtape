@@ -8,6 +8,75 @@ import (
 
 const resampleBlockFrames = 1024
 
+type streamResampler struct {
+	src       gosamplerate.Src
+	ratio     float64
+	nchannels int
+	in        Stream
+	inBlock   []float32
+	outBuf    []Smp
+	finished  bool
+	closed    bool
+}
+
+func (r *streamResampler) appendSamples(samples []float32) {
+	for _, smp := range samples {
+		r.outBuf = append(r.outBuf, Smp(smp))
+	}
+}
+
+func (r *streamResampler) close() {
+	if r.closed {
+		return
+	}
+	_ = gosamplerate.Delete(r.src)
+	r.closed = true
+}
+
+func (r *streamResampler) flushTail() {
+	for {
+		tail, err := r.src.Process(nil, r.ratio, true)
+		if err != nil || len(tail) == 0 {
+			break
+		}
+		r.appendSamples(tail)
+	}
+	r.close()
+}
+
+func (r *streamResampler) fillAndProcessBlock(next Stepper) {
+	r.inBlock = r.inBlock[:0]
+	for len(r.inBlock) < cap(r.inBlock) {
+		frame, ok := next()
+		if !ok {
+			break
+		}
+		for c := 0; c < r.nchannels; c++ {
+			r.inBlock = append(r.inBlock, float32(frame[c]))
+		}
+	}
+
+	endOfInput := len(r.inBlock) < cap(r.inBlock)
+	if len(r.inBlock) == 0 && endOfInput {
+		r.finished = true
+		r.flushTail()
+		return
+	}
+
+	processed, err := r.src.Process(r.inBlock, r.ratio, endOfInput)
+	if err != nil {
+		r.finished = true
+		r.flushTail()
+		return
+	}
+
+	r.appendSamples(processed)
+	if endOfInput {
+		r.finished = true
+		r.flushTail()
+	}
+}
+
 func resampleStream(input Stream, converterType int, ratio float64) Stream {
 	nchannels := input.nchannels
 	nframes := 0
@@ -22,86 +91,37 @@ func resampleStream(input Stream, converterType int, ratio float64) Stream {
 			return func() (Frame, bool) { return nil, false }
 		}
 
-		inBlock := make([]float32, 0, resampleBlockFrames*nchannels)
-		outBuf := make([]Smp, 0, resampleBlockFrames*nchannels*2)
-		finished := false
-		deleted := false
-
-		flush := func() {
-			for {
-				tail, err := src.Process(nil, ratio, true)
-				if err != nil {
-					break
-				}
-				if len(tail) == 0 {
-					break
-				}
-				for _, smp := range tail {
-					outBuf = append(outBuf, Smp(smp))
-				}
-			}
-			if !deleted {
-				_ = gosamplerate.Delete(src)
-				deleted = true
-			}
+		r := &streamResampler{
+			src:       src,
+			ratio:     ratio,
+			nchannels: nchannels,
+			inBlock:   make([]float32, 0, resampleBlockFrames*nchannels),
+			outBuf:    make([]Smp, 0, resampleBlockFrames*nchannels*2),
 		}
 
+		next := in.Next
 		frame := make(Frame, nchannels)
 
 		return func() (Frame, bool) {
-			for len(outBuf) < nchannels {
-				if finished {
-					if len(outBuf) == 0 {
+			for len(r.outBuf) < nchannels {
+				if r.finished {
+					if len(r.outBuf) == 0 {
 						return nil, false
 					}
 					break
 				}
-
-				inBlock = inBlock[:0]
-				for len(inBlock) < cap(inBlock) {
-					frame, ok := in.Next()
-					if !ok {
-						break
-					}
-					for c := 0; c < nchannels; c++ {
-						inBlock = append(inBlock, float32(frame[c]))
-					}
-				}
-
-				endOfInput := len(inBlock) < cap(inBlock)
-				if len(inBlock) == 0 && endOfInput {
-					finished = true
-					flush()
-					break
-				}
-
-				processed, err := src.Process(inBlock, ratio, endOfInput)
-				if err != nil {
-					finished = true
-					flush()
-					break
-				}
-
-				for _, smp := range processed {
-					outBuf = append(outBuf, Smp(smp))
-				}
-
-				if endOfInput {
-					finished = true
-					flush()
-				}
+				r.fillAndProcessBlock(next)
 			}
 
-			if len(outBuf) < nchannels {
+			if len(r.outBuf) < nchannels {
 				return nil, false
 			}
 
-			copy(frame, outBuf[:nchannels])
-			outBuf = outBuf[nchannels:]
+			copy(frame, r.outBuf[:nchannels])
+			r.outBuf = r.outBuf[nchannels:]
 
-			if finished && len(outBuf) == 0 && !deleted {
-				_ = gosamplerate.Delete(src)
-				deleted = true
+			if r.finished && len(r.outBuf) == 0 {
+				r.close()
 			}
 
 			return frame, true
