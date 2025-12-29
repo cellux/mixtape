@@ -24,8 +24,6 @@ func CreateListDisplay() *ListDisplay {
 }
 
 func (ld *ListDisplay) Reset() {
-	ld.index = 0
-	ld.top = 0
 	ld.searchText = ""
 }
 
