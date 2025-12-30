@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+
 	gl "github.com/go-gl/gl/v3.1/gles2"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	"runtime"
 )
 
 const desiredFPS = 30
@@ -26,6 +27,7 @@ type GlfwApp interface {
 	OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey)
 	OnChar(char rune)
 	OnFramebufferSize(width, height int)
+	BgColor() (r, g, b, a float32)
 	Render() error
 	Update() error
 	Close()
@@ -88,7 +90,8 @@ func WithGL(windowTitle string, app GlfwApp) error {
 	defer app.Close()
 	for app.IsRunning() {
 		start := glfw.GetTime()
-		gl.ClearColor(0, 0, 0, 0)
+		r, g, b, a := app.BgColor()
+		gl.ClearColor(r, g, b, a)
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 		if err := app.Render(); err != nil {
 			return err

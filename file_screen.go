@@ -92,7 +92,7 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	header, bodyPane := pane.SplitY(1)
 	header.DrawString(0, 0, fs.fileBrowser.Directory())
 	if fs.fileBrowser.SearchText() != "" {
-		header.WithFgBg(ColorBlack, ColorWhite, func() {
+		header.WithFgBg(ColorWhite, ColorGreen, func() {
 			header.DrawString(len(fs.fileBrowser.Directory())+1, 0, fmt.Sprintf("[%s]", fs.fileBrowser.SearchText()))
 		})
 	}

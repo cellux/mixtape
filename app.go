@@ -282,6 +282,15 @@ func (app *App) OnFramebufferSize(width, height int) {
 	logger.Debug("OnFramebufferSize", "width", width, "height", height)
 }
 
+func (app *App) BgColor() (r, g, b, a float32) {
+	bg := ColorBackground
+	r = float32(bg.R) / 255.0
+	g = float32(bg.G) / 255.0
+	b = float32(bg.B) / 255.0
+	a = float32(bg.A) / 255.0
+	return
+}
+
 func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()

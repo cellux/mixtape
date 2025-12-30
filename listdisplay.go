@@ -215,7 +215,7 @@ func (ld *ListDisplay) Render(tp *TilePane) {
 		}
 		isSelected := selectedEntry != nil && reflect.DeepEqual(entry.GetUniqueId(), selectedEntry.GetUniqueId())
 		if isSelected {
-			tp.WithFgBg(ColorBlack, ColorWhite, func() {
+			tp.WithFgBg(ColorWhite, ColorBlue, func() {
 				tp.DrawString(0, row, line)
 			})
 		} else {

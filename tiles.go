@@ -127,8 +127,8 @@ func (tm *TileMap) CreateScreen() (*TileScreen, error) {
 		a_bgColor:   program.GetAttribLocation("a_bgColor\x00"),
 		u_transform: program.GetUniformLocation("u_transform\x00"),
 		u_tex:       program.GetUniformLocation("u_tex\x00"),
-		fgColor:     ColorWhite,
-		bgColor:     ColorBlack,
+		fgColor:     ColorText,
+		bgColor:     ColorBackground,
 	}
 	return ts, nil
 }
