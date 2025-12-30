@@ -7,9 +7,10 @@ import (
 
 // Buffer represents an editor buffer with optional backing file.
 type Buffer struct {
-	Name string
-	Path string
-	Data []byte
+	Name      string
+	Path      string
+	Data      []byte
+	undoStack []Action
 }
 
 // HasPath reports whether this buffer is backed by a file.
