@@ -27,6 +27,37 @@ func (ld *ListDisplay) Reset() {
 	ld.searchText = ""
 }
 
+func (ld *ListDisplay) SearchText() string {
+	return ld.searchText
+}
+
+func (ld *ListDisplay) SetSearchText(text string) {
+	ld.searchText = text
+	ld.SelectFiltered(0)
+}
+
+func (ld *ListDisplay) AppendSearchChar(char rune) {
+	if char == 0 || char < 32 {
+		return
+	}
+	ld.searchText += string(char)
+	ld.SelectFiltered(0)
+}
+
+func (ld *ListDisplay) RemoveLastSearchChar() bool {
+	if ld.searchText == "" {
+		return false
+	}
+	runes := []rune(ld.searchText)
+	if len(runes) == 0 {
+		ld.searchText = ""
+		return false
+	}
+	ld.searchText = string(runes[:len(runes)-1])
+	ld.SelectFiltered(0)
+	return true
+}
+
 func (ld *ListDisplay) PageSize() int {
 	if ld.lastHeight > 0 {
 		return ld.lastHeight
@@ -42,6 +73,7 @@ func (ld *ListDisplay) SetEntries(entries []ListEntry) {
 	if ld.index < 0 {
 		ld.index = 0
 	}
+	ld.rebuildFormats()
 	ld.EnsureVisible()
 }
 
@@ -213,13 +245,21 @@ func (ld *ListDisplay) Render(tp TilePane) {
 			runes = runes[:availableWidth]
 			line = string(runes)
 		}
-		isSelected := selectedEntry != nil && reflect.DeepEqual(entry.GetUniqueId(), selectedEntry.GetUniqueId())
-		if isSelected {
-			tp.WithFgBg(ColorWhite, ColorBlue, func() {
-				tp.DrawString(0, row, line)
-			})
-		} else {
-			tp.DrawString(0, row, line)
-		}
+		ld.drawRow(tp, row, line, selectedEntry, entry)
 	}
+}
+
+func (ld *ListDisplay) drawRow(tp TilePane, row int, line string, selectedEntry ListEntry, entry ListEntry) {
+	isSelected := ld.isSelected(entry, selectedEntry)
+	if isSelected {
+		tp.WithFgBg(ColorWhite, ColorBlue, func() {
+			tp.DrawString(0, row, line)
+		})
+	} else {
+		tp.DrawString(0, row, line)
+	}
+}
+
+func (ld *ListDisplay) isSelected(entry ListEntry, selectedEntry ListEntry) bool {
+	return selectedEntry != nil && reflect.DeepEqual(entry.GetUniqueId(), selectedEntry.GetUniqueId())
 }

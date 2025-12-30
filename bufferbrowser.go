@@ -32,7 +32,7 @@ func CreateBufferBrowser(app *App) *BufferBrowser {
 }
 
 func (bb *BufferBrowser) SearchText() string {
-	return bb.listDisplay.searchText
+	return bb.listDisplay.SearchText()
 }
 
 func (bb *BufferBrowser) Reload() {
@@ -73,20 +73,12 @@ func (bb *BufferBrowser) CurrentFilteredEntry() *Buffer {
 }
 
 func (bb *BufferBrowser) OnChar(char rune) {
-	if char == 0 || char < 32 {
-		return
-	}
-	bb.listDisplay.searchText += string(char)
-	bb.listDisplay.SelectFiltered(0)
+	bb.listDisplay.AppendSearchChar(char)
 }
 
 func (bb *BufferBrowser) HandleBackspace() {
-	if bb.listDisplay.searchText != "" {
-		runes := []rune(bb.listDisplay.searchText)
-		if len(runes) > 0 {
-			bb.listDisplay.searchText = string(runes[:len(runes)-1])
-			bb.listDisplay.SelectFiltered(0)
-		}
+	if bb.listDisplay.RemoveLastSearchChar() {
+		return
 	}
 }
 
@@ -110,6 +102,5 @@ func (bb *BufferBrowser) Render(tp TilePane) {
 	}
 
 	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
-	bb.listDisplay.lastHeight = listPane.Height()
 	bb.listDisplay.Render(listPane)
 }

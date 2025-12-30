@@ -63,7 +63,7 @@ func (fb *FileBrowser) Directory() string {
 }
 
 func (fb *FileBrowser) SearchText() string {
-	return fb.listDisplay.searchText
+	return fb.listDisplay.SearchText()
 }
 
 func (fb *FileBrowser) MoveBy(delta int) {
@@ -194,12 +194,7 @@ func entriesToList(entries []FileEntry) []ListEntry {
 }
 
 func (fb *FileBrowser) HandleBackspace() (bool, error) {
-	if fb.listDisplay.searchText != "" {
-		runes := []rune(fb.listDisplay.searchText)
-		if len(runes) > 0 {
-			fb.listDisplay.searchText = string(runes[:len(runes)-1])
-			fb.listDisplay.SelectFiltered(0)
-		}
+	if fb.listDisplay.RemoveLastSearchChar() {
 		return false, nil
 	}
 	return fb.GoParent()
@@ -231,11 +226,7 @@ func (fb *FileBrowser) Enter() (bool, error) {
 }
 
 func (fb *FileBrowser) OnChar(char rune) {
-	if char == 0 || char < 32 {
-		return
-	}
-	fb.listDisplay.searchText += string(char)
-	fb.listDisplay.SelectFiltered(0)
+	fb.listDisplay.AppendSearchChar(char)
 }
 
 func (fb *FileBrowser) Reset() error {
@@ -260,6 +251,5 @@ func (fb *FileBrowser) Render(tp TilePane) {
 
 	// List area beneath the header.
 	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
-	fb.listDisplay.lastHeight = listPane.Height()
 	fb.listDisplay.Render(listPane)
 }
