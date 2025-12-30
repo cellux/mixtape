@@ -48,6 +48,7 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		tapeDisplay: tapeDisplay,
 		keymap:      keymap,
 	}
+	es.editor.SetActionDispatcher(es.DispatchAction)
 
 	tapeFilter := func(fe FileEntry) bool {
 		if fe.isDir {
@@ -73,83 +74,6 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 
 	es.loadCurrentBufferIntoEditor()
 
-	keymap.Bind("Enter", func() {
-		es.DispatchAction(func() UndoFunc {
-			editor.SplitLine()
-			return func() {
-				editor.AdvanceColumn(-1)
-				editor.DeleteRune()
-			}
-		})
-	})
-	keymap.Bind("Left", func() {
-		editor.AdvanceColumn(-1)
-	})
-	keymap.Bind("Right", func() {
-		editor.AdvanceColumn(1)
-	})
-	keymap.Bind("Up", func() {
-		editor.AdvanceLine(-1)
-	})
-	keymap.Bind("Down", func() {
-		editor.AdvanceLine(1)
-	})
-	keymap.Bind("PageUp", func() {
-		for range editor.height {
-			editor.AdvanceLine(-1)
-		}
-	})
-	keymap.Bind("PageDown", func() {
-		for range editor.height {
-			editor.AdvanceLine(1)
-		}
-	})
-	keymap.Bind("Delete", func() {
-		es.DispatchAction(func() UndoFunc {
-			deletedRune := editor.DeleteRune()
-			return func() {
-				if deletedRune != 0 {
-					editor.InsertRune(deletedRune)
-					editor.AdvanceColumn(-1)
-				}
-			}
-		})
-	})
-	keymap.Bind("Backspace", func() {
-		if editor.AtBOF() {
-			return
-		}
-		es.DispatchAction(func() UndoFunc {
-			editor.AdvanceColumn(-1)
-			deletedRune := editor.DeleteRune()
-			return func() {
-				if deletedRune != 0 {
-					editor.InsertRune(deletedRune)
-				}
-			}
-		})
-	})
-	keymap.Bind("Home", editor.MoveToBOL)
-	keymap.Bind("End", editor.MoveToEOL)
-	keymap.Bind("Tab", func() {
-		es.DispatchAction(func() UndoFunc {
-			start := editor.GetPoint()
-			editor.InsertSpacesUntilNextTabStop()
-			end := editor.GetPoint()
-			inserted := end.column - start.column
-			return func() {
-				if inserted <= 0 {
-					return
-				}
-				editor.SetPoint(end)
-				for range inserted {
-					editor.AdvanceColumn(-1)
-					editor.DeleteRune()
-				}
-				editor.SetPoint(start)
-			}
-		})
-	})
 	keymap.Bind("C-Enter", func() {
 		editorScript := editor.GetBytes()
 		app.evalEditorScript(editorScript, func() {
@@ -170,80 +94,6 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		}
 	})
 
-	keymap.Bind("C-Left", editor.WordLeft)
-	keymap.Bind("C-Right", editor.WordRight)
-	keymap.Bind("C-a", editor.MoveToBOL)
-	keymap.Bind("C-e", editor.MoveToEOL)
-	keymap.Bind("C-Home", editor.MoveToBOF)
-	keymap.Bind("C-End", editor.MoveToEOF)
-	keymap.Bind("C-k", func() {
-		es.DispatchAction(func() UndoFunc {
-			start := editor.GetPoint()
-			var deletedRunes []rune
-			if editor.AtEOL() {
-				if r := editor.DeleteRune(); r != 0 {
-					deletedRunes = append(deletedRunes, r)
-				}
-			} else {
-				for !editor.AtEOL() {
-					if r := editor.DeleteRune(); r != 0 {
-						deletedRunes = append(deletedRunes, r)
-					}
-				}
-			}
-			return func() {
-				if len(deletedRunes) == 0 {
-					return
-				}
-				editor.SetPoint(start)
-				editor.InsertRunes(deletedRunes)
-				editor.SetPoint(start)
-			}
-		})
-	})
-	keymap.Bind("C-Backspace", func() {
-		es.DispatchAction(func() UndoFunc {
-			editor.SetMark()
-			editor.WordLeft()
-			deletedRunes := editor.KillRegion()
-			return func() {
-				editor.InsertRunes(deletedRunes)
-			}
-		})
-	})
-	keymap.Bind("C-u", func() {
-		es.DispatchAction(func() UndoFunc {
-			editor.SetMark()
-			editor.MoveToBOL()
-			deletedRunes := editor.KillRegion()
-			return func() {
-				editor.InsertRunes(deletedRunes)
-			}
-		})
-	})
-	keymap.Bind("C-Space", editor.SetMark)
-	keymap.Bind("C-w", func() {
-		es.DispatchAction(func() UndoFunc {
-			start := editor.GetPoint()
-			p, _ := editor.PointAndMarkInOrder()
-			deletedRunes := editor.KillRegion()
-			return func() {
-				editor.SetPoint(p)
-				editor.InsertRunes(deletedRunes)
-				editor.SetPoint(start)
-			}
-		})
-	})
-	keymap.Bind("C-y", func() {
-		es.DispatchAction(func() UndoFunc {
-			p0 := editor.GetPoint()
-			editor.Paste()
-			p1 := editor.GetPoint()
-			return func() {
-				editor.KillBetween(p0, p1)
-			}
-		})
-	})
 	keymap.Bind("C-x C-s", func() {
 		es.syncEditorToBuffer()
 		if app.currentBuffer != nil && app.currentBuffer.HasPath() {
@@ -260,24 +110,6 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	})
 	keymap.Bind("C-x C-b", func() {
 		es.enterBufferSwitchMode()
-	})
-	keymap.Bind("M-b", editor.WordLeft)
-	keymap.Bind("M-f", editor.WordRight)
-	keymap.Bind("M-w", editor.YankRegion)
-	keymap.Bind("M-Backspace", func() {
-		es.DispatchAction(func() UndoFunc {
-			editor.SetMark()
-			editor.WordLeft()
-			p, _ := editor.PointAndMarkInOrder()
-			deletedRunes := editor.KillRegion()
-			return func() {
-				if len(deletedRunes) == 0 {
-					return
-				}
-				editor.SetPoint(p)
-				editor.InsertRunes(deletedRunes)
-			}
-		})
 	})
 	keymap.Bind("C-z", func() { es.UndoLastAction() })
 	keymap.Bind("C-x u", func() { es.UndoLastAction() })
@@ -315,18 +147,22 @@ func (es *EditScreen) UndoLastAction() {
 	lastAction.undoFunc()
 }
 
-func (es *EditScreen) HandleKey(key Key) (KeyHandler, bool) {
+func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
 	if es.showFileBrowser {
-		next, handled := es.fileBrowser.HandleKey(key)
+		next, handled = es.fileBrowser.HandleKey(key)
 		if handled {
-			return next, true
+			return
 		}
 	}
 	if es.showBufferBrowser {
-		next, handled := es.bufferBrowser.HandleKey(key)
+		next, handled = es.bufferBrowser.HandleKey(key)
 		if handled {
-			return next, true
+			return
 		}
+	}
+	next, handled = es.editor.HandleKey(key)
+	if handled {
+		return
 	}
 	return es.keymap.HandleKey(key)
 }

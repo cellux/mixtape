@@ -23,15 +23,17 @@ type EditorPoint struct {
 }
 
 type Editor struct {
-	lines       []EditorLine
-	point       EditorPoint
-	mark        EditorPoint
-	markActive  bool
-	yankedRunes []rune
-	top         int
-	left        int
-	height      int
-	readOnly    bool
+	lines            []EditorLine
+	point            EditorPoint
+	mark             EditorPoint
+	markActive       bool
+	yankedRunes      []rune
+	top              int
+	left             int
+	height           int
+	readOnly         bool
+	keymap           KeyMap
+	actionDispatcher func(UndoableFunction)
 }
 
 func (e *Editor) setYankedRunes(rs []rune) {
@@ -40,7 +42,21 @@ func (e *Editor) setYankedRunes(rs []rune) {
 }
 
 func CreateEditor() *Editor {
-	return &Editor{}
+	e := &Editor{}
+	e.initKeymap()
+	return e
+}
+
+func (e *Editor) Keymap() KeyMap {
+	return e.keymap
+}
+
+func (e *Editor) SetActionDispatcher(dispatch func(UndoableFunction)) {
+	e.actionDispatcher = dispatch
+}
+
+func (e *Editor) dispatchAction(f UndoableFunction) {
+	e.actionDispatcher(f)
 }
 
 func (e *Editor) SetReadOnly(readOnly bool) {
@@ -496,4 +512,176 @@ func (e *Editor) GetBytes() []byte {
 
 func (e *Editor) Close() error {
 	return nil
+}
+func (e *Editor) HandleKey(key Key) (KeyHandler, bool) {
+	return e.keymap.HandleKey(key)
+}
+
+func (e *Editor) initKeymap() {
+	e.keymap = CreateKeyMap()
+
+	e.keymap.Bind("Left", func() { e.AdvanceColumn(-1) })
+	e.keymap.Bind("Right", func() { e.AdvanceColumn(1) })
+	e.keymap.Bind("Up", func() { e.AdvanceLine(-1) })
+	e.keymap.Bind("Down", func() { e.AdvanceLine(1) })
+	e.keymap.Bind("Home", e.MoveToBOL)
+	e.keymap.Bind("End", e.MoveToEOL)
+	e.keymap.Bind("C-Home", e.MoveToBOF)
+	e.keymap.Bind("C-End", e.MoveToEOF)
+	e.keymap.Bind("PageUp", func() {
+		for range e.height {
+			e.AdvanceLine(-1)
+		}
+	})
+	e.keymap.Bind("PageDown", func() {
+		for range e.height {
+			e.AdvanceLine(1)
+		}
+	})
+	// Word and mark operations
+	e.keymap.Bind("C-Left", e.WordLeft)
+	e.keymap.Bind("C-Right", e.WordRight)
+	e.keymap.Bind("M-b", e.WordLeft)
+	e.keymap.Bind("M-f", e.WordRight)
+	e.keymap.Bind("C-a", e.MoveToBOL)
+	e.keymap.Bind("C-e", e.MoveToEOL)
+	e.keymap.Bind("C-Space", e.SetMark)
+	e.keymap.Bind("M-w", e.YankRegion)
+
+	// Editing with undo support
+	e.keymap.Bind("Enter", func() {
+		e.dispatchAction(func() UndoFunc {
+			e.SplitLine()
+			return func() {
+				e.AdvanceColumn(-1)
+				e.DeleteRune()
+			}
+		})
+	})
+	e.keymap.Bind("Delete", func() {
+		e.dispatchAction(func() UndoFunc {
+			deletedRune := e.DeleteRune()
+			return func() {
+				if deletedRune != 0 {
+					e.InsertRune(deletedRune)
+					e.AdvanceColumn(-1)
+				}
+			}
+		})
+	})
+	e.keymap.Bind("Backspace", func() {
+		if e.AtBOF() {
+			return
+		}
+		e.dispatchAction(func() UndoFunc {
+			e.AdvanceColumn(-1)
+			deletedRune := e.DeleteRune()
+			return func() {
+				if deletedRune != 0 {
+					e.InsertRune(deletedRune)
+				}
+			}
+		})
+	})
+	e.keymap.Bind("Tab", func() {
+		e.dispatchAction(func() UndoFunc {
+			start := e.GetPoint()
+			e.InsertSpacesUntilNextTabStop()
+			end := e.GetPoint()
+			inserted := end.column - start.column
+			return func() {
+				if inserted <= 0 {
+					return
+				}
+				e.SetPoint(end)
+				for range inserted {
+					e.AdvanceColumn(-1)
+					e.DeleteRune()
+				}
+				e.SetPoint(start)
+			}
+		})
+	})
+	e.keymap.Bind("C-k", func() {
+		e.dispatchAction(func() UndoFunc {
+			start := e.GetPoint()
+			var deletedRunes []rune
+			if e.AtEOL() {
+				if r := e.DeleteRune(); r != 0 {
+					deletedRunes = append(deletedRunes, r)
+				}
+			} else {
+				for !e.AtEOL() {
+					if r := e.DeleteRune(); r != 0 {
+						deletedRunes = append(deletedRunes, r)
+					}
+				}
+			}
+			return func() {
+				if len(deletedRunes) == 0 {
+					return
+				}
+				e.SetPoint(start)
+				e.InsertRunes(deletedRunes)
+				e.SetPoint(start)
+			}
+		})
+	})
+	e.keymap.Bind("C-Backspace", func() {
+		e.dispatchAction(func() UndoFunc {
+			e.SetMark()
+			e.WordLeft()
+			deletedRunes := e.KillRegion()
+			return func() {
+				e.InsertRunes(deletedRunes)
+			}
+		})
+	})
+	e.keymap.Bind("C-u", func() {
+		e.dispatchAction(func() UndoFunc {
+			e.SetMark()
+			e.MoveToBOL()
+			deletedRunes := e.KillRegion()
+			return func() {
+				e.InsertRunes(deletedRunes)
+			}
+		})
+	})
+	e.keymap.Bind("C-w", func() {
+		e.dispatchAction(func() UndoFunc {
+			start := e.GetPoint()
+			p, _ := e.PointAndMarkInOrder()
+			deletedRunes := e.KillRegion()
+			return func() {
+				e.SetPoint(p)
+				e.InsertRunes(deletedRunes)
+				e.SetPoint(start)
+			}
+		})
+	})
+	e.keymap.Bind("C-y", func() {
+		e.dispatchAction(func() UndoFunc {
+			p0 := e.GetPoint()
+			e.Paste()
+			p1 := e.GetPoint()
+			return func() {
+				e.KillBetween(p0, p1)
+			}
+		})
+	})
+	e.keymap.Bind("M-Backspace", func() {
+		e.dispatchAction(func() UndoFunc {
+			e.SetMark()
+			e.WordLeft()
+			p, _ := e.PointAndMarkInOrder()
+			deletedRunes := e.KillRegion()
+			return func() {
+				if len(deletedRunes) == 0 {
+					return
+				}
+				e.SetPoint(p)
+				e.InsertRunes(deletedRunes)
+			}
+		})
+	})
 }
