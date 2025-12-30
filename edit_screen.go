@@ -242,7 +242,6 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		statusFile = app.currentBuffer.Path
 	}
 
-	var browserPane TilePane
 	var editorPane TilePane
 	var tapeDisplayPane TilePane
 	var statusPane TilePane
@@ -253,11 +252,6 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
 			errorPane.DrawString(0, 0, err.Error())
 		})
-	}
-
-	if es.showFileBrowser {
-		browserPane, screenPane = screenPane.SplitY(8)
-		es.fileBrowser.Render(browserPane)
 	}
 
 	switch result := app.vm.evalResult.(type) {
@@ -275,6 +269,11 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 			editorPane, statusPane = screenPane.SplitY(-1)
 			statusPane.DrawString(0, 0, fmt.Sprintf("%#v", result))
 		}
+	}
+
+	if es.showFileBrowser {
+		es.fileBrowser.Render(editorPane)
+		return
 	}
 
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
