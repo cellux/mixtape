@@ -431,6 +431,24 @@ func (tp TilePane) DrawString(x, y int, s string) {
 	}
 }
 
+func (tp TilePane) SubPane(x, y, w, h int) TilePane {
+	min := Point{X: tp.rect.Min.X + x, Y: tp.rect.Min.Y + y}
+	max := Point{X: min.X + w, Y: min.Y + h}
+	if min.X < tp.rect.Min.X {
+		min.X = tp.rect.Min.X
+	}
+	if min.Y < tp.rect.Min.Y {
+		min.Y = tp.rect.Min.Y
+	}
+	if max.X > tp.rect.Max.X {
+		max.X = tp.rect.Max.X
+	}
+	if max.Y > tp.rect.Max.Y {
+		max.Y = tp.rect.Max.Y
+	}
+	return TilePane{ts: tp.ts, rect: Rect{Min: min, Max: max}}
+}
+
 func (ts *TileScreen) GetPane() TilePane {
 	tileSize := ts.tm.GetTileSize()
 	return TilePane{

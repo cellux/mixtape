@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 )
 
@@ -13,6 +14,10 @@ type EditScreen struct {
 	lastScript  []byte // last script successfully evaluated by VM
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
+
+	fileBrowser       *FileBrowser
+	fileBrowserKeymap KeyMap
+	showFileBrowser   bool
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -30,6 +35,31 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		tapeDisplay: tapeDisplay,
 		keymap:      keymap,
 	}
+
+	fb, err := CreateFileBrowser(app, "", func(fe FileEntry) bool {
+		if fe.isDir {
+			return true
+		}
+		return filepath.Ext(fe.name) == ".tape"
+	})
+	if err != nil {
+		return nil, err
+	}
+	es.fileBrowser = fb
+
+	fbKeyMap := CreateKeyMap()
+	fbKeyMap.Bind("Up", func() { es.fileBrowser.MoveBy(-1) })
+	fbKeyMap.Bind("Down", func() { es.fileBrowser.MoveBy(1) })
+	fbKeyMap.Bind("Home", func() { es.fileBrowser.MoveTo(0) })
+	fbKeyMap.Bind("End", func() { es.fileBrowser.MoveToEnd() })
+	fbKeyMap.Bind("PageUp", func() { es.fileBrowser.MoveBy(-es.fileBrowser.PageSize()) })
+	fbKeyMap.Bind("PageDown", func() { es.fileBrowser.MoveBy(es.fileBrowser.PageSize()) })
+	fbKeyMap.Bind("Enter", func() { es.handleFileBrowserEnter() })
+	fbKeyMap.Bind("Escape", es.exitFileOpenMode)
+	fbKeyMap.Bind("C-g", es.exitFileOpenMode)
+	fbKeyMap.Bind("Backspace", func() { es.handleFileBrowserBackspace() })
+	es.fileBrowserKeymap = fbKeyMap
+
 	es.loadCurrentBufferIntoEditor()
 
 	keymap.Bind("Enter", func() {
@@ -110,6 +140,7 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 			}, false)
 		}
 	})
+
 	keymap.Bind("C-Left", editor.WordLeft)
 	keymap.Bind("C-Right", editor.WordRight)
 	keymap.Bind("C-a", editor.MoveToBOL)
@@ -174,6 +205,9 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 			}
 		}
 	})
+	keymap.Bind("C-x C-f", func() {
+		es.enterFileOpenMode()
+	})
 	keymap.Bind("M-b", editor.WordLeft)
 	keymap.Bind("M-f", editor.WordRight)
 	keymap.Bind("M-w", editor.YankRegion)
@@ -187,6 +221,12 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 }
 
 func (es *EditScreen) HandleKey(key Key) (KeyHandler, bool) {
+	if es.showFileBrowser {
+		next, handled := es.fileBrowserKeymap.HandleKey(key)
+		if handled {
+			return next, true
+		}
+	}
 	return es.keymap.HandleKey(key)
 }
 
@@ -202,6 +242,7 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		statusFile = app.currentBuffer.Path
 	}
 
+	var browserPane TilePane
 	var editorPane TilePane
 	var tapeDisplayPane TilePane
 	var statusPane TilePane
@@ -212,6 +253,19 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
 			errorPane.DrawString(0, 0, err.Error())
 		})
+	}
+
+	if es.showFileBrowser {
+		browserPane, screenPane = screenPane.SplitY(8)
+		browserPane.DrawString(0, 0, es.fileBrowser.Directory())
+		if es.fileBrowser.SearchText() != "" {
+			browserPane.WithFgBg(ColorWhite, ColorGreen, func() {
+				browserPane.DrawString(len(es.fileBrowser.Directory())+1, 0, fmt.Sprintf("[%s]", es.fileBrowser.SearchText()))
+			})
+		}
+		listPane := browserPane.SubPane(0, 1, browserPane.Width(), browserPane.Height()-1)
+		es.fileBrowser.listDisplay.lastHeight = listPane.Height()
+		es.fileBrowser.Render(&listPane)
 	}
 
 	switch result := app.vm.evalResult.(type) {
@@ -248,6 +302,53 @@ func (es *EditScreen) Keymap() KeyMap {
 	return es.keymap
 }
 
+func (es *EditScreen) enterFileOpenMode() {
+	if err := es.fileBrowser.Reset(); err != nil {
+		es.app.SetLastError(err)
+	}
+	es.showFileBrowser = true
+}
+
+func (es *EditScreen) exitFileOpenMode() {
+	es.showFileBrowser = false
+}
+
+func (es *EditScreen) handleFileBrowserBackspace() {
+	_, err := es.fileBrowser.HandleBackspace()
+	if err != nil {
+		es.app.SetLastError(err)
+	}
+}
+
+func (es *EditScreen) handleFileBrowserEnter() {
+	entry := es.fileBrowser.CurrentFilteredEntry()
+	if entry == nil {
+		return
+	}
+	if entry.isDir {
+		_, err := es.fileBrowser.Enter()
+		if err != nil {
+			es.app.SetLastError(err)
+		}
+		return
+	}
+	full := es.fileBrowser.CanonicalPath(entry.path)
+	if buf := es.app.findBufferByPath(full); buf != nil {
+		es.app.SetLastError(fmt.Errorf("buffer already exists for %s", full))
+		es.exitFileOpenMode()
+		return
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		es.app.SetLastError(err)
+		return
+	}
+	buf := &Buffer{Name: filepath.Base(full), Path: full, Data: data}
+	es.app.buffers = append(es.app.buffers, buf)
+	es.app.currentBuffer = buf
+	es.loadCurrentBufferIntoEditor()
+	es.exitFileOpenMode()
+}
 func (es *EditScreen) Reset() {
 	es.editor.Reset()
 }
@@ -259,6 +360,10 @@ func (es *EditScreen) loadCurrentBufferIntoEditor() {
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {
+	if es.showFileBrowser {
+		es.fileBrowser.OnChar(char)
+		return
+	}
 	DispatchAction(func() UndoFunc {
 		es.editor.InsertRune(char)
 		return func() {

@@ -111,6 +111,15 @@ func (app *App) ResetFontSize() {
 	app.setFontSize(defaultFontSize)
 }
 
+func (app *App) findBufferByPath(path string) *Buffer {
+	for _, b := range app.buffers {
+		if b.Path == path {
+			return b
+		}
+	}
+	return nil
+}
+
 func (app *App) postEvent(ev Event, dropIfFull bool) {
 	if dropIfFull {
 		select {

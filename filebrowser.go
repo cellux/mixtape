@@ -33,14 +33,17 @@ func (fe FileEntry) Format() string {
 	return fmt.Sprintf("%c %-20s %s", fe.typeRune, name, sizeText)
 }
 
+type FileFilter func(FileEntry) bool
+
 type FileBrowser struct {
 	app         *App
 	dir         string
 	entries     []FileEntry
 	listDisplay *ListDisplay
+	filter      FileFilter
 }
 
-func CreateFileBrowser(app *App, startDir string) (*FileBrowser, error) {
+func CreateFileBrowser(app *App, startDir string, filter FileFilter) (*FileBrowser, error) {
 	if startDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -48,7 +51,7 @@ func CreateFileBrowser(app *App, startDir string) (*FileBrowser, error) {
 		}
 		startDir = cwd
 	}
-	fb := &FileBrowser{app: app, dir: startDir, listDisplay: CreateListDisplay()}
+	fb := &FileBrowser{app: app, dir: startDir, listDisplay: CreateListDisplay(), filter: filter}
 	if err := fb.Reload(); err != nil {
 		return nil, err
 	}
@@ -160,14 +163,18 @@ func (fb *FileBrowser) Reload() error {
 		case mode&os.ModeSymlink != 0:
 			typeRune = 'l'
 		}
-		result = append(result, FileEntry{
+		fileEntry := FileEntry{
 			name:     name,
 			path:     path,
 			size:     info.Size(),
 			mode:     mode,
 			isDir:    isDir,
 			typeRune: typeRune,
-		})
+		}
+		if fb.filter != nil && !fb.filter(fileEntry) {
+			continue
+		}
+		result = append(result, fileEntry)
 	}
 
 	fb.entries = result
