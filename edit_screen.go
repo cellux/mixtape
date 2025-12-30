@@ -335,7 +335,7 @@ func (es *EditScreen) handleFileBrowserEnter() {
 		es.app.SetLastError(err)
 		return
 	}
-	buf := &Buffer{Name: filepath.Base(full), Path: full, Data: data}
+	buf := CreateBuffer(es.app.buffers, full, data)
 	es.app.buffers = append(es.app.buffers, buf)
 	es.app.currentBuffer = buf
 	es.loadCurrentBufferIntoEditor()

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"runtime/pprof"
 	"strings"
 )
@@ -136,8 +135,7 @@ func runWithArgs(vm *VM, args []string) error {
 			return err
 		}
 		path := arg
-		name := filepath.Base(path)
-		buf := &Buffer{Name: name, Path: path, Data: data}
+		buf := CreateBuffer(buffers, path, data)
 		buffers = append(buffers, buf)
 		currentBuffer = buf
 	}
