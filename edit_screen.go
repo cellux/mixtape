@@ -8,15 +8,15 @@ import (
 
 // EditScreen bundles the editor-related UI components.
 type EditScreen struct {
+	app         *App
 	editor      *Editor
 	lastScript  []byte // last script successfully evaluated by VM
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
 }
 
-func CreateEditScreen(app *App, initialText string) (*EditScreen, error) {
+func CreateEditScreen(app *App) (*EditScreen, error) {
 	editor := CreateEditor()
-	editor.SetText(initialText)
 	tapeDisplay, err := CreateTapeDisplay()
 	if err != nil {
 		return nil, err
@@ -25,10 +25,12 @@ func CreateEditScreen(app *App, initialText string) (*EditScreen, error) {
 	keymap := CreateKeyMap()
 
 	es := &EditScreen{
+		app:         app,
 		editor:      editor,
 		tapeDisplay: tapeDisplay,
 		keymap:      keymap,
 	}
+	es.loadCurrentBufferIntoEditor()
 
 	keymap.Bind("Enter", func() {
 		DispatchAction(func() UndoFunc {
@@ -165,8 +167,9 @@ func CreateEditScreen(app *App, initialText string) (*EditScreen, error) {
 		})
 	})
 	keymap.Bind("C-x C-s", func() {
-		if app.currentFile != "" {
-			os.WriteFile(app.currentFile, editor.GetBytes(), 0o644)
+		es.syncEditorToBuffer()
+		if app.currentBuffer != nil && app.currentBuffer.HasPath() {
+			_ = os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644)
 		}
 	})
 	keymap.Bind("M-b", editor.WordLeft)
@@ -189,10 +192,12 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	screenPane := ts.GetPane()
 
 	var statusFile string
-	if app.currentFile == "" {
-		statusFile = "<no file>"
+	if app.currentBuffer == nil {
+		statusFile = "<no buffer>"
+	} else if !app.currentBuffer.HasPath() {
+		statusFile = app.currentBuffer.Name
 	} else {
-		statusFile = app.currentFile
+		statusFile = app.currentBuffer.Path
 	}
 
 	var editorPane TilePane
@@ -230,12 +235,25 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
 }
 
+func (es *EditScreen) syncEditorToBuffer() {
+	if es.app == nil || es.app.currentBuffer == nil {
+		return
+	}
+	es.app.currentBuffer.Data = es.editor.GetBytes()
+}
+
 func (es *EditScreen) Keymap() KeyMap {
 	return es.keymap
 }
 
 func (es *EditScreen) Reset() {
 	es.editor.Reset()
+}
+
+func (es *EditScreen) loadCurrentBufferIntoEditor() {
+	if es.app != nil && es.app.currentBuffer != nil {
+		es.editor.SetText(string(es.app.currentBuffer.Data))
+	}
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {

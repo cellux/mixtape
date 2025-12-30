@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"strings"
 )
@@ -53,15 +54,15 @@ func (f *EvalTargetFlag) Set(val string) error {
 	return nil
 }
 
-func runGui(vm *VM, openFiles map[string]string, currentFile string) error {
+func runGui(vm *VM, buffers []*Buffer, currentBuffer *Buffer) error {
 	app := &App{
-		vm:          vm,
-		openFiles:   openFiles,
-		currentFile: currentFile,
+		vm:            vm,
+		buffers:       buffers,
+		currentBuffer: currentBuffer,
 	}
 	var windowTitle string
-	if currentFile != "" {
-		windowTitle = fmt.Sprintf("mixtape : %s", currentFile)
+	if currentBuffer != nil {
+		windowTitle = fmt.Sprintf("mixtape : %s", currentBuffer.Name)
 	} else {
 		windowTitle = "mixtape"
 	}
@@ -104,8 +105,6 @@ func evalAndReport(vm *VM, r io.Reader, name string) error {
 }
 
 func runWithArgs(vm *VM, args []string) error {
-	openFiles := make(map[string]string)
-	currentFile := ""
 	if len(flags.EvalTargets) > 0 {
 		return withProfileIfNeeded(func() error {
 			for _, target := range flags.EvalTargets {
@@ -127,15 +126,28 @@ func runWithArgs(vm *VM, args []string) error {
 			return nil
 		})
 	}
+
+	buffers := []*Buffer{}
+	var currentBuffer *Buffer
+
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
 		if err != nil {
 			return err
 		}
-		openFiles[arg] = string(data)
-		currentFile = arg
+		path := arg
+		name := filepath.Base(path)
+		buf := &Buffer{Name: name, Path: path, Data: data}
+		buffers = append(buffers, buf)
+		currentBuffer = buf
 	}
-	return runGui(vm, openFiles, currentFile)
+
+	if len(buffers) == 0 {
+		currentBuffer = NewScratchBuffer()
+		buffers = append(buffers, currentBuffer)
+	}
+
+	return runGui(vm, buffers, currentBuffer)
 }
 
 func setDefaults(vm *VM) {

@@ -22,8 +22,8 @@ const (
 
 type App struct {
 	vm                *VM
-	openFiles         map[string]string
-	currentFile       string
+	buffers           []*Buffer
+	currentBuffer     *Buffer
 	shouldExit        bool
 	font              *Font
 	fontSize          FontSizeInPoints
@@ -136,10 +136,6 @@ func (app *App) Init() error {
 	if err := app.reloadFont(); err != nil {
 		return err
 	}
-	tapeScript := ""
-	if app.currentFile != "" {
-		tapeScript = app.openFiles[app.currentFile]
-	}
 
 	helpBytes, err := assets.ReadFile("assets/help.txt")
 	if err != nil {
@@ -172,7 +168,7 @@ func (app *App) Init() error {
 		return err
 	}
 
-	editScreen, err := CreateEditScreen(app, tapeScript)
+	editScreen, err := CreateEditScreen(app)
 	if err != nil {
 		return err
 	}
@@ -373,8 +369,8 @@ func (app *App) evalEditorScript(editorScript []byte, evalSuccessCallback func()
 	}
 	app.Reset()
 	tapePath := "<temp-tape>"
-	if app.currentFile != "" {
-		tapePath = app.currentFile
+	if app.currentBuffer != nil && app.currentBuffer.HasPath() {
+		tapePath = app.currentBuffer.Path
 	}
 	go func() {
 		if err := app.vm.ParseAndEval(bytes.NewReader(editorScript), tapePath); err == nil {

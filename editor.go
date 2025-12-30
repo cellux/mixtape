@@ -453,8 +453,8 @@ func (e *Editor) Render(tp TilePane, currentToken *Token) {
 	}
 }
 
-func (e *Editor) RenderStatusLine(tp TilePane, currentFile string, currentToken *Token, nftotal, nfdone int) {
-	leftText := fmt.Sprintf("%s  Ln %d, Col %d", currentFile, e.point.line+1, e.point.column+1)
+func (e *Editor) RenderStatusLine(tp TilePane, bufferName string, currentToken *Token, nftotal, nfdone int) {
+	leftText := fmt.Sprintf("%s  Ln %d, Col %d", bufferName, e.point.line+1, e.point.column+1)
 	var rightText string
 	if currentToken != nil {
 		rightText = currentToken.String()
