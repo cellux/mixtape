@@ -169,7 +169,9 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	keymap.Bind("C-x C-s", func() {
 		es.syncEditorToBuffer()
 		if app.currentBuffer != nil && app.currentBuffer.HasPath() {
-			_ = os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644)
+			if err := os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644); err != nil {
+				app.SetLastError(err)
+			}
 		}
 	})
 	keymap.Bind("M-b", editor.WordLeft)
@@ -232,7 +234,13 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
 	currentToken := app.vm.CurrentToken()
 	es.editor.Render(editorBufferPane, currentToken)
-	es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
+	if app.lastError != nil {
+		editorStatusPane.WithFgBg(ColorWhite, ColorRed, func() {
+			editorStatusPane.DrawString(0, 0, app.lastError.Error())
+		})
+	} else {
+		es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
+	}
 }
 
 func (es *EditScreen) syncEditorToBuffer() {

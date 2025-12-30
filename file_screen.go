@@ -10,7 +10,7 @@ import (
 type FileScreen struct {
 	fileBrowser *FileBrowser
 	keymap      KeyMap
-	lastErr     error
+	app         *App
 
 	lastPlayedPath string
 	lastTape       *Tape
@@ -31,6 +31,7 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 		fileBrowser: fileBrowser,
 		keymap:      keymap,
 		tapeDisplay: tapeDisplay,
+		app:         app,
 	}
 
 	keymap.Bind("Up", func() { fileBrowser.MoveBy(-1) })
@@ -53,7 +54,9 @@ func (fs *FileScreen) handleBackspace() {
 		fs.lastPlayedPath = ""
 		fs.lastTape = nil
 	}
-	fs.lastErr = err
+	if err != nil {
+		fs.app.SetLastError(err)
+	}
 }
 
 func (fs *FileScreen) handleEnter() {
@@ -62,7 +65,9 @@ func (fs *FileScreen) handleEnter() {
 		fs.lastPlayedPath = ""
 		fs.lastTape = nil
 	}
-	fs.lastErr = err
+	if err != nil {
+		fs.app.SetLastError(err)
+	}
 }
 
 func (fs *FileScreen) copyPath() {
@@ -83,7 +88,6 @@ func (fs *FileScreen) HandleKey(key Key) (KeyHandler, bool) {
 }
 
 func (fs *FileScreen) Reset() {
-	fs.lastErr = nil
 	fs.lastPlayedPath = ""
 	fs.lastTape = nil
 	_ = fs.fileBrowser.Reset()
@@ -102,7 +106,8 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	}
 
 	var statusPane TilePane
-	if fs.lastErr != nil {
+	lastError := fs.app.lastError
+	if lastError != nil {
 		bodyPane, statusPane = bodyPane.SplitY(-1)
 	}
 
@@ -120,9 +125,9 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	fs.fileBrowser.listDisplay.lastHeight = listPane.Height()
 	fs.fileBrowser.Render(&listPane)
 
-	if fs.lastErr != nil {
+	if lastError != nil {
 		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
-			statusPane.DrawString(0, 0, fs.lastErr.Error())
+			statusPane.DrawString(0, 0, lastError.Error())
 		})
 	}
 }
@@ -143,10 +148,9 @@ func (fs *FileScreen) playSelected(app *App) {
 	}
 	tape, err := loadSample(path)
 	if err != nil {
-		fs.lastErr = err
+		fs.app.SetLastError(err)
 		return
 	}
-	fs.lastErr = nil
 	fs.lastPlayedPath = path
 	fs.lastTape = tape
 	app.oto.PlayTape(tape, fs)

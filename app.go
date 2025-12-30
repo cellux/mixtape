@@ -41,6 +41,15 @@ type App struct {
 	currentKeyHandler KeyHandler
 	chordHandler      KeyHandler
 	events            chan Event
+	lastError         error
+}
+
+func (app *App) SetLastError(err error) {
+	app.lastError = err
+}
+
+func (app *App) ClearLastError() {
+	app.lastError = nil
 }
 
 func (app *App) reloadFont() error {
@@ -299,6 +308,7 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 }
 
 func (app *App) HandleKey(key Key) (nextHandler KeyHandler, handled bool) {
+	app.ClearLastError()
 	if app.chordHandler != nil {
 		nextHandler, handled = app.chordHandler.HandleKey(key)
 		if handled {
@@ -318,6 +328,7 @@ func (app *App) HandleKey(key Key) (nextHandler KeyHandler, handled bool) {
 
 func (app *App) OnChar(char rune) {
 	//logger.Debug("OnChar", "char", char)
+	app.ClearLastError()
 	if app.chordHandler != nil {
 		return
 	}
@@ -393,6 +404,7 @@ func (app *App) Reset() {
 	app.rTape = nil
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
+	app.lastError = nil
 	app.drainEvents()
 	app.oto.StopAllPlayers()
 	for _, screen := range app.screens {
