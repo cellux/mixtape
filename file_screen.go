@@ -23,7 +23,7 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileBrowser, err := CreateFileBrowser(app, "", nil, nil, nil)
+	fileBrowser, err := CreateFileBrowser(app, "", nil, FileBrowserCallbacks{})
 	if err != nil {
 		return nil, err
 	}

@@ -49,18 +49,26 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		keymap:      keymap,
 	}
 
-	fb, err := CreateFileBrowser(app, "", func(fe FileEntry) bool {
+	tapeFilter := func(fe FileEntry) bool {
 		if fe.isDir {
 			return true
 		}
 		return filepath.Ext(fe.name) == ".tape"
-	}, es.handleFileBrowserSelection, es.exitFileOpenMode)
+	}
+
+	fb, err := CreateFileBrowser(app, "", tapeFilter, FileBrowserCallbacks{
+		onSelect: es.handleFileBrowserSelection,
+		onExit:   es.exitFileOpenMode,
+	})
 	if err != nil {
 		return nil, err
 	}
 	es.fileBrowser = fb
 
-	bb := CreateBufferBrowser(app, es.handleBufferBrowserEnter, es.exitBufferSwitchMode)
+	bb := CreateBufferBrowser(app, BufferBrowserCallbacks{
+		onSelect: es.handleBufferBrowserEnter,
+		onExit:   es.exitBufferSwitchMode,
+	})
 	es.bufferBrowser = bb
 
 	es.loadCurrentBufferIntoEditor()

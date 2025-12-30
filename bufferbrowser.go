@@ -19,21 +19,24 @@ func (be BufferEntry) Format() string {
 	return fmt.Sprintf("%-20s %s", be.buffer.Name, path)
 }
 
+type BufferBrowserCallbacks struct {
+	onSelect func(*Buffer)
+	onExit   func()
+}
+
 // BufferBrowser provides a searchable list of buffers.
 type BufferBrowser struct {
 	app         *App
 	listDisplay *ListDisplay
 	keymap      KeyMap
-	onSelect    func(*Buffer)
-	onExit      func()
+	callbacks   BufferBrowserCallbacks
 }
 
-func CreateBufferBrowser(app *App, onSelect func(*Buffer), onExit func()) *BufferBrowser {
+func CreateBufferBrowser(app *App, callbacks BufferBrowserCallbacks) *BufferBrowser {
 	bb := &BufferBrowser{
 		app:         app,
 		listDisplay: CreateListDisplay(),
-		onSelect:    onSelect,
-		onExit:      onExit,
+		callbacks:   callbacks,
 	}
 	bb.initKeymap()
 	bb.Reload()
@@ -119,8 +122,8 @@ func (bb *BufferBrowser) Reset() {
 }
 
 func (bb *BufferBrowser) Exit() {
-	if bb.onExit != nil {
-		bb.onExit()
+	if bb.callbacks.onExit != nil {
+		bb.callbacks.onExit()
 	}
 }
 
@@ -129,8 +132,8 @@ func (bb *BufferBrowser) handleEnter() {
 	if buf == nil {
 		return
 	}
-	if bb.onSelect != nil {
-		bb.onSelect(buf)
+	if bb.callbacks.onSelect != nil {
+		bb.callbacks.onSelect(buf)
 	}
 }
 

@@ -35,6 +35,11 @@ func (fe FileEntry) Format() string {
 
 type FileFilter func(FileEntry) bool
 
+type FileBrowserCallbacks struct {
+	onExit   func()
+	onSelect func(FileEntry)
+}
+
 type FileBrowser struct {
 	app         *App
 	dir         string
@@ -42,8 +47,7 @@ type FileBrowser struct {
 	listDisplay *ListDisplay
 	filter      FileFilter
 	keymap      KeyMap
-	onExit      func()
-	onSelect    func(FileEntry)
+	callbacks   FileBrowserCallbacks
 }
 
 func (fb *FileBrowser) initKeymap() {
@@ -68,7 +72,7 @@ func (fb *FileBrowser) HandleKey(key Key) (KeyHandler, bool) {
 	return fb.keymap.HandleKey(key)
 }
 
-func CreateFileBrowser(app *App, startDir string, filter FileFilter, onSelect func(FileEntry), onExit func()) (*FileBrowser, error) {
+func CreateFileBrowser(app *App, startDir string, filter FileFilter, callbacks FileBrowserCallbacks) (*FileBrowser, error) {
 	if startDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -81,8 +85,7 @@ func CreateFileBrowser(app *App, startDir string, filter FileFilter, onSelect fu
 		dir:         startDir,
 		listDisplay: CreateListDisplay(),
 		filter:      filter,
-		onSelect:    onSelect,
-		onExit:      onExit,
+		callbacks:   callbacks,
 	}
 	fb.initKeymap()
 	if err := fb.Reload(); err != nil {
@@ -259,8 +262,8 @@ func (fb *FileBrowser) Reset() error {
 }
 
 func (fb *FileBrowser) Exit() {
-	if fb.onExit != nil {
-		fb.onExit()
+	if fb.callbacks.onExit != nil {
+		fb.callbacks.onExit()
 	}
 }
 
@@ -279,8 +282,8 @@ func (fb *FileBrowser) enterSelection(selected *FileEntry) (bool, error) {
 		err := fb.Reload()
 		return true, err
 	}
-	if fb.onSelect != nil {
-		fb.onSelect(*selected)
+	if fb.callbacks.onSelect != nil {
+		fb.callbacks.onSelect(*selected)
 	}
 	return false, nil
 }
