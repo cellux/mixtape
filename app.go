@@ -310,7 +310,9 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 	}
 	nextHandler, handled := app.HandleKey(keyName)
 	if handled {
-		app.chordHandler = nextHandler
+		app.postEvent(func() {
+			app.chordHandler = nextHandler
+		}, false)
 	} else {
 		app.chordHandler = nil
 	}

@@ -1,0 +1,115 @@
+package main
+
+import "fmt"
+
+// BufferEntry adapts Buffer to the ListEntry interface.
+type BufferEntry struct {
+	buffer *Buffer
+}
+
+func (be BufferEntry) GetUniqueId() any {
+	return be.buffer
+}
+
+func (be BufferEntry) Format() string {
+	path := be.buffer.Path
+	if path == "" {
+		path = "(scratch)"
+	}
+	return fmt.Sprintf("%-20s %s", be.buffer.Name, path)
+}
+
+// BufferBrowser provides a searchable list of buffers.
+type BufferBrowser struct {
+	app         *App
+	listDisplay *ListDisplay
+}
+
+func CreateBufferBrowser(app *App) *BufferBrowser {
+	bb := &BufferBrowser{app: app, listDisplay: CreateListDisplay()}
+	bb.Reload()
+	return bb
+}
+
+func (bb *BufferBrowser) SearchText() string {
+	return bb.listDisplay.searchText
+}
+
+func (bb *BufferBrowser) Reload() {
+	entries := make([]ListEntry, len(bb.app.buffers))
+	for i, buf := range bb.app.buffers {
+		entries[i] = BufferEntry{buffer: buf}
+	}
+	bb.listDisplay.SetEntries(entries)
+	if bb.app.currentBuffer != nil {
+		_ = bb.listDisplay.SelectById(bb.app.currentBuffer)
+	}
+}
+
+func (bb *BufferBrowser) MoveBy(delta int) {
+	bb.listDisplay.MoveBy(delta)
+}
+
+func (bb *BufferBrowser) MoveTo(idx int) {
+	bb.listDisplay.MoveTo(idx)
+}
+
+func (bb *BufferBrowser) MoveToEnd() {
+	bb.MoveTo(len(bb.listDisplay.GetFilteredEntries()) - 1)
+}
+
+func (bb *BufferBrowser) PageSize() int {
+	return bb.listDisplay.PageSize()
+}
+
+func (bb *BufferBrowser) CurrentFilteredEntry() *Buffer {
+	filtered := bb.listDisplay.GetFilteredEntries()
+	if len(filtered) == 0 {
+		return nil
+	}
+	idx := bb.listDisplay.GetFilteredSelectionIndex()
+	be := filtered[idx].(BufferEntry)
+	return be.buffer
+}
+
+func (bb *BufferBrowser) OnChar(char rune) {
+	if char == 0 || char < 32 {
+		return
+	}
+	bb.listDisplay.searchText += string(char)
+	bb.listDisplay.SelectFiltered(0)
+}
+
+func (bb *BufferBrowser) HandleBackspace() {
+	if bb.listDisplay.searchText != "" {
+		runes := []rune(bb.listDisplay.searchText)
+		if len(runes) > 0 {
+			bb.listDisplay.searchText = string(runes[:len(runes)-1])
+			bb.listDisplay.SelectFiltered(0)
+		}
+	}
+}
+
+func (bb *BufferBrowser) Reset() {
+	bb.listDisplay.Reset()
+	bb.Reload()
+}
+
+func (bb *BufferBrowser) Render(tp TilePane) {
+	height := tp.Height()
+	if height <= 0 {
+		return
+	}
+
+	header := tp.SubPane(0, 0, tp.Width(), 1)
+	header.DrawString(0, 0, "Buffers")
+	if bb.SearchText() != "" {
+		header.WithFgBg(ColorWhite, ColorGreen, func() {
+			header.DrawString(len("Buffers")+1, 0, fmt.Sprintf("[%s]", bb.SearchText()))
+		})
+	}
+
+	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
+	bb.listDisplay.lastHeight = listPane.Height()
+	bb.listDisplay.Render(listPane)
+}
