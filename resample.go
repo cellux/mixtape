@@ -6,127 +6,109 @@ import (
 	"github.com/dh1tw/gosamplerate"
 )
 
-const resampleBlockFrames = 1024
-
-type streamResampler struct {
-	src       gosamplerate.Src
-	ratio     float64
-	nchannels int
-	in        Stream
-	inBlock   []float32
-	outBuf    []Smp
-	finished  bool
-	closed    bool
-}
-
-func (r *streamResampler) appendSamples(samples []float32) {
-	for _, smp := range samples {
-		r.outBuf = append(r.outBuf, Smp(smp))
-	}
-}
-
-func (r *streamResampler) close() {
-	if r.closed {
-		return
-	}
-	_ = gosamplerate.Delete(r.src)
-	r.closed = true
-}
-
-func (r *streamResampler) flushTail() {
-	for {
-		tail, err := r.src.Process(nil, r.ratio, true)
-		if err != nil || len(tail) == 0 {
-			break
-		}
-		r.appendSamples(tail)
-	}
-	r.close()
-}
-
-func (r *streamResampler) fillAndProcessBlock(next Stepper) {
-	r.inBlock = r.inBlock[:0]
-	for len(r.inBlock) < cap(r.inBlock) {
-		frame, ok := next()
-		if !ok {
-			break
-		}
-		for c := 0; c < r.nchannels; c++ {
-			r.inBlock = append(r.inBlock, float32(frame[c]))
-		}
-	}
-
-	endOfInput := len(r.inBlock) < cap(r.inBlock)
-	if len(r.inBlock) == 0 && endOfInput {
-		r.finished = true
-		r.flushTail()
-		return
-	}
-
-	processed, err := r.src.Process(r.inBlock, r.ratio, endOfInput)
-	if err != nil {
-		r.finished = true
-		r.flushTail()
-		return
-	}
-
-	r.appendSamples(processed)
-	if endOfInput {
-		r.finished = true
-		r.flushTail()
-	}
-}
+const (
+	resampleBlockFrames = 1024
+	resampleMaxRatio    = 1.0 * 16
+	resampleMinRatio    = 1.0 / 16
+)
 
 func resampleStream(input Stream, converterType int, ratio float64) Stream {
 	nchannels := input.nchannels
-	nframes := 0
+
 	if input.nframes > 0 {
-		nframes = int(math.Ceil(float64(input.nframes) * ratio))
+		// one-shot case
+		t := input.Take(nil, input.nframes)
+		tempBuf := make([]float32, t.nframes*t.nchannels)
+		for i, smp := range t.samples {
+			tempBuf[i] = float32(smp)
+		}
+		resampledBuf, err := gosamplerate.Simple(tempBuf, ratio, t.nchannels, converterType)
+		if err != nil {
+			return makeEmptyStream(nchannels)
+		}
+		resampledFrames := len(resampledBuf) / nchannels
+		return makeRewindableStream(nchannels, resampledFrames, func() Stepper {
+			readIndex := 0
+			frame := make(Frame, nchannels)
+			return func() (Frame, bool) {
+				if readIndex == len(resampledBuf) {
+					return nil, false
+				}
+				for ch := range nchannels {
+					frame[ch] = Smp(resampledBuf[readIndex])
+					readIndex++
+				}
+				return frame, true
+			}
+		})
 	}
 
-	return makeRewindableStream(nchannels, nframes, func() Stepper {
-		in := input.clone()
-		src, err := gosamplerate.New(converterType, nchannels, resampleBlockFrames)
+	// streaming case
+	return makeRewindableStream(nchannels, 0, func() Stepper {
+		inputBufferLen := resampleBlockFrames * nchannels
+		outputBufferLen := int(math.Ceil(resampleBlockFrames*resampleMaxRatio)) * nchannels
+		src, err := gosamplerate.New(converterType, nchannels, outputBufferLen)
 		if err != nil {
 			return func() (Frame, bool) { return nil, false }
 		}
 
-		r := &streamResampler{
-			src:       src,
-			ratio:     ratio,
-			nchannels: nchannels,
-			inBlock:   make([]float32, 0, resampleBlockFrames*nchannels),
-			outBuf:    make([]Smp, 0, resampleBlockFrames*nchannels*2),
-		}
+		inBlock := make([]float32, 0, inputBufferLen)
+		var outBlock []float32
 
-		next := in.Next
+		next := input.clone().Next
 		frame := make(Frame, nchannels)
 
+		outIndex := 0
+		endOfInput := false
+
 		return func() (Frame, bool) {
-			for len(r.outBuf) < nchannels {
-				if r.finished {
-					if len(r.outBuf) == 0 {
-						return nil, false
+			for {
+				if outBlock != nil && outIndex < len(outBlock) {
+					for ch := range nchannels {
+						frame[ch] = Smp(outBlock[outIndex])
+						outIndex++
 					}
-					break
+					return frame, true
 				}
-				r.fillAndProcessBlock(next)
+				if endOfInput {
+					return nil, false
+				}
+				outBlock = nil
+				outIndex = 0
+				inBlock = inBlock[:0]
+				writeIndex := 0
+				for writeIndex < cap(inBlock) {
+					frame, ok := next()
+					if !ok {
+						endOfInput = true
+						break
+					}
+					for ch := range nchannels {
+						inBlock = append(inBlock, float32(frame[ch]))
+						writeIndex++
+					}
+				}
+				if writeIndex == 0 {
+					return nil, false
+				}
+				outBlock, err = src.Process(inBlock, ratio, endOfInput)
+				if err != nil {
+					endOfInput = true
+					return nil, false
+				}
 			}
-
-			if len(r.outBuf) < nchannels {
-				return nil, false
-			}
-
-			copy(frame, r.outBuf[:nchannels])
-			r.outBuf = r.outBuf[nchannels:]
-
-			if r.finished && len(r.outBuf) == 0 {
-				r.close()
-			}
-
-			return frame, true
 		}
 	})
+}
+
+func isValidRatio(ratio float64) bool {
+	if !gosamplerate.IsValidRatio(ratio) {
+		return false
+	}
+	if ratio < resampleMinRatio || ratio > resampleMaxRatio {
+		return false
+	}
+	return true
 }
 
 func init() {
@@ -136,7 +118,7 @@ func init() {
 			return err
 		}
 		ratio := float64(ratioNum)
-		if ratio <= 0 {
+		if !isValidRatio(ratio) {
 			return vm.Errorf("resample: invalid ratio: %f", ratio)
 		}
 		converterType, err := vm.GetInt(":resample/converter")
@@ -160,7 +142,7 @@ func init() {
 			return err
 		}
 		ratio := float64(ratioNum)
-		if ratio <= 0 {
+		if !isValidRatio(ratio) {
 			return vm.Errorf("resample: invalid ratio: %f", ratio)
 		}
 		converterType, err := vm.GetInt(":resample/converter")
