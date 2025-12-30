@@ -21,23 +21,25 @@ const (
 )
 
 type App struct {
-	vm            *VM
-	openFiles     map[string]string
-	currentFile   string
-	shouldExit    bool
-	font          *Font
-	fontSize      FontSizeInPoints
-	tm            *TileMap
-	ts            *TileScreen
-	screens       []Screen
-	currentScreen int
-	oto           *OtoState
+	vm                 *VM
+	openFiles          map[string]string
+	currentFile        string
+	shouldExit         bool
+	font               *Font
+	fontSize           FontSizeInPoints
+	tm                 *TileMap
+	ts                 *TileScreen
+	screens            []Screen
+	currentScreenIndex int
+	oto                *OtoState
 	// rTape points to the currently rendered tape
-	rTape        *Tape
-	rTotalFrames int
-	rDoneFrames  int
-	kmm          *KeyMapManager
-	events       chan Event
+	rTape             *Tape
+	rTotalFrames      int
+	rDoneFrames       int
+	globalKeyMap      KeyMap
+	currentKeyHandler KeyHandler
+	chordHandler      KeyHandler
+	events            chan Event
 }
 
 func (app *App) reloadFont() error {
@@ -83,7 +85,7 @@ func (app *App) setFontSize(size FontSizeInPoints) {
 	}
 	app.fontSize = clamped
 	if err := app.reloadFont(); err != nil {
-		logger.Debug("reloadFont error", "error", err)
+		logger.Debug("reloadFont failed", "fontSize", app.fontSize, "error", err)
 	}
 }
 
@@ -100,7 +102,7 @@ func (app *App) ResetFontSize() {
 }
 
 func (app *App) CurrentScreen() Screen {
-	return app.screens[app.currentScreen]
+	return app.screens[app.currentScreenIndex]
 }
 
 func (app *App) postEvent(ev Event, dropIfFull bool) {
@@ -147,7 +149,7 @@ func (app *App) Init() error {
 		return err
 	}
 
-	globalKeyMap := CreateKeyMap(nil)
+	globalKeyMap := CreateKeyMap()
 	globalKeyMap.Bind("C-g", app.Reset)
 	globalKeyMap.Bind("Escape", app.Reset)
 	globalKeyMap.Bind("C-z", UndoLastAction)
@@ -157,26 +159,25 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-S-=", app.IncreaseFontSize)
 	globalKeyMap.Bind("C--", app.DecreaseFontSize)
 	globalKeyMap.Bind("C-0", app.ResetFontSize)
+	app.globalKeyMap = globalKeyMap
 
-	helpScreen, err := CreateHelpScreen(app, globalKeyMap, string(helpBytes))
+	helpScreen, err := CreateHelpScreen(app, string(helpBytes))
 	if err != nil {
 		return err
 	}
 
-	editScreen, err := CreateEditScreen(app, globalKeyMap, tapeScript)
+	editScreen, err := CreateEditScreen(app, tapeScript)
 	if err != nil {
 		return err
 	}
 
-	fileScreen, err := CreateFileScreen(app, globalKeyMap)
+	fileScreen, err := CreateFileScreen(app)
 	if err != nil {
 		return err
 	}
 
 	app.screens = []Screen{helpScreen, editScreen, fileScreen}
-	app.currentScreen = 1
-	app.kmm = CreateKeyMapManager()
-	app.kmm.SetCurrentKeyMap(app.CurrentScreen().Keymap())
+	app.SelectScreen(1)
 
 	app.vm.tapeProgressCallback = func(t *Tape, nftotal, nfdone int) {
 		app.postEvent(func() {
@@ -202,8 +203,8 @@ func (app *App) SelectScreen(index int) {
 	if index < 0 || index >= len(app.screens) {
 		return
 	}
-	app.currentScreen = index
-	app.kmm.SetCurrentKeyMap(app.CurrentScreen().Keymap())
+	app.currentScreenIndex = index
+	app.currentKeyHandler = app.CurrentScreen()
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
@@ -265,12 +266,35 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 	if modes&glfw.ModControl != 0 {
 		keyName = "C-" + keyName
 	}
-	app.kmm.HandleKey(keyName)
+	app.HandleKey(keyName)
+}
+
+func (app *App) HandleKey(key Key) {
+	var nextHandler KeyHandler
+	var handled bool
+	if app.chordHandler != nil {
+		nextHandler, handled = app.chordHandler.HandleKey(key)
+		if handled {
+			app.chordHandler = nextHandler
+			return
+		}
+	}
+	app.chordHandler = nil
+	nextHandler, handled = app.currentKeyHandler.HandleKey(key)
+	if handled {
+		app.chordHandler = nextHandler
+		return
+	}
+	nextHandler, handled = app.globalKeyMap.HandleKey(key)
+	if handled {
+		app.chordHandler = nextHandler
+		return
+	}
 }
 
 func (app *App) OnChar(char rune) {
 	//logger.Debug("OnChar", "char", char)
-	if app.kmm.IsInsideKeySequence() {
+	if app.chordHandler != nil {
 		return
 	}
 	if cs, ok := app.CurrentScreen().(CharScreen); ok {
@@ -351,7 +375,7 @@ func (app *App) Reset() {
 	for _, screen := range app.screens {
 		screen.Reset()
 	}
-	app.kmm.Reset()
+	app.chordHandler = nil
 }
 
 func (app *App) Close() {

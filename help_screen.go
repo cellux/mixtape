@@ -6,12 +6,12 @@ type HelpScreen struct {
 	keymap KeyMap
 }
 
-func CreateHelpScreen(app *App, parent KeyMap, helpText string) (*HelpScreen, error) {
+func CreateHelpScreen(app *App, helpText string) (*HelpScreen, error) {
 	editor := CreateEditor()
 	editor.SetText(helpText)
 	editor.SetReadOnly(true)
 
-	keymap := CreateKeyMap(parent)
+	keymap := CreateKeyMap()
 
 	// Navigation
 	keymap.Bind("Left", func() { editor.AdvanceColumn(-1) })
@@ -53,8 +53,8 @@ func (hs *HelpScreen) Render(app *App, ts *TileScreen) {
 	hs.editor.Render(screenPane, nil)
 }
 
-func (hs *HelpScreen) Keymap() KeyMap {
-	return hs.keymap
+func (hs *HelpScreen) HandleKey(key Key) (KeyHandler, bool) {
+	return hs.keymap.HandleKey(key)
 }
 
 func (hs *HelpScreen) Reset() {

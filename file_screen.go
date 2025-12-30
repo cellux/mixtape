@@ -17,8 +17,8 @@ type FileScreen struct {
 	tapeDisplay    *TapeDisplay
 }
 
-func CreateFileScreen(app *App, parent KeyMap) (*FileScreen, error) {
-	keymap := CreateKeyMap(parent)
+func CreateFileScreen(app *App) (*FileScreen, error) {
+	keymap := CreateKeyMap()
 	tapeDisplay, err := CreateTapeDisplay()
 	if err != nil {
 		return nil, err
@@ -76,6 +76,10 @@ func (fs *FileScreen) copyPath() {
 
 func (fs *FileScreen) Keymap() KeyMap {
 	return fs.keymap
+}
+
+func (fs *FileScreen) HandleKey(key Key) (KeyHandler, bool) {
+	return fs.keymap.HandleKey(key)
 }
 
 func (fs *FileScreen) Reset() {

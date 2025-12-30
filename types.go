@@ -18,7 +18,7 @@ type Frame = []Smp
 // Screen is a UI screen that can render itself and provide a keymap overlay.
 type Screen interface {
 	Render(app *App, ts *TileScreen)
-	Keymap() KeyMap
+	HandleKey(key Key) (KeyHandler, bool)
 	Reset()
 	Close()
 }

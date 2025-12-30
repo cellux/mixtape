@@ -13,102 +13,57 @@ type Key = string
 
 type KeySeq = []Key
 
-type KeyHandler func()
+type KeyHandler interface {
+	HandleKey(key Key) (nextHandler KeyHandler, handled bool)
+}
 
 // KeyMap maps keys to KeyHandlers or KeyMaps
 type KeyMap map[Key]any
 
-func CreateKeyMap(parent KeyMap) KeyMap {
-	km := make(KeyMap)
-	if parent != nil {
-		km["_parent"] = parent
-	}
-	return km
+func CreateKeyMap() KeyMap {
+	return make(KeyMap)
 }
 
-func (km KeyMap) findOrCreateKeyMap(keyseq KeySeq, createMissing bool) KeyMap {
-	current := km
-	for len(keyseq) > 1 {
-		k := keyseq[0]
-		if keymap, ok := current[k].(KeyMap); ok {
-			current = keymap
-		} else if createMissing {
-			keymap := make(KeyMap)
-			current[k] = keymap
-			current = keymap
-		} else {
-			return nil
-		}
-		keyseq = keyseq[1:]
+func (km KeyMap) BindSeq(keyseq KeySeq, handler any) {
+	if len(keyseq) == 0 {
+		return
 	}
-	return current
+	k := keyseq[0]
+	if len(keyseq) == 1 {
+		km[k] = handler
+		return
+	}
+	value, exists := km[k]
+	if !exists {
+		value = make(KeyMap)
+		km[k] = value
+	}
+	if _, ok := value.(KeyMap); !ok {
+		value = make(KeyMap)
+		km[k] = value
+	}
+	keymap := value.(KeyMap)
+	keymap.BindSeq(keyseq[1:], handler)
 }
 
-func (km KeyMap) findKeyMap(keyseq KeySeq) KeyMap {
-	return km.findOrCreateKeyMap(keyseq, false)
-}
-
-func (km KeyMap) HandleKeySeq(keyseq KeySeq) KeyMap {
-	keymap := km.findKeyMap(keyseq)
-	if keymap != nil {
-		k := keyseq[len(keyseq)-1]
-		if value, ok := keymap[k]; ok {
-			switch v := value.(type) {
-			case KeyHandler:
-				v()
-				return nil
-			case KeyMap:
-				return v
-			}
-		}
-	}
-	if parent, ok := km["_parent"]; ok {
-		return parent.(KeyMap).HandleKeySeq(keyseq)
-	}
-	return nil
-}
-
-func (km KeyMap) Bind(keys string, handler KeyHandler) {
+func (km KeyMap) Bind(keys string, handler any) {
 	keyseq := strings.Fields(keys)
-	keymap := km.findOrCreateKeyMap(keyseq, true)
-	k := keyseq[len(keyseq)-1]
-	keymap[k] = handler
+	km.BindSeq(keyseq, handler)
 }
 
-type KeyMapManager struct {
-	currentMap     KeyMap
-	currentKeys    KeySeq
-	isResetPending bool
-}
-
-func CreateKeyMapManager() *KeyMapManager {
-	keymap := CreateKeyMap(nil)
-	return &KeyMapManager{currentMap: keymap}
-}
-
-func (kmm *KeyMapManager) IsInsideKeySequence() bool {
-	return kmm.currentKeys != nil
-}
-
-func (kmm *KeyMapManager) Reset() {
-	kmm.currentKeys = nil
-	kmm.isResetPending = false
-}
-
-func (kmm *KeyMapManager) SetCurrentKeyMap(keymap KeyMap) {
-	kmm.currentMap = keymap
-	kmm.Reset()
-}
-
-func (kmm *KeyMapManager) HandleKey(key Key) {
-	if kmm.isResetPending {
-		kmm.Reset()
+func (km KeyMap) HandleKey(key Key) (KeyHandler, bool) {
+	if v, ok := km[key]; ok {
+		switch vv := v.(type) {
+		case KeyMap:
+			return vv, true
+		case func():
+			vv()
+			return nil, true
+		case KeyHandler:
+			return vv.HandleKey(key)
+		default:
+			return nil, false
+		}
 	}
-	keyseq := append(kmm.currentKeys, key)
-	keymap := kmm.currentMap.HandleKeySeq(keyseq)
-	if keymap != nil {
-		kmm.currentKeys = keyseq
-	} else {
-		kmm.isResetPending = true
-	}
+	return nil, false
 }

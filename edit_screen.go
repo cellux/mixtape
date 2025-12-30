@@ -14,7 +14,7 @@ type EditScreen struct {
 	keymap      KeyMap
 }
 
-func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen, error) {
+func CreateEditScreen(app *App, initialText string) (*EditScreen, error) {
 	editor := CreateEditor()
 	editor.SetText(initialText)
 	tapeDisplay, err := CreateTapeDisplay()
@@ -22,7 +22,7 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 		return nil, err
 	}
 
-	keymap := CreateKeyMap(parent)
+	keymap := CreateKeyMap()
 
 	es := &EditScreen{
 		editor:      editor,
@@ -179,6 +179,10 @@ func CreateEditScreen(app *App, parent KeyMap, initialText string) (*EditScreen,
 	})
 
 	return es, nil
+}
+
+func (es *EditScreen) HandleKey(key Key) (KeyHandler, bool) {
+	return es.keymap.HandleKey(key)
 }
 
 func (es *EditScreen) Render(app *App, ts *TileScreen) {
