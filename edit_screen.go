@@ -276,7 +276,7 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		es.enterFileOpenMode()
 	})
 	keymap.Bind("C-x b", func() {
-		es.enterBufferSwitchMode()
+		es.switchToBuffer(es.app.lastBuffer)
 	})
 	keymap.Bind("C-x C-b", func() {
 		es.enterBufferSwitchMode()
@@ -422,9 +422,20 @@ func (es *EditScreen) handleBufferBrowserEnter() {
 	if buf == nil {
 		return
 	}
+	es.switchToBuffer(buf)
+	es.exitBufferSwitchMode()
+}
+
+func (es *EditScreen) switchToBuffer(buf *Buffer) {
+	if buf == nil {
+		return
+	}
+	es.syncEditorToBuffer()
+	if es.app.currentBuffer != nil && es.app.currentBuffer != buf {
+		es.app.lastBuffer = es.app.currentBuffer
+	}
 	es.app.currentBuffer = buf
 	es.loadCurrentBufferIntoEditor()
-	es.exitBufferSwitchMode()
 }
 
 func (es *EditScreen) syncEditorToBuffer() {

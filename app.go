@@ -24,6 +24,7 @@ type App struct {
 	vm                *VM
 	buffers           []*Buffer
 	currentBuffer     *Buffer
+	lastBuffer        *Buffer
 	shouldExit        bool
 	font              *Font
 	fontSize          FontSizeInPoints
