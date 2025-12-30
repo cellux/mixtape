@@ -11,6 +11,8 @@ import (
 	"unicode"
 )
 
+var ErrEvalCancelled = errors.New("VM evaluation cancelled")
+
 type Val interface {
 	fmt.Stringer
 	getVal() Val
@@ -90,18 +92,10 @@ type VM struct {
 	quoteDepth  int           // nesting level {... {.. {..} ..} ...}
 	tokenStack  Box[[]*Token] // call stack of currently executing tokens
 
-	// Evaluation lifecycle
-	//
-	// isEvaluating is used for quick checks inside tight loops.
-	// cancelCh is closed to request cancellation of the current evaluation.
-	// doneCh is closed when the current evaluation finishes (success, error, or cancellation).
-	//
-	// These channels are per-evaluation run, guarded by evalMu.
-	evalMu       sync.Mutex
-	isEvaluating Box[bool]
-	cancelCh     chan struct{}
-	doneCh       chan struct{}
-
+	evalMu               sync.Mutex
+	evalDepth            Box[int] // increases at every ParseAndEval() call
+	cancelRequested      bool     // closed when the current evaluation finishes (success, error, or cancellation).
+	doneCh               chan struct{}
 	evalResult           Val   // top of stack after a successful evaluation
 	errResult            error // last evaluation error
 	tapeProgressCallback func(t *Tape, nftotal, nfdone int)
@@ -112,6 +106,7 @@ func CreateVM() (*VM, error) {
 		valStack:    make(Vec, 0, 4096),
 		envStack:    []Map{rootEnv},
 		markerStack: make([]int, 0, 16),
+		doneCh:      make(chan struct{}),
 	}
 	return vm, nil
 }
@@ -143,34 +138,38 @@ func (vm *VM) RestoreStackState(state *VMStackState) {
 }
 
 func (vm *VM) Reset() {
+	vm.evalMu.Lock()
+	defer vm.evalMu.Unlock()
 	vm.valStack = vm.valStack[:0]
 	vm.envStack = vm.envStack[:1]
 	vm.markerStack = vm.markerStack[:0]
 	vm.quoteBuffer = nil
 	vm.quoteDepth = 0
 	vm.tokenStack.Set(nil)
-	vm.isEvaluating.Set(false)
-
-	// Do not close doneCh/cancelCh here: those are lifecycle signals managed by ParseAndEval.
+	vm.evalDepth.Set(0)
+	vm.cancelRequested = false
+	vm.doneCh = make(chan struct{})
+	vm.evalResult = nil
+	vm.errResult = nil
 }
 
 func (vm *VM) IsEvaluating() bool {
-	return vm.isEvaluating.Get()
+	vm.evalMu.Lock()
+	defer vm.evalMu.Unlock()
+	return vm.evalDepth.Get() > 0
+}
+
+func (vm *VM) CancelRequested() bool {
+	vm.evalMu.Lock()
+	defer vm.evalMu.Unlock()
+	return vm.cancelRequested
 }
 
 func (vm *VM) CancelEvaluation() {
-	// Fast path: flip the flag so cooperative checks can bail out quickly.
-	vm.isEvaluating.Set(false)
-
-	// Signal cancellation (idempotent) and then wait for the evaluation to finish.
 	vm.evalMu.Lock()
-	cancelCh := vm.cancelCh
+	vm.cancelRequested = true
 	doneCh := vm.doneCh
 	vm.evalMu.Unlock()
-
-	if cancelCh != nil {
-		close(cancelCh)
-	}
 	if doneCh != nil {
 		<-doneCh
 	}
@@ -593,23 +592,10 @@ func (vm *VM) Errorf(format string, a ...any) error {
 	return vm.Err(fmt.Errorf(format, a...))
 }
 
-var ErrEvalCancelled = errors.New("VM evaluation cancelled")
-
 func (vm *VM) Eval(val Val) error {
-	if !vm.isEvaluating.Get() {
-		// someone called vm.CancelEvaluation()
+	if vm.CancelRequested() {
+		// someone called CancelEvaluation()
 		return ErrEvalCancelled
-	}
-	// Also honor explicit cancel signal if present.
-	vm.evalMu.Lock()
-	cancelCh := vm.cancelCh
-	vm.evalMu.Unlock()
-	if cancelCh != nil {
-		select {
-		case <-cancelCh:
-			return ErrEvalCancelled
-		default:
-		}
 	}
 	v := val.getVal()
 	if vm.IsQuoting() {
@@ -643,50 +629,42 @@ func (vm *VM) Eval(val Val) error {
 	return nil
 }
 
-func (vm *VM) ParseAndEval(r io.Reader, filename string) (err error) {
-	// Set up per-run cancellation + completion signals.
-	vm.evalMu.Lock()
-	vm.isEvaluating.Set(true)
-	// Keep previous eval result until eval success, but clear any errors
-	vm.errResult = nil
-	vm.cancelCh = make(chan struct{})
-	vm.doneCh = make(chan struct{})
-	doneCh := vm.doneCh
-	vm.evalMu.Unlock()
-
-	defer func() {
-		// Always mark evaluation complete and unblock any CancelEvaluation waiters.
-		vm.isEvaluating.Set(false)
-		vm.evalMu.Lock()
-		close(doneCh)
-		// Clear channels so a later CancelEvaluation doesn't wait on an old run.
-		vm.cancelCh = nil
-		vm.doneCh = nil
-		vm.evalMu.Unlock()
-
+func (vm *VM) ParseAndEval(r io.Reader, filename string) error {
+	evalDepth := vm.evalDepth.Get()
+	if evalDepth == 0 {
 		vm.Reset()
-	}()
+	}
 
 	code, parseErr := vm.Parse(r, filename)
 	if parseErr != nil {
-		vm.errResult = parseErr
 		return parseErr
 	}
-	err = vm.Eval(code)
-	if err != nil {
-		if !errors.Is(err, ErrEvalCancelled) {
-			vm.errResult = err
-		}
-		return err
+
+	vm.evalDepth.Set(evalDepth + 1)
+	evalErr := vm.Eval(code)
+	vm.evalDepth.Set(evalDepth)
+
+	evalCancelled := evalErr != nil && errors.Is(evalErr, ErrEvalCancelled)
+	if evalDepth > 0 && !evalCancelled {
+		return evalErr
 	}
-	result := vm.Top()
-	if stream, ok := result.(Stream); ok {
-		if stream.nframes > 0 {
-			result = stream.Take(nil, stream.nframes)
+
+	// end of top-level evaluation
+	if evalErr != nil {
+		if !evalCancelled {
+			vm.errResult = evalErr
 		}
+	} else {
+		result := vm.Top()
+		if stream, ok := result.(Stream); ok {
+			if stream.nframes > 0 {
+				result = stream.Take(nil, stream.nframes)
+			}
+		}
+		vm.evalResult = result
 	}
-	vm.evalResult = result
-	return nil
+	close(vm.doneCh)
+	return evalErr
 }
 
 func (vm *VM) ReportTapeProgress(t *Tape, nftotal, nfdone int) {

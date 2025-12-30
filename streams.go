@@ -175,7 +175,7 @@ func (s Stream) Take(vm *VM, nframes int) *Tape {
 		if vm != nil {
 			// Check cancellation frequently enough to make C-g feel responsive,
 			// but only report progress occasionally.
-			if !vm.IsEvaluating() {
+			if vm.CancelRequested() {
 				break
 			}
 			if pct1 > 0 && writeIndex%pct1 == 0 {
