@@ -354,6 +354,19 @@ func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	app.currentScreen.Render(app, ts)
+	if err := app.lastError; err != nil {
+		pane := ts.GetPane()
+		if pane.Height() > 0 {
+			_, statusPane := pane.SplitY(-1)
+			width := statusPane.Width()
+			statusPane.WithFgBg(ColorWhite, ColorRed, func() {
+				for x := 0; x < width; x++ {
+					statusPane.DrawRune(x, 0, ' ')
+				}
+				statusPane.DrawString(0, 0, err.Error())
+			})
+		}
+	}
 	ts.Render()
 	return nil
 }
@@ -404,7 +417,7 @@ func (app *App) Reset() {
 	app.rTape = nil
 	app.rTotalFrames = 0
 	app.rDoneFrames = 0
-	app.lastError = nil
+	app.ClearLastError()
 	app.drainEvents()
 	app.oto.StopAllPlayers()
 	for _, screen := range app.screens {

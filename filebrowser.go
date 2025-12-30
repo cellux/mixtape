@@ -34,13 +34,13 @@ func (fe FileEntry) Format() string {
 }
 
 type FileBrowser struct {
+	app         *App
 	dir         string
 	entries     []FileEntry
 	listDisplay *ListDisplay
-	lastErr     error
 }
 
-func CreateFileBrowser(startDir string) (*FileBrowser, error) {
+func CreateFileBrowser(app *App, startDir string) (*FileBrowser, error) {
 	if startDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -48,7 +48,7 @@ func CreateFileBrowser(startDir string) (*FileBrowser, error) {
 		}
 		startDir = cwd
 	}
-	fb := &FileBrowser{dir: startDir, listDisplay: CreateListDisplay()}
+	fb := &FileBrowser{app: app, dir: startDir, listDisplay: CreateListDisplay()}
 	if err := fb.Reload(); err != nil {
 		return nil, err
 	}
@@ -61,10 +61,6 @@ func (fb *FileBrowser) Directory() string {
 
 func (fb *FileBrowser) SearchText() string {
 	return fb.listDisplay.searchText
-}
-
-func (fb *FileBrowser) LastError() error {
-	return fb.lastErr
 }
 
 func (fb *FileBrowser) MoveBy(delta int) {
@@ -121,10 +117,9 @@ func (fb *FileBrowser) Reload() error {
 	if err != nil {
 		fb.entries = nil
 		fb.listDisplay.SetEntries(nil)
-		fb.lastErr = err
+		fb.app.SetLastError(err)
 		return err
 	}
-	fb.lastErr = nil
 	slices.SortFunc(entries, func(a, b os.DirEntry) int {
 		return strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 	})
@@ -237,7 +232,6 @@ func (fb *FileBrowser) OnChar(char rune) {
 }
 
 func (fb *FileBrowser) Reset() error {
-	fb.lastErr = nil
 	fb.listDisplay.Reset()
 	return fb.Reload()
 }

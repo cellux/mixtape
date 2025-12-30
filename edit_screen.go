@@ -234,13 +234,7 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
 	currentToken := app.vm.CurrentToken()
 	es.editor.Render(editorBufferPane, currentToken)
-	if app.lastError != nil {
-		editorStatusPane.WithFgBg(ColorWhite, ColorRed, func() {
-			editorStatusPane.DrawString(0, 0, app.lastError.Error())
-		})
-	} else {
-		es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
-	}
+	es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
 }
 
 func (es *EditScreen) syncEditorToBuffer() {

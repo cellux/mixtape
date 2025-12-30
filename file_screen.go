@@ -23,7 +23,7 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileBrowser, err := CreateFileBrowser("")
+	fileBrowser, err := CreateFileBrowser(app, "")
 	if err != nil {
 		return nil, err
 	}
@@ -105,12 +105,6 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 		})
 	}
 
-	var statusPane TilePane
-	lastError := fs.app.lastError
-	if lastError != nil {
-		bodyPane, statusPane = bodyPane.SplitY(-1)
-	}
-
 	listPane := bodyPane
 	if fs.lastTape != nil {
 		var tapePane TilePane
@@ -124,12 +118,6 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 
 	fs.fileBrowser.listDisplay.lastHeight = listPane.Height()
 	fs.fileBrowser.Render(&listPane)
-
-	if lastError != nil {
-		statusPane.WithFgBg(ColorWhite, ColorRed, func() {
-			statusPane.DrawString(0, 0, lastError.Error())
-		})
-	}
 }
 
 func (fs *FileScreen) OnChar(app *App, char rune) {
