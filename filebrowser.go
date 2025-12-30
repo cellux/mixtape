@@ -41,9 +41,34 @@ type FileBrowser struct {
 	entries     []FileEntry
 	listDisplay *ListDisplay
 	filter      FileFilter
+	keymap      KeyMap
+	onExit      func()
+	onSelect    func(FileEntry)
 }
 
-func CreateFileBrowser(app *App, startDir string, filter FileFilter) (*FileBrowser, error) {
+func (fb *FileBrowser) initKeymap() {
+	fb.keymap = CreateKeyMap()
+	fb.keymap.Bind("Up", func() { fb.MoveBy(-1) })
+	fb.keymap.Bind("Down", func() { fb.MoveBy(1) })
+	fb.keymap.Bind("Home", func() { fb.MoveTo(0) })
+	fb.keymap.Bind("End", func() { fb.MoveToEnd() })
+	fb.keymap.Bind("PageUp", func() { fb.MoveBy(-fb.PageSize()) })
+	fb.keymap.Bind("PageDown", func() { fb.MoveBy(fb.PageSize()) })
+	fb.keymap.Bind("Enter", func() { fb.handleEnter() })
+	fb.keymap.Bind("Backspace", func() { _, _ = fb.HandleBackspace() })
+	fb.keymap.Bind("Escape", func() { fb.Exit() })
+	fb.keymap.Bind("C-g", func() { fb.Exit() })
+}
+
+func (fb *FileBrowser) Keymap() KeyMap {
+	return fb.keymap
+}
+
+func (fb *FileBrowser) HandleKey(key Key) (KeyHandler, bool) {
+	return fb.keymap.HandleKey(key)
+}
+
+func CreateFileBrowser(app *App, startDir string, filter FileFilter, onSelect func(FileEntry), onExit func()) (*FileBrowser, error) {
 	if startDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -51,7 +76,15 @@ func CreateFileBrowser(app *App, startDir string, filter FileFilter) (*FileBrows
 		}
 		startDir = cwd
 	}
-	fb := &FileBrowser{app: app, dir: startDir, listDisplay: CreateListDisplay(), filter: filter}
+	fb := &FileBrowser{
+		app:         app,
+		dir:         startDir,
+		listDisplay: CreateListDisplay(),
+		filter:      filter,
+		onSelect:    onSelect,
+		onExit:      onExit,
+	}
+	fb.initKeymap()
 	if err := fb.Reload(); err != nil {
 		return nil, err
 	}
@@ -213,16 +246,7 @@ func (fb *FileBrowser) GoParent() (bool, error) {
 
 func (fb *FileBrowser) Enter() (bool, error) {
 	selected := fb.SelectedEntry()
-	if selected == nil {
-		return false, nil
-	}
-	if !selected.isDir {
-		return false, nil
-	}
-	fb.dir = selected.path
-	fb.listDisplay.Reset()
-	err := fb.Reload()
-	return true, err
+	return fb.enterSelection(selected)
 }
 
 func (fb *FileBrowser) OnChar(char rune) {
@@ -232,6 +256,33 @@ func (fb *FileBrowser) OnChar(char rune) {
 func (fb *FileBrowser) Reset() error {
 	fb.listDisplay.Reset()
 	return fb.Reload()
+}
+
+func (fb *FileBrowser) Exit() {
+	if fb.onExit != nil {
+		fb.onExit()
+	}
+}
+
+func (fb *FileBrowser) handleEnter() {
+	selected := fb.CurrentFilteredEntry()
+	fb.enterSelection(selected)
+}
+
+func (fb *FileBrowser) enterSelection(selected *FileEntry) (bool, error) {
+	if selected == nil {
+		return false, nil
+	}
+	if selected.isDir {
+		fb.dir = selected.path
+		fb.listDisplay.Reset()
+		err := fb.Reload()
+		return true, err
+	}
+	if fb.onSelect != nil {
+		fb.onSelect(*selected)
+	}
+	return false, nil
 }
 
 func (fb *FileBrowser) Render(tp TilePane) {

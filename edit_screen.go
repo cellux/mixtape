@@ -26,13 +26,11 @@ type EditScreen struct {
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
 
-	fileBrowser       *FileBrowser
-	fileBrowserKeymap KeyMap
-	showFileBrowser   bool
+	fileBrowser     *FileBrowser
+	showFileBrowser bool
 
-	bufferBrowser       *BufferBrowser
-	bufferBrowserKeymap KeyMap
-	showBufferBrowser   bool
+	bufferBrowser     *BufferBrowser
+	showBufferBrowser bool
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -56,40 +54,14 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 			return true
 		}
 		return filepath.Ext(fe.name) == ".tape"
-	})
+	}, es.handleFileBrowserSelection, es.exitFileOpenMode)
 	if err != nil {
 		return nil, err
 	}
 	es.fileBrowser = fb
 
-	bb := CreateBufferBrowser(app)
+	bb := CreateBufferBrowser(app, es.handleBufferBrowserEnter, es.exitBufferSwitchMode)
 	es.bufferBrowser = bb
-
-	fbKeyMap := CreateKeyMap()
-	fbKeyMap.Bind("Up", func() { es.fileBrowser.MoveBy(-1) })
-	fbKeyMap.Bind("Down", func() { es.fileBrowser.MoveBy(1) })
-	fbKeyMap.Bind("Home", func() { es.fileBrowser.MoveTo(0) })
-	fbKeyMap.Bind("End", func() { es.fileBrowser.MoveToEnd() })
-	fbKeyMap.Bind("PageUp", func() { es.fileBrowser.MoveBy(-es.fileBrowser.PageSize()) })
-	fbKeyMap.Bind("PageDown", func() { es.fileBrowser.MoveBy(es.fileBrowser.PageSize()) })
-	fbKeyMap.Bind("Enter", func() { es.handleFileBrowserEnter() })
-	fbKeyMap.Bind("Escape", es.exitFileOpenMode)
-	fbKeyMap.Bind("C-g", es.exitFileOpenMode)
-	fbKeyMap.Bind("Backspace", func() { es.handleFileBrowserBackspace() })
-	es.fileBrowserKeymap = fbKeyMap
-
-	bbKeyMap := CreateKeyMap()
-	bbKeyMap.Bind("Up", func() { es.bufferBrowser.MoveBy(-1) })
-	bbKeyMap.Bind("Down", func() { es.bufferBrowser.MoveBy(1) })
-	bbKeyMap.Bind("Home", func() { es.bufferBrowser.MoveTo(0) })
-	bbKeyMap.Bind("End", func() { es.bufferBrowser.MoveToEnd() })
-	bbKeyMap.Bind("PageUp", func() { es.bufferBrowser.MoveBy(-es.bufferBrowser.PageSize()) })
-	bbKeyMap.Bind("PageDown", func() { es.bufferBrowser.MoveBy(es.bufferBrowser.PageSize()) })
-	bbKeyMap.Bind("Enter", func() { es.handleBufferBrowserEnter() })
-	bbKeyMap.Bind("Backspace", func() { es.bufferBrowser.HandleBackspace() })
-	bbKeyMap.Bind("Escape", es.exitBufferSwitchMode)
-	bbKeyMap.Bind("C-g", es.exitBufferSwitchMode)
-	es.bufferBrowserKeymap = bbKeyMap
 
 	es.loadCurrentBufferIntoEditor()
 
@@ -337,13 +309,13 @@ func (es *EditScreen) UndoLastAction() {
 
 func (es *EditScreen) HandleKey(key Key) (KeyHandler, bool) {
 	if es.showFileBrowser {
-		next, handled := es.fileBrowserKeymap.HandleKey(key)
+		next, handled := es.fileBrowser.HandleKey(key)
 		if handled {
 			return next, true
 		}
 	}
 	if es.showBufferBrowser {
-		next, handled := es.bufferBrowserKeymap.HandleKey(key)
+		next, handled := es.bufferBrowser.HandleKey(key)
 		if handled {
 			return next, true
 		}
@@ -417,8 +389,7 @@ func (es *EditScreen) exitBufferSwitchMode() {
 	es.showBufferBrowser = false
 }
 
-func (es *EditScreen) handleBufferBrowserEnter() {
-	buf := es.bufferBrowser.CurrentFilteredEntry()
+func (es *EditScreen) handleBufferBrowserEnter(buf *Buffer) {
 	if buf == nil {
 		return
 	}
@@ -460,21 +431,9 @@ func (es *EditScreen) exitFileOpenMode() {
 	es.showFileBrowser = false
 }
 
-func (es *EditScreen) handleFileBrowserBackspace() {
-	_, err := es.fileBrowser.HandleBackspace()
-	if err != nil {
-		es.app.SetLastError(err)
-	}
-}
-
-func (es *EditScreen) handleFileBrowserEnter() {
-	entry := es.fileBrowser.CurrentFilteredEntry()
-	if entry == nil {
-		return
-	}
+func (es *EditScreen) handleFileBrowserSelection(entry FileEntry) {
 	if entry.isDir {
-		_, err := es.fileBrowser.Enter()
-		if err != nil {
+		if _, err := es.fileBrowser.Enter(); err != nil {
 			es.app.SetLastError(err)
 		}
 		return
@@ -496,6 +455,7 @@ func (es *EditScreen) handleFileBrowserEnter() {
 	es.loadCurrentBufferIntoEditor()
 	es.exitFileOpenMode()
 }
+
 func (es *EditScreen) Reset() {
 	es.editor.Reset()
 	es.showBufferBrowser = false

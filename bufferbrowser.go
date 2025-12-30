@@ -23,12 +23,35 @@ func (be BufferEntry) Format() string {
 type BufferBrowser struct {
 	app         *App
 	listDisplay *ListDisplay
+	keymap      KeyMap
+	onSelect    func(*Buffer)
+	onExit      func()
 }
 
-func CreateBufferBrowser(app *App) *BufferBrowser {
-	bb := &BufferBrowser{app: app, listDisplay: CreateListDisplay()}
+func CreateBufferBrowser(app *App, onSelect func(*Buffer), onExit func()) *BufferBrowser {
+	bb := &BufferBrowser{
+		app:         app,
+		listDisplay: CreateListDisplay(),
+		onSelect:    onSelect,
+		onExit:      onExit,
+	}
+	bb.initKeymap()
 	bb.Reload()
 	return bb
+}
+
+func (bb *BufferBrowser) initKeymap() {
+	bb.keymap = CreateKeyMap()
+	bb.keymap.Bind("Up", func() { bb.MoveBy(-1) })
+	bb.keymap.Bind("Down", func() { bb.MoveBy(1) })
+	bb.keymap.Bind("Home", func() { bb.MoveTo(0) })
+	bb.keymap.Bind("End", func() { bb.MoveToEnd() })
+	bb.keymap.Bind("PageUp", func() { bb.MoveBy(-bb.PageSize()) })
+	bb.keymap.Bind("PageDown", func() { bb.MoveBy(bb.PageSize()) })
+	bb.keymap.Bind("Backspace", func() { bb.HandleBackspace() })
+	bb.keymap.Bind("Enter", func() { bb.handleEnter() })
+	bb.keymap.Bind("Escape", func() { bb.Exit() })
+	bb.keymap.Bind("C-g", func() { bb.Exit() })
 }
 
 func (bb *BufferBrowser) SearchText() string {
@@ -72,6 +95,14 @@ func (bb *BufferBrowser) CurrentFilteredEntry() *Buffer {
 	return be.buffer
 }
 
+func (bb *BufferBrowser) Keymap() KeyMap {
+	return bb.keymap
+}
+
+func (bb *BufferBrowser) HandleKey(key Key) (KeyHandler, bool) {
+	return bb.keymap.HandleKey(key)
+}
+
 func (bb *BufferBrowser) OnChar(char rune) {
 	bb.listDisplay.AppendSearchChar(char)
 }
@@ -85,6 +116,22 @@ func (bb *BufferBrowser) HandleBackspace() {
 func (bb *BufferBrowser) Reset() {
 	bb.listDisplay.Reset()
 	bb.Reload()
+}
+
+func (bb *BufferBrowser) Exit() {
+	if bb.onExit != nil {
+		bb.onExit()
+	}
+}
+
+func (bb *BufferBrowser) handleEnter() {
+	buf := bb.CurrentFilteredEntry()
+	if buf == nil {
+		return
+	}
+	if bb.onSelect != nil {
+		bb.onSelect(buf)
+	}
 }
 
 func (bb *BufferBrowser) Render(tp TilePane) {
