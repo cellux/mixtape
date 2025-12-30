@@ -21,17 +21,18 @@ const (
 )
 
 type App struct {
-	vm                 *VM
-	openFiles          map[string]string
-	currentFile        string
-	shouldExit         bool
-	font               *Font
-	fontSize           FontSizeInPoints
-	tm                 *TileMap
-	ts                 *TileScreen
-	screens            []Screen
-	currentScreenIndex int
-	oto                *OtoState
+	vm                *VM
+	openFiles         map[string]string
+	currentFile       string
+	shouldExit        bool
+	font              *Font
+	fontSize          FontSizeInPoints
+	tm                *TileMap
+	ts                *TileScreen
+	screens           map[string]Screen
+	currentScreenName string
+	currentScreen     Screen
+	oto               *OtoState
 	// rTape points to the currently rendered tape
 	rTape             *Tape
 	rTotalFrames      int
@@ -101,10 +102,6 @@ func (app *App) ResetFontSize() {
 	app.setFontSize(defaultFontSize)
 }
 
-func (app *App) CurrentScreen() Screen {
-	return app.screens[app.currentScreenIndex]
-}
-
 func (app *App) postEvent(ev Event, dropIfFull bool) {
 	if dropIfFull {
 		select {
@@ -159,6 +156,15 @@ func (app *App) Init() error {
 	globalKeyMap.Bind("C-S-=", app.IncreaseFontSize)
 	globalKeyMap.Bind("C--", app.DecreaseFontSize)
 	globalKeyMap.Bind("C-0", app.ResetFontSize)
+	globalKeyMap.Bind("F1", func() {
+		app.SelectScreen("help")
+	})
+	globalKeyMap.Bind("F2", func() {
+		app.SelectScreen("edit")
+	})
+	globalKeyMap.Bind("F3", func() {
+		app.SelectScreen("file")
+	})
 	app.globalKeyMap = globalKeyMap
 
 	helpScreen, err := CreateHelpScreen(app, string(helpBytes))
@@ -176,8 +182,12 @@ func (app *App) Init() error {
 		return err
 	}
 
-	app.screens = []Screen{helpScreen, editScreen, fileScreen}
-	app.SelectScreen(1)
+	app.screens = map[string]Screen{
+		"help": helpScreen,
+		"edit": editScreen,
+		"file": fileScreen,
+	}
+	app.SelectScreen("edit")
 
 	app.vm.tapeProgressCallback = func(t *Tape, nftotal, nfdone int) {
 		app.postEvent(func() {
@@ -199,23 +209,17 @@ func (app *App) Quit() {
 	app.shouldExit = true
 }
 
-func (app *App) SelectScreen(index int) {
-	if index < 0 || index >= len(app.screens) {
-		return
+func (app *App) SelectScreen(name string) {
+	if screen, ok := app.screens[name]; ok {
+		app.currentScreenName = name
+		app.currentScreen = screen
+		app.currentKeyHandler = screen
 	}
-	app.currentScreenIndex = index
-	app.currentKeyHandler = app.CurrentScreen()
 }
 
 func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw.ModifierKey) {
 	//logger.Debug("OnKey", "key", key, "scancode", scancode, "action", action, "modes", modes)
 	if action != glfw.Press && action != glfw.Repeat {
-		return
-	}
-	// Screen switching via function keys (F1, F2, ...)
-	if key >= glfw.KeyF1 && key <= glfw.KeyF12 {
-		index := int(key - glfw.KeyF1)
-		app.SelectScreen(index)
 		return
 	}
 	var keyName string
@@ -254,6 +258,30 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 		keyName = "Home"
 	case glfw.KeyEnd:
 		keyName = "End"
+	case glfw.KeyF1:
+		keyName = "F1"
+	case glfw.KeyF2:
+		keyName = "F2"
+	case glfw.KeyF3:
+		keyName = "F3"
+	case glfw.KeyF4:
+		keyName = "F4"
+	case glfw.KeyF5:
+		keyName = "F5"
+	case glfw.KeyF6:
+		keyName = "F6"
+	case glfw.KeyF7:
+		keyName = "F7"
+	case glfw.KeyF8:
+		keyName = "F8"
+	case glfw.KeyF9:
+		keyName = "F9"
+	case glfw.KeyF10:
+		keyName = "F10"
+	case glfw.KeyF11:
+		keyName = "F11"
+	case glfw.KeyF12:
+		keyName = "F12"
 	default:
 		keyName = glfw.GetKeyName(key, scancode)
 	}
@@ -266,30 +294,30 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 	if modes&glfw.ModControl != 0 {
 		keyName = "C-" + keyName
 	}
-	app.HandleKey(keyName)
+	nextHandler, handled := app.HandleKey(keyName)
+	if handled {
+		app.chordHandler = nextHandler
+	} else {
+		app.chordHandler = nil
+	}
 }
 
-func (app *App) HandleKey(key Key) {
-	var nextHandler KeyHandler
-	var handled bool
+func (app *App) HandleKey(key Key) (nextHandler KeyHandler, handled bool) {
 	if app.chordHandler != nil {
 		nextHandler, handled = app.chordHandler.HandleKey(key)
 		if handled {
-			app.chordHandler = nextHandler
 			return
 		}
 	}
-	app.chordHandler = nil
 	nextHandler, handled = app.currentKeyHandler.HandleKey(key)
 	if handled {
-		app.chordHandler = nextHandler
 		return
 	}
 	nextHandler, handled = app.globalKeyMap.HandleKey(key)
 	if handled {
-		app.chordHandler = nextHandler
 		return
 	}
+	return nil, false
 }
 
 func (app *App) OnChar(char rune) {
@@ -297,7 +325,7 @@ func (app *App) OnChar(char rune) {
 	if app.chordHandler != nil {
 		return
 	}
-	if cs, ok := app.CurrentScreen().(CharScreen); ok {
+	if cs, ok := app.currentScreen.(CharScreen); ok {
 		cs.OnChar(app, char)
 	}
 }
@@ -318,7 +346,7 @@ func (app *App) BgColor() (r, g, b, a float32) {
 func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
-	app.CurrentScreen().Render(app, ts)
+	app.currentScreen.Render(app, ts)
 	ts.Render()
 	return nil
 }
@@ -340,8 +368,7 @@ func (app *App) Update() error {
 }
 
 func (app *App) evalEditorScript(editorScript []byte, evalSuccessCallback func()) {
-	_, ok := app.CurrentScreen().(*EditScreen)
-	if !ok {
+	if app.currentScreenName != "edit" {
 		return
 	}
 	app.Reset()
