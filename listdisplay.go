@@ -189,7 +189,7 @@ func (ld *ListDisplay) SelectedEntry() ListEntry {
 	return ld.entries[ld.index]
 }
 
-func (ld *ListDisplay) Render(tp *TilePane) {
+func (ld *ListDisplay) Render(tp TilePane) {
 	ld.lastHeight = tp.Height()
 	if ld.lastHeight <= 0 {
 		return

@@ -257,15 +257,7 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 
 	if es.showFileBrowser {
 		browserPane, screenPane = screenPane.SplitY(8)
-		browserPane.DrawString(0, 0, es.fileBrowser.Directory())
-		if es.fileBrowser.SearchText() != "" {
-			browserPane.WithFgBg(ColorWhite, ColorGreen, func() {
-				browserPane.DrawString(len(es.fileBrowser.Directory())+1, 0, fmt.Sprintf("[%s]", es.fileBrowser.SearchText()))
-			})
-		}
-		listPane := browserPane.SubPane(0, 1, browserPane.Width(), browserPane.Height()-1)
-		es.fileBrowser.listDisplay.lastHeight = listPane.Height()
-		es.fileBrowser.Render(&listPane)
+		es.fileBrowser.Render(browserPane)
 	}
 
 	switch result := app.vm.evalResult.(type) {

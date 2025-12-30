@@ -243,6 +243,23 @@ func (fb *FileBrowser) Reset() error {
 	return fb.Reload()
 }
 
-func (fb *FileBrowser) Render(tp *TilePane) {
-	fb.listDisplay.Render(tp)
+func (fb *FileBrowser) Render(tp TilePane) {
+	height := tp.Height()
+	if height <= 0 {
+		return
+	}
+
+	// Header with current directory and optional search text.
+	header := tp.SubPane(0, 0, tp.Width(), 1)
+	header.DrawString(0, 0, fb.Directory())
+	if fb.SearchText() != "" {
+		header.WithFgBg(ColorWhite, ColorGreen, func() {
+			header.DrawString(len(fb.Directory())+1, 0, fmt.Sprintf("[%s]", fb.SearchText()))
+		})
+	}
+
+	// List area beneath the header.
+	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
+	fb.listDisplay.lastHeight = listPane.Height()
+	fb.listDisplay.Render(listPane)
 }

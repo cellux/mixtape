@@ -97,18 +97,11 @@ func (fs *FileScreen) Close() {}
 
 func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	pane := ts.GetPane()
-	header, bodyPane := pane.SplitY(1)
-	header.DrawString(0, 0, fs.fileBrowser.Directory())
-	if fs.fileBrowser.SearchText() != "" {
-		header.WithFgBg(ColorWhite, ColorGreen, func() {
-			header.DrawString(len(fs.fileBrowser.Directory())+1, 0, fmt.Sprintf("[%s]", fs.fileBrowser.SearchText()))
-		})
-	}
 
-	listPane := bodyPane
+	browserPane := pane
 	if fs.lastTape != nil {
 		var tapePane TilePane
-		listPane, tapePane = bodyPane.SplitY(-8)
+		browserPane, tapePane = pane.SplitY(-8)
 		playheadFrames := []int{}
 		for _, tp := range app.oto.GetTapePlayers(fs) {
 			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
@@ -116,8 +109,7 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 		fs.tapeDisplay.Render(fs.lastTape, tapePane.GetPixelRect(), fs.lastTape.nframes, 0, playheadFrames)
 	}
 
-	fs.fileBrowser.listDisplay.lastHeight = listPane.Height()
-	fs.fileBrowser.Render(&listPane)
+	fs.fileBrowser.Render(browserPane)
 }
 
 func (fs *FileScreen) OnChar(app *App, char rune) {
