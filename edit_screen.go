@@ -111,6 +111,9 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		if app.currentBuffer.HasPath() {
 			if err := os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644); err != nil {
 				app.SetLastError(err)
+			} else {
+				app.currentBuffer.MarkClean()
+				es.editor.dirty = false
 			}
 			return
 		}
@@ -247,7 +250,8 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
 	currentToken := app.vm.CurrentToken()
 	es.editor.Render(editorBufferPane, currentToken)
-	es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
+	dirty := es.editor.Dirty() && es.app.currentBuffer.HasPath()
+	es.editor.RenderStatusLine(editorStatusPane, statusFile, dirty, currentToken, app.rTotalFrames, app.rDoneFrames)
 }
 
 func (es *EditScreen) switchToAdjacentBuffer(delta int) {
@@ -303,7 +307,7 @@ func (es *EditScreen) syncEditorToBuffer() {
 	if es.app == nil || es.app.currentBuffer == nil {
 		return
 	}
-	es.app.currentBuffer.Data = es.editor.GetBytes()
+	es.app.currentBuffer.SetData(es.editor.GetBytes())
 }
 
 func (es *EditScreen) Keymap() KeyMap {
@@ -357,6 +361,7 @@ func (es *EditScreen) Reset() {
 func (es *EditScreen) loadCurrentBufferIntoEditor() {
 	if es.app != nil && es.app.currentBuffer != nil {
 		es.editor.SetText(string(es.app.currentBuffer.Data))
+		es.editor.dirty = es.app.currentBuffer.Dirty
 	}
 }
 
@@ -393,11 +398,14 @@ func (es *EditScreen) confirmSavePrompt(value string) {
 		es.cancelSavePrompt()
 		return
 	}
-	es.app.currentBuffer.Path = path
+	es.app.currentBuffer.SetPath(path)
 	es.cancelSavePrompt()
 	es.syncEditorToBuffer()
 	if err := os.WriteFile(path, es.editor.GetBytes(), 0o644); err != nil {
 		es.app.SetLastError(err)
+	} else {
+		es.app.currentBuffer.MarkClean()
+		es.editor.dirty = false
 	}
 }
 

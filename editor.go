@@ -32,6 +32,7 @@ type Editor struct {
 	left             int
 	height           int
 	readOnly         bool
+	dirty            bool
 	keymap           KeyMap
 	actionDispatcher func(UndoableFunction)
 }
@@ -354,6 +355,7 @@ func (e *Editor) InsertRune(r rune) {
 		e.lines[p.line] = slices.Insert(e.lines[p.line], p.column, r)
 		e.AdvanceColumn(1)
 	}
+	e.dirty = true
 }
 
 func (e *Editor) InsertRunes(rs []rune) {
@@ -390,6 +392,7 @@ func (e *Editor) DeleteRune() (deletedRune rune) {
 		deletedRune = e.lines[p.line][p.column]
 		e.lines[p.line] = slices.Delete(e.lines[p.line], p.column, p.column+1)
 	}
+	e.dirty = true
 	return deletedRune
 }
 
@@ -403,6 +406,7 @@ func (e *Editor) SplitLine() {
 	e.lines[p.line] = e.lines[p.line][:p.column]
 	e.AdvanceLine(1)
 	p.column = 0
+	e.dirty = true
 }
 
 func (e *Editor) Render(tp TilePane, currentToken *Token) {
@@ -469,8 +473,12 @@ func (e *Editor) Render(tp TilePane, currentToken *Token) {
 	}
 }
 
-func (e *Editor) RenderStatusLine(tp TilePane, bufferName string, currentToken *Token, nftotal, nfdone int) {
-	leftText := fmt.Sprintf("%s  Ln %d, Col %d", bufferName, e.point.line+1, e.point.column+1)
+func (e *Editor) RenderStatusLine(tp TilePane, bufferName string, dirty bool, currentToken *Token, nftotal, nfdone int) {
+	label := bufferName
+	if dirty {
+		label += " *"
+	}
+	leftText := fmt.Sprintf("%s  Ln %d, Col %d", label, e.point.line+1, e.point.column+1)
 	var rightText string
 	if currentToken != nil {
 		rightText = currentToken.String()
@@ -515,6 +523,14 @@ func (e *Editor) Close() error {
 }
 func (e *Editor) HandleKey(key Key) (KeyHandler, bool) {
 	return e.keymap.HandleKey(key)
+}
+
+func (e *Editor) Dirty() bool {
+	return e.dirty
+}
+
+func (e *Editor) MarkClean() {
+	e.dirty = false
 }
 
 func (e *Editor) initKeymap() {
