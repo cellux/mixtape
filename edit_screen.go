@@ -94,7 +94,7 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		}
 	})
 
-	keymap.Bind("C-x C-s", func() {
+	keymap.Bind("C-x s", func() {
 		es.syncEditorToBuffer()
 		if app.currentBuffer != nil && app.currentBuffer.HasPath() {
 			if err := os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644); err != nil {
@@ -102,14 +102,20 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 			}
 		}
 	})
-	keymap.Bind("C-x C-f", func() {
+	keymap.Bind("C-x f", func() {
 		es.enterFileOpenMode()
 	})
 	keymap.Bind("C-x b", func() {
+		es.enterBufferSwitchMode()
+	})
+	keymap.Bind("C-x o", func() {
 		es.switchToBuffer(es.app.lastBuffer)
 	})
-	keymap.Bind("C-x C-b", func() {
-		es.enterBufferSwitchMode()
+	keymap.Bind("C-x n", func() {
+		es.switchToAdjacentBuffer(1)
+	})
+	keymap.Bind("C-x p", func() {
+		es.switchToAdjacentBuffer(-1)
 	})
 	keymap.Bind("C-z", func() { es.UndoLastAction() })
 	keymap.Bind("C-x u", func() { es.UndoLastAction() })
@@ -213,6 +219,25 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	currentToken := app.vm.CurrentToken()
 	es.editor.Render(editorBufferPane, currentToken)
 	es.editor.RenderStatusLine(editorStatusPane, statusFile, currentToken, app.rTotalFrames, app.rDoneFrames)
+}
+
+func (es *EditScreen) switchToAdjacentBuffer(delta int) {
+	n := len(es.app.buffers)
+	if n < 2 {
+		return
+	}
+	currentIndex := -1
+	for i, buf := range es.app.buffers {
+		if buf == es.app.currentBuffer {
+			currentIndex = i
+			break
+		}
+	}
+	if currentIndex == -1 {
+		return
+	}
+	nextIndex := (currentIndex + delta + n) % n
+	es.switchToBuffer(es.app.buffers[nextIndex])
 }
 
 func (es *EditScreen) enterBufferSwitchMode() {

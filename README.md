@@ -97,9 +97,17 @@ When you run `./mixtape [file.tape]` you get an editor pane and (when the result
 
 Evaluation happens in the background; progress is shown while rendering finite streams to a tape.
 
+### Buffers
+
+- `C-x n` — switch to next buffer
+- `C-x p` — switch to previous buffer
+- `C-x o` — switch to last buffer
+- `C-x b` — open buffer switcher
+
 ### Files
 
-- `C-x C-s` — save the current file (only works if the GUI was started with a file path).
+- `C-x f` — open file
+- `C-x s` — save the current file (only works if the GUI was started with a file path).
 
 ### Quit / undo
 

@@ -8,8 +8,15 @@ Evaluate / play:
 - C-Enter: eval buffer (no playback)
 - C-g / Esc: cancel current evaluation
 
+Buffers:
+- C-x n: switch to next buffer
+- C-x p: switch to previous buffer
+- C-x o: switch to last buffer
+- C-x b: open buffer switcher
+
 Files:
-- C-x C-s: save (only when GUI started with a file path)
+- C-x f: open file
+- C-x s: save (only when GUI started with a file path)
 
 Quit / undo:
 - C-q: quit
