@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 type PromptInputMode int
 
 const (
@@ -52,6 +50,10 @@ func (p *Prompt) SetText(text string) {
 		return
 	}
 	p.input.SetText(text)
+}
+
+func (p *Prompt) SetPrompt(text string) {
+	p.prompt = text
 }
 
 func (p *Prompt) Text() string {
@@ -106,7 +108,7 @@ func (p *Prompt) Render(tp TilePane) {
 		inputPane := linePane.SubPane(len(p.prompt), 0, width-len(p.prompt), 1)
 		p.input.Render(inputPane)
 	case PromptInputModeChar:
-		linePane.DrawString(0, 0, fmt.Sprintf("%s [%s]", p.prompt, string(p.chars)))
+		linePane.DrawString(0, 0, p.prompt)
 	}
 }
 

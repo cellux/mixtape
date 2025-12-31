@@ -35,6 +35,9 @@ type EditScreen struct {
 
 	savePrompt     *Prompt
 	showSavePrompt bool
+
+	killPrompt     *Prompt
+	showKillPrompt bool
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -57,6 +60,11 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	es.savePrompt = CreateTextPrompt("Save file: ", PromptCallbacks{
 		onConfirm: es.confirmSavePrompt,
 		onCancel:  es.cancelSavePrompt,
+	})
+
+	es.killPrompt = CreateCharPrompt("Kill buffer? (y/n)", "ynYN", PromptCallbacks{
+		onConfirm: es.confirmKillPrompt,
+		onCancel:  es.cancelKillPrompt,
 	})
 
 	tapeFilter := func(fe FileEntry) bool {
@@ -138,6 +146,13 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	keymap.Bind("C-x p", func() {
 		es.switchToAdjacentBuffer(-1)
 	})
+	keymap.Bind("C-x k", func() {
+		if es.editor.Dirty() {
+			es.openKillPrompt()
+		} else {
+			es.killCurrentBuffer()
+		}
+	})
 	keymap.Bind("C-z", func() { es.UndoLastAction() })
 	keymap.Bind("C-x u", func() { es.UndoLastAction() })
 	keymap.Bind("C-S--", func() { es.UndoLastAction() })
@@ -175,6 +190,18 @@ func (es *EditScreen) UndoLastAction() {
 }
 
 func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
+	if es.showKillPrompt {
+		next, handled = es.killPrompt.HandleKey(key)
+		if handled {
+			return
+		}
+	}
+	if es.showSavePrompt {
+		next, handled = es.savePrompt.HandleKey(key)
+		if handled {
+			return
+		}
+	}
 	if es.showFileBrowser {
 		next, handled = es.fileBrowser.HandleKey(key)
 		if handled {
@@ -183,12 +210,6 @@ func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
 	}
 	if es.showBufferBrowser {
 		next, handled = es.bufferBrowser.HandleKey(key)
-		if handled {
-			return
-		}
-	}
-	if es.showSavePrompt {
-		next, handled = es.savePrompt.HandleKey(key)
 		if handled {
 			return
 		}
@@ -244,6 +265,10 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 
 	if es.showSavePrompt {
 		es.renderSavePrompt(editorPane)
+		return
+	}
+	if es.showKillPrompt {
+		es.renderKillPrompt(editorPane)
 		return
 	}
 
@@ -355,7 +380,9 @@ func (es *EditScreen) Reset() {
 	es.showBufferBrowser = false
 	es.showFileBrowser = false
 	es.showSavePrompt = false
+	es.showKillPrompt = false
 	es.savePrompt.Reset()
+	es.killPrompt.Reset()
 }
 
 func (es *EditScreen) loadCurrentBufferIntoEditor() {
@@ -409,12 +436,66 @@ func (es *EditScreen) confirmSavePrompt(value string) {
 	}
 }
 
+func (es *EditScreen) openKillPrompt() {
+	target := es.app.currentBuffer
+	if target == nil {
+		return
+	}
+	es.killPrompt.Reset()
+	es.showKillPrompt = true
+}
+
+func (es *EditScreen) cancelKillPrompt() {
+	es.showKillPrompt = false
+}
+
+func (es *EditScreen) killCurrentBuffer() {
+	target := es.app.currentBuffer
+	if target == nil {
+		return
+	}
+	for i, b := range es.app.buffers {
+		if b == target {
+			es.app.buffers = append(es.app.buffers[:i], es.app.buffers[i+1:]...)
+			break
+		}
+	}
+	if len(es.app.buffers) == 0 {
+		es.app.Quit()
+		return
+	}
+	if es.app.lastBuffer == target {
+		es.app.lastBuffer = nil
+	}
+	es.app.currentBuffer = es.app.buffers[0]
+	es.loadCurrentBufferIntoEditor()
+}
+
+func (es *EditScreen) confirmKillPrompt(value string) {
+	if !es.showKillPrompt {
+		return
+	}
+	es.cancelKillPrompt()
+	if value != "y" && value != "Y" {
+		return
+	}
+	es.killCurrentBuffer()
+}
+
 func (es *EditScreen) renderSavePrompt(tp TilePane) {
 	if tp.Height() <= 0 {
 		return
 	}
 	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
 	es.savePrompt.Render(linePane)
+}
+
+func (es *EditScreen) renderKillPrompt(tp TilePane) {
+	if tp.Height() <= 0 {
+		return
+	}
+	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
+	es.killPrompt.Render(linePane)
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {
@@ -428,6 +509,10 @@ func (es *EditScreen) OnChar(app *App, char rune) {
 	}
 	if es.showSavePrompt {
 		es.savePrompt.OnChar(char)
+		return
+	}
+	if es.showKillPrompt {
+		es.killPrompt.OnChar(char)
 		return
 	}
 	es.DispatchAction(func() UndoFunc {
