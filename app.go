@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"errors"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
@@ -406,16 +407,22 @@ func (app *App) evalEditorScript(editorScript []byte, evalSuccessCallback func()
 		tapePath = app.currentBuffer.Path
 	}
 	go func() {
-		if err := app.vm.ParseAndEval(bytes.NewReader(editorScript), tapePath); err == nil {
-			app.postEvent(func() {
-				app.rTape = nil
-				app.rTotalFrames = 0
-				app.rDoneFrames = 0
-				if evalSuccessCallback != nil {
-					evalSuccessCallback()
-				}
-			}, false)
+		if err := app.vm.ParseAndEval(bytes.NewReader(editorScript), tapePath); err != nil {
+			if !errors.Is(err, ErrEvalCancelled) {
+				app.postEvent(func() {
+					app.SetLastError(err)
+				}, false)
+			}
+			return
 		}
+		app.postEvent(func() {
+			app.rTape = nil
+			app.rTotalFrames = 0
+			app.rDoneFrames = 0
+			if evalSuccessCallback != nil {
+				evalSuccessCallback()
+			}
+		}, false)
 	}()
 }
 

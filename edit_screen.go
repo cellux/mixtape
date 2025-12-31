@@ -182,14 +182,6 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	var editorPane TilePane
 	var tapeDisplayPane TilePane
 	var statusPane TilePane
-	var errorPane TilePane
-
-	if err := app.vm.errResult; err != nil {
-		screenPane, errorPane = screenPane.SplitY(-1)
-		errorPane.WithFgBg(ColorWhite, ColorRed, func() {
-			errorPane.DrawString(0, 0, err.Error())
-		})
-	}
 
 	switch result := app.vm.evalResult.(type) {
 	case *Tape:

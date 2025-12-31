@@ -96,8 +96,7 @@ type VM struct {
 	evalDepth            Box[int] // increases at every ParseAndEval() call
 	cancelRequested      bool     // closed when the current evaluation finishes (success, error, or cancellation).
 	doneCh               chan struct{}
-	evalResult           Val   // top of stack after a successful evaluation
-	errResult            error // last evaluation error
+	evalResult           Val // top of stack after a successful evaluation
 	tapeProgressCallback func(t *Tape, nftotal, nfdone int)
 }
 
@@ -150,7 +149,6 @@ func (vm *VM) Reset() {
 	vm.cancelRequested = false
 	vm.doneCh = make(chan struct{})
 	vm.evalResult = nil
-	vm.errResult = nil
 }
 
 func (vm *VM) IsEvaluating() bool {
@@ -650,11 +648,7 @@ func (vm *VM) ParseAndEval(r io.Reader, filename string) error {
 	}
 
 	// end of top-level evaluation
-	if evalErr != nil {
-		if !evalCancelled {
-			vm.errResult = evalErr
-		}
-	} else {
+	if evalErr == nil {
 		result := vm.Top()
 		if stream, ok := result.(Stream); ok {
 			if stream.nframes > 0 {
