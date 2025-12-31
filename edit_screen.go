@@ -33,8 +33,12 @@ type EditScreen struct {
 	bufferBrowser     *BufferBrowser
 	showBufferBrowser bool
 
-	savePrompt     *Prompt
-	showSavePrompt bool
+	savePrompt         *Prompt
+	showSavePrompt     bool
+	reloadPrompt       *Prompt
+	showReloadPrompt   bool
+	reloadTargetBuffer *Buffer
+	reloadTargetPath   string
 
 	killPrompt     *Prompt
 	showKillPrompt bool
@@ -60,6 +64,11 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	es.savePrompt = CreateTextPrompt("Save file: ", PromptCallbacks{
 		onConfirm: es.confirmSavePrompt,
 		onCancel:  es.cancelSavePrompt,
+	})
+
+	es.reloadPrompt = CreateCharPrompt("Replace dirty buffer? (y/n)", "ynYN", PromptCallbacks{
+		onConfirm: es.confirmReloadPrompt,
+		onCancel:  es.cancelReloadPrompt,
 	})
 
 	es.killPrompt = CreateCharPrompt("Kill buffer? (y/n)", "ynYN", PromptCallbacks{
@@ -196,6 +205,12 @@ func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
 			return
 		}
 	}
+	if es.showReloadPrompt {
+		next, handled = es.reloadPrompt.HandleKey(key)
+		if handled {
+			return
+		}
+	}
 	if es.showSavePrompt {
 		next, handled = es.savePrompt.HandleKey(key)
 		if handled {
@@ -263,6 +278,10 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		return
 	}
 
+	if es.showReloadPrompt {
+		es.renderReloadPrompt(editorPane)
+		return
+	}
 	if es.showSavePrompt {
 		es.renderSavePrompt(editorPane)
 		return
@@ -316,6 +335,30 @@ func (es *EditScreen) handleBufferBrowserEnter(buf *Buffer) {
 	es.exitBufferSwitchMode()
 }
 
+func (es *EditScreen) openReloadPrompt(buf *Buffer, path string) {
+	es.reloadTargetBuffer = buf
+	es.reloadTargetPath = path
+	es.reloadPrompt.Reset()
+	es.showReloadPrompt = true
+}
+
+func (es *EditScreen) confirmReloadPrompt(value string) {
+	if !es.showReloadPrompt {
+		return
+	}
+	buf := es.reloadTargetBuffer
+	path := es.reloadTargetPath
+	es.cancelReloadPrompt()
+	if value != "y" && value != "Y" {
+		return
+	}
+	if buf == nil || path == "" {
+		return
+	}
+	es.exitFileOpenMode()
+	es.switchToBuffer(buf)
+}
+
 func (es *EditScreen) switchToBuffer(buf *Buffer) {
 	if buf == nil {
 		return
@@ -359,7 +402,11 @@ func (es *EditScreen) handleFileBrowserSelection(entry FileEntry) {
 	}
 	full := es.fileBrowser.CanonicalPath(entry.path)
 	if buf := es.app.findBufferByPath(full); buf != nil {
-		es.app.SetLastError(fmt.Errorf("buffer already exists for %s", full))
+		if buf.Dirty {
+			es.openReloadPrompt(buf, full)
+			return
+		}
+		es.switchToBuffer(buf)
 		es.exitFileOpenMode()
 		return
 	}
@@ -380,7 +427,9 @@ func (es *EditScreen) Reset() {
 	es.showBufferBrowser = false
 	es.showFileBrowser = false
 	es.showSavePrompt = false
+	es.showReloadPrompt = false
 	es.showKillPrompt = false
+	es.reloadPrompt.Reset()
 	es.savePrompt.Reset()
 	es.killPrompt.Reset()
 }
@@ -414,6 +463,12 @@ func (es *EditScreen) openSavePrompt() {
 
 func (es *EditScreen) cancelSavePrompt() {
 	es.showSavePrompt = false
+}
+
+func (es *EditScreen) cancelReloadPrompt() {
+	es.showReloadPrompt = false
+	es.reloadTargetBuffer = nil
+	es.reloadTargetPath = ""
 }
 
 func (es *EditScreen) confirmSavePrompt(value string) {
@@ -498,6 +553,14 @@ func (es *EditScreen) renderKillPrompt(tp TilePane) {
 	es.killPrompt.Render(linePane)
 }
 
+func (es *EditScreen) renderReloadPrompt(tp TilePane) {
+	if tp.Height() <= 0 {
+		return
+	}
+	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
+	es.reloadPrompt.Render(linePane)
+}
+
 func (es *EditScreen) OnChar(app *App, char rune) {
 	if es.showFileBrowser {
 		es.fileBrowser.OnChar(char)
@@ -509,6 +572,10 @@ func (es *EditScreen) OnChar(app *App, char rune) {
 	}
 	if es.showSavePrompt {
 		es.savePrompt.OnChar(char)
+		return
+	}
+	if es.showReloadPrompt {
+		es.reloadPrompt.OnChar(char)
 		return
 	}
 	if es.showKillPrompt {
