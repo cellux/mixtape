@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 const MaxUndo = 64
@@ -31,6 +32,9 @@ type EditScreen struct {
 
 	bufferBrowser     *BufferBrowser
 	showBufferBrowser bool
+
+	savePrompt     *Prompt
+	showSavePrompt bool
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -49,6 +53,11 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		keymap:      keymap,
 	}
 	es.editor.SetActionDispatcher(es.DispatchAction)
+
+	es.savePrompt = CreateTextPrompt("Save file: ", PromptCallbacks{
+		onConfirm: es.confirmSavePrompt,
+		onCancel:  es.cancelSavePrompt,
+	})
 
 	tapeFilter := func(fe FileEntry) bool {
 		if fe.isDir {
@@ -96,11 +105,20 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 
 	keymap.Bind("C-x s", func() {
 		es.syncEditorToBuffer()
-		if app.currentBuffer != nil && app.currentBuffer.HasPath() {
+		if app.currentBuffer == nil {
+			return
+		}
+		if app.currentBuffer.HasPath() {
 			if err := os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644); err != nil {
 				app.SetLastError(err)
 			}
+			return
 		}
+		es.openSavePrompt()
+	})
+	keymap.Bind("C-x C-s", func() {
+		es.syncEditorToBuffer()
+		es.openSavePrompt()
 	})
 	keymap.Bind("C-x f", func() {
 		es.enterFileOpenMode()
@@ -166,6 +184,12 @@ func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
 			return
 		}
 	}
+	if es.showSavePrompt {
+		next, handled = es.savePrompt.HandleKey(key)
+		if handled {
+			return
+		}
+	}
 	next, handled = es.editor.HandleKey(key)
 	if handled {
 		return
@@ -212,6 +236,11 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	}
 	if es.showBufferBrowser {
 		es.bufferBrowser.Render(editorPane)
+		return
+	}
+
+	if es.showSavePrompt {
+		es.renderSavePrompt(editorPane)
 		return
 	}
 
@@ -321,12 +350,63 @@ func (es *EditScreen) Reset() {
 	es.editor.Reset()
 	es.showBufferBrowser = false
 	es.showFileBrowser = false
+	es.showSavePrompt = false
+	es.savePrompt.Reset()
 }
 
 func (es *EditScreen) loadCurrentBufferIntoEditor() {
 	if es.app != nil && es.app.currentBuffer != nil {
 		es.editor.SetText(string(es.app.currentBuffer.Data))
 	}
+}
+
+func (es *EditScreen) openSavePrompt() {
+	if es.app == nil || es.app.currentBuffer == nil {
+		return
+	}
+	es.savePrompt.Reset()
+	cwd, err := os.Getwd()
+	if err != nil {
+		es.app.SetLastError(err)
+		return
+	}
+	defaultPath := cwd
+	if es.app.currentBuffer.HasPath() {
+		defaultPath = es.app.currentBuffer.Path
+	} else if !strings.HasSuffix(defaultPath, string(filepath.Separator)) {
+		defaultPath += string(filepath.Separator)
+	}
+	es.savePrompt.SetText(defaultPath)
+	es.showSavePrompt = true
+}
+
+func (es *EditScreen) cancelSavePrompt() {
+	es.showSavePrompt = false
+}
+
+func (es *EditScreen) confirmSavePrompt(value string) {
+	if !es.showSavePrompt {
+		return
+	}
+	path := value
+	if path == "" {
+		es.cancelSavePrompt()
+		return
+	}
+	es.app.currentBuffer.Path = path
+	es.cancelSavePrompt()
+	es.syncEditorToBuffer()
+	if err := os.WriteFile(path, es.editor.GetBytes(), 0o644); err != nil {
+		es.app.SetLastError(err)
+	}
+}
+
+func (es *EditScreen) renderSavePrompt(tp TilePane) {
+	if tp.Height() <= 0 {
+		return
+	}
+	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
+	es.savePrompt.Render(linePane)
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {
@@ -336,6 +416,10 @@ func (es *EditScreen) OnChar(app *App, char rune) {
 	}
 	if es.showBufferBrowser {
 		es.bufferBrowser.OnChar(char)
+		return
+	}
+	if es.showSavePrompt {
+		es.savePrompt.OnChar(char)
 		return
 	}
 	es.DispatchAction(func() UndoFunc {
