@@ -8,20 +8,6 @@ import (
 	"strings"
 )
 
-const MaxUndo = 64
-
-// UndoFunc undoes an action.
-type UndoFunc = func()
-
-// UndoableFunction executes an action and tells how it can be undone.
-type UndoableFunction = func() UndoFunc
-
-type Action struct {
-	doFunc     UndoableFunction // how to do it
-	undoFunc   UndoFunc         // how to undo it
-	pointAfter EditorPoint      // location of point right after the action
-}
-
 // EditScreen bundles the editor-related UI components.
 type EditScreen struct {
 	app         *App
@@ -56,7 +42,6 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 		tapeDisplay: tapeDisplay,
 		keymap:      keymap,
 	}
-	es.editor.SetActionDispatcher(es.DispatchAction)
 
 	es.syncBufferToEditor()
 
@@ -166,9 +151,9 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	})
 
 	// undo
-	keymap.Bind("C-z", func() { es.UndoLastAction() })
-	keymap.Bind("C-x u", func() { es.UndoLastAction() })
-	keymap.Bind("C-S--", func() { es.UndoLastAction() })
+	keymap.Bind("C-z", func() { es.editor.UndoLastAction() })
+	keymap.Bind("C-x u", func() { es.editor.UndoLastAction() })
+	keymap.Bind("C-S--", func() { es.editor.UndoLastAction() })
 
 	return es, nil
 }
@@ -180,25 +165,6 @@ func (es *EditScreen) GetCurrentBuffer() *Buffer {
 func (es *EditScreen) SetCurrentBuffer(b *Buffer) {
 	es.lastBuffer = es.bm.GetCurrentBuffer()
 	es.bm.SetCurrentBuffer(b)
-}
-
-func (es *EditScreen) DispatchAction(f UndoableFunction) {
-	action := Action{doFunc: f}
-	action.undoFunc = f()
-	action.pointAfter = es.editor.GetPoint()
-	buf := es.GetCurrentBuffer()
-	buf.PushActionToUndoStack(action)
-}
-
-func (es *EditScreen) UndoLastAction() {
-	buf := es.GetCurrentBuffer()
-	if buf.UndoStackIsEmpty() {
-		return
-	}
-	lastAction := buf.PopActionFromUndoStack()
-	es.editor.SetPoint(lastAction.pointAfter)
-	lastAction.undoFunc()
-	es.editor.ForgetMark()
 }
 
 func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
@@ -336,6 +302,7 @@ func (es *EditScreen) syncBufferToEditor() {
 	es.editor.top = currentBuffer.editorTop
 	es.editor.left = currentBuffer.editorLeft
 	es.editor.dirty = currentBuffer.Dirty
+	es.editor.undoStack = currentBuffer.undoStack
 	es.editor.Reset()
 }
 
@@ -345,6 +312,8 @@ func (es *EditScreen) syncEditorToBuffer() {
 	currentBuffer.editorPoint = es.editor.point
 	currentBuffer.editorTop = es.editor.top
 	currentBuffer.editorLeft = es.editor.left
+	currentBuffer.Dirty = es.editor.dirty
+	currentBuffer.undoStack = es.editor.undoStack
 }
 
 func (es *EditScreen) Keymap() KeyMap {
@@ -524,13 +493,7 @@ func (es *EditScreen) OnChar(app *App, char rune) {
 		es.bufferBrowser.OnChar(char)
 		return
 	}
-	es.DispatchAction(func() UndoFunc {
-		es.editor.InsertRune(char)
-		return func() {
-			es.editor.AdvanceColumn(-1)
-			es.editor.DeleteRune()
-		}
-	})
+	es.editor.OnChar(char)
 }
 
 func (es *EditScreen) Close() {

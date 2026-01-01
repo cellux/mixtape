@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 )
 
 // Buffer represents an editor buffer with optional backing file.
@@ -43,23 +42,6 @@ func (b *Buffer) WriteFile() error {
 		}
 	}
 	return nil
-}
-
-func (b *Buffer) PushActionToUndoStack(action Action) {
-	b.undoStack = append(b.undoStack, action)
-	if len(b.undoStack) > MaxUndo {
-		b.undoStack = slices.Delete(b.undoStack, 0, len(b.undoStack)-MaxUndo)
-	}
-}
-
-func (b *Buffer) UndoStackIsEmpty() bool {
-	return len(b.undoStack) == 0
-}
-
-func (b *Buffer) PopActionFromUndoStack() Action {
-	lastAction := b.undoStack[len(b.undoStack)-1]
-	b.undoStack = b.undoStack[:len(b.undoStack)-1]
-	return lastAction
 }
 
 // Clean reports whether the buffer is not dirty.

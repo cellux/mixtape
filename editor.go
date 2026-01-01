@@ -11,6 +11,20 @@ import (
 	"unicode/utf8"
 )
 
+const MaxUndo = 64
+
+// UndoFunc undoes an action.
+type UndoFunc = func()
+
+// UndoableFunction executes an action and tells how it can be undone.
+type UndoableFunction = func() UndoFunc
+
+type Action struct {
+	doFunc     UndoableFunction // how to do it
+	undoFunc   UndoFunc         // how to undo it
+	pointAfter EditorPoint      // location of point right after the action
+}
+
 const (
 	TabWidth = 2
 )
@@ -35,6 +49,7 @@ type Editor struct {
 	dirty            bool
 	keymap           KeyMap
 	actionDispatcher func(UndoableFunction)
+	undoStack        []Action
 }
 
 func (e *Editor) setYankedRunes(rs []rune) {
@@ -52,12 +67,38 @@ func (e *Editor) Keymap() KeyMap {
 	return e.keymap
 }
 
-func (e *Editor) SetActionDispatcher(dispatch func(UndoableFunction)) {
-	e.actionDispatcher = dispatch
+func (e *Editor) PushActionToUndoStack(action Action) {
+	e.undoStack = append(e.undoStack, action)
+	if len(e.undoStack) > MaxUndo {
+		e.undoStack = slices.Delete(e.undoStack, 0, len(e.undoStack)-MaxUndo)
+	}
 }
 
-func (e *Editor) dispatchAction(f UndoableFunction) {
-	e.actionDispatcher(f)
+func (e *Editor) UndoStackIsEmpty() bool {
+	return len(e.undoStack) == 0
+}
+
+func (e *Editor) PopActionFromUndoStack() Action {
+	lastAction := e.undoStack[len(e.undoStack)-1]
+	e.undoStack = e.undoStack[:len(e.undoStack)-1]
+	return lastAction
+}
+
+func (e *Editor) DispatchAction(f UndoableFunction) {
+	action := Action{doFunc: f}
+	action.undoFunc = f()
+	action.pointAfter = e.GetPoint()
+	e.PushActionToUndoStack(action)
+}
+
+func (e *Editor) UndoLastAction() {
+	if e.UndoStackIsEmpty() {
+		return
+	}
+	lastAction := e.PopActionFromUndoStack()
+	e.SetPoint(lastAction.pointAfter)
+	lastAction.undoFunc()
+	e.ForgetMark()
 }
 
 func (e *Editor) SetReadOnly(readOnly bool) {
@@ -564,7 +605,7 @@ func (e *Editor) initKeymap() {
 
 	// Editing with undo support
 	e.keymap.Bind("Enter", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			e.SplitLine()
 			return func() {
 				e.AdvanceColumn(-1)
@@ -573,7 +614,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("Delete", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			deletedRune := e.DeleteRune()
 			return func() {
 				if deletedRune != 0 {
@@ -587,7 +628,7 @@ func (e *Editor) initKeymap() {
 		if e.AtBOF() {
 			return
 		}
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			e.AdvanceColumn(-1)
 			deletedRune := e.DeleteRune()
 			return func() {
@@ -598,7 +639,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("Tab", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			start := e.GetPoint()
 			e.InsertSpacesUntilNextTabStop()
 			end := e.GetPoint()
@@ -617,7 +658,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("C-k", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			start := e.GetPoint()
 			var deletedRunes []rune
 			if e.AtEOL() {
@@ -642,7 +683,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("C-Backspace", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			e.SetMark()
 			e.WordLeft()
 			deletedRunes := e.KillRegion()
@@ -652,7 +693,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("C-u", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			e.SetMark()
 			e.MoveToBOL()
 			deletedRunes := e.KillRegion()
@@ -662,7 +703,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("C-w", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			start := e.GetPoint()
 			p, _ := e.PointAndMarkInOrder()
 			deletedRunes := e.KillRegion()
@@ -674,7 +715,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("C-y", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			p0 := e.GetPoint()
 			e.Paste()
 			p1 := e.GetPoint()
@@ -684,7 +725,7 @@ func (e *Editor) initKeymap() {
 		})
 	})
 	e.keymap.Bind("M-Backspace", func() {
-		e.dispatchAction(func() UndoFunc {
+		e.DispatchAction(func() UndoFunc {
 			e.SetMark()
 			e.WordLeft()
 			p, _ := e.PointAndMarkInOrder()
@@ -697,5 +738,15 @@ func (e *Editor) initKeymap() {
 				e.InsertRunes(deletedRunes)
 			}
 		})
+	})
+}
+
+func (e *Editor) OnChar(char rune) {
+	e.DispatchAction(func() UndoFunc {
+		e.InsertRune(char)
+		return func() {
+			e.AdvanceColumn(-1)
+			e.DeleteRune()
+		}
 	})
 }
