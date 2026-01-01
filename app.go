@@ -32,6 +32,7 @@ type App struct {
 	screens           map[string]Screen
 	currentScreenName string
 	currentScreen     Screen
+	currentPrompt     *Prompt
 	oto               *OtoState
 	// rTape points to the currently rendered tape
 	rTape             *Tape
@@ -315,6 +316,12 @@ func (app *App) OnKey(key glfw.Key, scancode int, action glfw.Action, modes glfw
 
 func (app *App) HandleKey(key Key) (nextHandler KeyHandler, handled bool) {
 	app.ClearLastError()
+
+	// prompts behave like modal dialogs
+	if app.currentPrompt != nil {
+		nextHandler, handled = app.currentPrompt.HandleKey(key)
+		return
+	}
 	if app.chordHandler != nil {
 		nextHandler, handled = app.chordHandler.HandleKey(key)
 		if handled {
@@ -335,6 +342,10 @@ func (app *App) HandleKey(key Key) (nextHandler KeyHandler, handled bool) {
 func (app *App) OnChar(char rune) {
 	//logger.Debug("OnChar", "char", char)
 	app.ClearLastError()
+	if app.currentPrompt != nil {
+		app.currentPrompt.OnChar(char)
+		return
+	}
 	if app.chordHandler != nil {
 		return
 	}
@@ -360,15 +371,19 @@ func (app *App) Render() error {
 	ts := app.ts
 	ts.Clear()
 	app.currentScreen.Render(app, ts)
+	screenPane := ts.GetPane()
 	if err := app.lastError; err != nil {
-		pane := ts.GetPane()
-		if pane.Height() > 0 {
-			_, statusPane := pane.SplitY(-1)
+		if screenPane.Height() > 0 {
+			_, statusPane := screenPane.SplitY(-1)
 			statusPane.WithFgBg(ColorWhite, ColorRed, func() {
 				statusPane.Clear()
 				statusPane.DrawString(0, 0, err.Error())
 			})
 		}
+	}
+	if app.currentPrompt != nil {
+		promptPane := screenPane.SubPane(0, screenPane.Height()-1, screenPane.Width(), 1)
+		app.currentPrompt.Render(promptPane)
 	}
 	ts.Render()
 	return nil
@@ -417,6 +432,14 @@ func (app *App) evalBuffer(buffer *Buffer, evalSuccessCallback func()) {
 			}
 		}, false)
 	}()
+}
+
+func (app *App) OpenPrompt(prompt *Prompt) {
+	app.currentPrompt = prompt
+}
+
+func (app *App) ClosePrompt() {
+	app.currentPrompt = nil
 }
 
 func (app *App) Reset() {

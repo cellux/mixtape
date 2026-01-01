@@ -23,8 +23,6 @@ type EditScreen struct {
 
 	bufferBrowser     *BufferBrowser // C-x b
 	showBufferBrowser bool
-
-	currentPrompt *Prompt
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -168,11 +166,6 @@ func (es *EditScreen) SetCurrentBuffer(b *Buffer) {
 }
 
 func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
-	// prompts behave like modal dialogs
-	if es.currentPrompt != nil {
-		next, handled = es.currentPrompt.HandleKey(key)
-		return
-	}
 	if es.showFileBrowser {
 		next, handled = es.fileBrowser.HandleKey(key)
 		if handled {
@@ -248,12 +241,6 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		currentToken,
 		app.rTotalFrames,
 		app.rDoneFrames)
-
-	if es.currentPrompt != nil {
-		promptPane := screenPane.SubPane(0, screenPane.Height()-1, screenPane.Width(), 1)
-		es.renderPrompt(promptPane)
-		return
-	}
 }
 
 func (es *EditScreen) switchToAdjacentBuffer(delta int) {
@@ -385,22 +372,14 @@ func (es *EditScreen) Reset() {
 	es.editor.Reset()
 	es.showBufferBrowser = false
 	es.showFileBrowser = false
-	es.currentPrompt = nil
 }
 
 func (es *EditScreen) openPrompt(prompt *Prompt) {
-	es.currentPrompt = prompt
-}
-
-func (es *EditScreen) renderPrompt(tp TilePane) {
-	if es.currentPrompt == nil {
-		return
-	}
-	es.currentPrompt.Render(tp)
+	es.app.OpenPrompt(prompt)
 }
 
 func (es *EditScreen) closePrompt() {
-	es.currentPrompt = nil
+	es.app.ClosePrompt()
 }
 
 func (es *EditScreen) openSavePrompt() {
@@ -481,10 +460,6 @@ func (es *EditScreen) confirmKillPrompt(value string) {
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {
-	if es.currentPrompt != nil {
-		es.currentPrompt.OnChar(char)
-		return
-	}
 	if es.showFileBrowser {
 		es.fileBrowser.OnChar(char)
 		return
