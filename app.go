@@ -23,14 +23,12 @@ const (
 
 type App struct {
 	vm                *VM
-	buffers           []*Buffer
-	currentBuffer     *Buffer
-	lastBuffer        *Buffer
 	shouldExit        bool
 	font              *Font
 	fontSize          FontSizeInPoints
 	tm                *TileMap
 	ts                *TileScreen
+	bm                *BufferManager
 	screens           map[string]Screen
 	currentScreenName string
 	currentScreen     Screen
@@ -113,15 +111,6 @@ func (app *App) ResetFontSize() {
 	app.setFontSize(defaultFontSize)
 }
 
-func (app *App) findBufferByPath(path string) *Buffer {
-	for _, b := range app.buffers {
-		if b.Path == path {
-			return b
-		}
-	}
-	return nil
-}
-
 func (app *App) postEvent(ev Event, dropIfFull bool) {
 	if dropIfFull {
 		select {
@@ -130,6 +119,13 @@ func (app *App) postEvent(ev Event, dropIfFull bool) {
 		}
 	} else {
 		app.events <- ev
+	}
+}
+
+func CreateApp(vm *VM, bm *BufferManager) *App {
+	return &App{
+		vm: vm,
+		bm: bm,
 	}
 }
 
@@ -368,11 +364,8 @@ func (app *App) Render() error {
 		pane := ts.GetPane()
 		if pane.Height() > 0 {
 			_, statusPane := pane.SplitY(-1)
-			width := statusPane.Width()
 			statusPane.WithFgBg(ColorWhite, ColorRed, func() {
-				for x := 0; x < width; x++ {
-					statusPane.DrawRune(x, 0, ' ')
-				}
+				statusPane.Clear()
 				statusPane.DrawString(0, 0, err.Error())
 			})
 		}
@@ -397,17 +390,17 @@ func (app *App) Update() error {
 	return nil
 }
 
-func (app *App) evalEditorScript(editorScript []byte, evalSuccessCallback func()) {
+func (app *App) evalBuffer(buffer *Buffer, evalSuccessCallback func()) {
 	if app.currentScreenName != "edit" {
 		return
 	}
 	app.Reset()
 	tapePath := "<temp-tape>"
-	if app.currentBuffer != nil && app.currentBuffer.HasPath() {
-		tapePath = app.currentBuffer.Path
+	if buffer.HasPath() {
+		tapePath = buffer.Path
 	}
 	go func() {
-		if err := app.vm.ParseAndEval(bytes.NewReader(editorScript), tapePath); err != nil {
+		if err := app.vm.ParseAndEval(bytes.NewReader(buffer.Data), tapePath); err != nil {
 			if !errors.Is(err, ErrEvalCancelled) {
 				app.postEvent(func() {
 					app.SetLastError(err)

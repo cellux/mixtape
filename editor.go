@@ -493,9 +493,7 @@ func (e *Editor) RenderStatusLine(tp TilePane, bufferName string, dirty bool, cu
 	leftTextSize := utf8.RuneCountInString(leftText)
 	rightStart := max(paddedWidth-utf8.RuneCountInString(rightText), leftTextSize+1)
 	tp.WithFgBg(ColorWhite, ColorBlue, func() {
-		for x := range tp.Width() {
-			tp.DrawRune(x, 0, ' ')
-		}
+		tp.Clear()
 		tp.DrawString(1, 0, leftText)
 		if rightText != "" && 1+rightStart < paddedWidth {
 			tp.DrawString(1+rightStart, 0, rightText)

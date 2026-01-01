@@ -223,7 +223,7 @@ func (f *InputField) Render(tp TilePane) {
 
 	f.ensureCursorVisible(width)
 
-	for x := 0; x < width; x++ {
+	for x := range width {
 		idx := f.left + x
 		r := ' '
 		if idx < len(f.runes) {
@@ -235,12 +235,6 @@ func (f *InputField) Render(tp TilePane) {
 			})
 		} else {
 			tp.DrawRune(x, 0, r)
-		}
-	}
-
-	for y := 1; y < height; y++ {
-		for x := 0; x < width; x++ {
-			tp.DrawRune(x, y, ' ')
 		}
 	}
 }

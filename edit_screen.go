@@ -1,47 +1,44 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
 const MaxUndo = 64
 
+// UndoFunc undoes an action.
 type UndoFunc = func()
+
+// UndoableFunction executes an action and tells how it can be undone.
 type UndoableFunction = func() UndoFunc
 
 type Action struct {
-	doFunc     UndoableFunction
-	undoFunc   UndoFunc
-	pointAfter EditorPoint
+	doFunc     UndoableFunction // how to do it
+	undoFunc   UndoFunc         // how to undo it
+	pointAfter EditorPoint      // location of point right after the action
 }
 
 // EditScreen bundles the editor-related UI components.
 type EditScreen struct {
 	app         *App
+	bm          *BufferManager
 	editor      *Editor
 	lastScript  []byte // last script successfully evaluated by VM
+	lastBuffer  *Buffer
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
 
-	fileBrowser     *FileBrowser
+	fileBrowser     *FileBrowser // C-x f
 	showFileBrowser bool
 
-	bufferBrowser     *BufferBrowser
+	bufferBrowser     *BufferBrowser // C-x b
 	showBufferBrowser bool
 
-	savePrompt         *Prompt
-	showSavePrompt     bool
-	reloadPrompt       *Prompt
-	showReloadPrompt   bool
-	reloadTargetBuffer *Buffer
-	reloadTargetPath   string
-
-	killPrompt     *Prompt
-	showKillPrompt bool
+	currentPrompt *Prompt
 }
 
 func CreateEditScreen(app *App) (*EditScreen, error) {
@@ -50,40 +47,33 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	keymap := CreateKeyMap()
 
 	es := &EditScreen{
 		app:         app,
+		bm:          app.bm,
 		editor:      editor,
 		tapeDisplay: tapeDisplay,
 		keymap:      keymap,
 	}
 	es.editor.SetActionDispatcher(es.DispatchAction)
 
-	es.savePrompt = CreateTextPrompt("Save file: ", PromptCallbacks{
-		onConfirm: es.confirmSavePrompt,
-		onCancel:  es.cancelSavePrompt,
-	})
+	es.syncBufferToEditor()
 
-	es.reloadPrompt = CreateCharPrompt("Replace dirty buffer? (y/n)", "ynYN", PromptCallbacks{
-		onConfirm: es.confirmReloadPrompt,
-		onCancel:  es.cancelReloadPrompt,
-	})
-
-	es.killPrompt = CreateCharPrompt("Kill buffer? (y/n)", "ynYN", PromptCallbacks{
-		onConfirm: es.confirmKillPrompt,
-		onCancel:  es.cancelKillPrompt,
-	})
-
-	tapeFilter := func(fe FileEntry) bool {
+	fbFilter := func(fe FileEntry) bool {
+		// show directories
 		if fe.isDir {
 			return true
 		}
+		// show files with .tape extension
 		return filepath.Ext(fe.name) == ".tape"
 	}
 
-	fb, err := CreateFileBrowser(app, "", tapeFilter, FileBrowserCallbacks{
+	fbStartDir := ""
+	if path := es.GetCurrentBuffer().Path; path != "" {
+		fbStartDir = filepath.Dir(path)
+	}
+	fb, err := CreateFileBrowser(fbStartDir, fbFilter, FileBrowserCallbacks{
 		onSelect: es.handleFileBrowserSelection,
 		onExit:   es.exitFileOpenMode,
 	})
@@ -92,76 +82,90 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	}
 	es.fileBrowser = fb
 
-	bb := CreateBufferBrowser(app, BufferBrowserCallbacks{
+	bb := CreateBufferBrowser(es.bm, BufferBrowserCallbacks{
 		onSelect: es.handleBufferBrowserEnter,
 		onExit:   es.exitBufferSwitchMode,
 	})
 	es.bufferBrowser = bb
 
-	es.loadCurrentBufferIntoEditor()
-
+	// eval editor script
 	keymap.Bind("C-Enter", func() {
-		editorScript := editor.GetBytes()
-		app.evalEditorScript(editorScript, func() {
-			es.lastScript = editorScript
+		es.syncEditorToBuffer()
+		buf := es.GetCurrentBuffer()
+		lastScript := buf.Data
+		app.evalBuffer(buf, func() {
+			es.lastScript = lastScript
 		})
 	})
+
+	// eval if changed, then play
 	keymap.Bind("C-p", func() {
-		editorScript := editor.GetBytes()
-		if slices.Compare(editorScript, es.lastScript) != 0 {
-			app.evalEditorScript(editorScript, func() {
-				es.lastScript = editorScript
-				app.oto.PlayTape(app.vm.evalResult, es)
-			})
-		} else {
+		es.syncEditorToBuffer()
+		buf := es.GetCurrentBuffer()
+		if bytes.Equal(buf.Data, es.lastScript) {
 			app.postEvent(func() {
 				app.oto.PlayTape(app.vm.evalResult, es)
 			}, false)
+		} else {
+			lastScript := buf.Data
+			app.evalBuffer(buf, func() {
+				es.lastScript = lastScript
+				app.oto.PlayTape(app.vm.evalResult, es)
+			})
 		}
 	})
 
+	// save
 	keymap.Bind("C-x s", func() {
-		es.syncEditorToBuffer()
-		if app.currentBuffer == nil {
+		buf := es.GetCurrentBuffer()
+		if !buf.HasPath() {
+			es.openSavePrompt()
 			return
 		}
-		if app.currentBuffer.HasPath() {
-			if err := os.WriteFile(app.currentBuffer.Path, editor.GetBytes(), 0o644); err != nil {
-				app.SetLastError(err)
-			} else {
-				app.currentBuffer.MarkClean()
-				es.editor.dirty = false
-			}
-			return
-		}
-		es.openSavePrompt()
+		es.SaveEditorContentToCurrentBuffer()
 	})
+
+	// save as
 	keymap.Bind("C-x C-s", func() {
-		es.syncEditorToBuffer()
 		es.openSavePrompt()
 	})
+
+	// file browser
 	keymap.Bind("C-x f", func() {
 		es.enterFileOpenMode()
 	})
+
+	// buffer browser
 	keymap.Bind("C-x b", func() {
 		es.enterBufferSwitchMode()
 	})
+
+	// switch to last buffer
 	keymap.Bind("C-x o", func() {
-		es.switchToBuffer(es.app.lastBuffer)
+		es.switchToOtherBuffer()
 	})
+
+	// switch to next buffer
 	keymap.Bind("C-x n", func() {
 		es.switchToAdjacentBuffer(1)
 	})
+
+	// switch to previous buffer
 	keymap.Bind("C-x p", func() {
 		es.switchToAdjacentBuffer(-1)
 	})
+
+	// kill current buffer
 	keymap.Bind("C-x k", func() {
 		if es.editor.Dirty() {
+			// ask before we kill it
 			es.openKillPrompt()
 		} else {
 			es.killCurrentBuffer()
 		}
 	})
+
+	// undo
 	keymap.Bind("C-z", func() { es.UndoLastAction() })
 	keymap.Bind("C-x u", func() { es.UndoLastAction() })
 	keymap.Bind("C-S--", func() { es.UndoLastAction() })
@@ -169,53 +173,39 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	return es, nil
 }
 
-func (es *EditScreen) DispatchAction(f UndoableFunction) {
-	editor := es.editor
-	buf := es.app.currentBuffer
+func (es *EditScreen) GetCurrentBuffer() *Buffer {
+	return es.bm.GetCurrentBuffer()
+}
 
+func (es *EditScreen) SetCurrentBuffer(b *Buffer) {
+	es.lastBuffer = es.bm.GetCurrentBuffer()
+	es.bm.SetCurrentBuffer(b)
+}
+
+func (es *EditScreen) DispatchAction(f UndoableFunction) {
 	action := Action{doFunc: f}
 	action.undoFunc = f()
-	action.pointAfter = editor.GetPoint()
-
-	buf.undoStack = append(buf.undoStack, action)
-	if len(buf.undoStack) > MaxUndo {
-		buf.undoStack = slices.Delete(buf.undoStack, 0, len(buf.undoStack)-MaxUndo)
-	}
+	action.pointAfter = es.editor.GetPoint()
+	buf := es.GetCurrentBuffer()
+	buf.PushActionToUndoStack(action)
 }
 
 func (es *EditScreen) UndoLastAction() {
-	editor := es.editor
-	buf := es.app.currentBuffer
-
-	if len(buf.undoStack) == 0 {
+	buf := es.GetCurrentBuffer()
+	if buf.UndoStackIsEmpty() {
 		return
 	}
-
-	lastAction := buf.undoStack[len(buf.undoStack)-1]
-	buf.undoStack = buf.undoStack[:len(buf.undoStack)-1]
-	editor.SetPoint(lastAction.pointAfter)
-	editor.ForgetMark()
+	lastAction := buf.PopActionFromUndoStack()
+	es.editor.SetPoint(lastAction.pointAfter)
 	lastAction.undoFunc()
+	es.editor.ForgetMark()
 }
 
 func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
-	if es.showKillPrompt {
-		next, handled = es.killPrompt.HandleKey(key)
-		if handled {
-			return
-		}
-	}
-	if es.showReloadPrompt {
-		next, handled = es.reloadPrompt.HandleKey(key)
-		if handled {
-			return
-		}
-	}
-	if es.showSavePrompt {
-		next, handled = es.savePrompt.HandleKey(key)
-		if handled {
-			return
-		}
+	// prompts behave like modal dialogs
+	if es.currentPrompt != nil {
+		next, handled = es.currentPrompt.HandleKey(key)
+		return
 	}
 	if es.showFileBrowser {
 		next, handled = es.fileBrowser.HandleKey(key)
@@ -239,13 +229,15 @@ func (es *EditScreen) HandleKey(key Key) (next KeyHandler, handled bool) {
 func (es *EditScreen) Render(app *App, ts *TileScreen) {
 	screenPane := ts.GetPane()
 
+	currentBuffer := es.GetCurrentBuffer()
+
 	var statusFile string
-	if app.currentBuffer == nil {
+	if currentBuffer == nil {
 		statusFile = "<no buffer>"
-	} else if !app.currentBuffer.HasPath() {
-		statusFile = app.currentBuffer.Name
+	} else if currentBuffer.HasPath() {
+		statusFile = currentBuffer.Path
 	} else {
-		statusFile = app.currentBuffer.Path
+		statusFile = currentBuffer.Name
 	}
 
 	var editorPane TilePane
@@ -273,48 +265,44 @@ func (es *EditScreen) Render(app *App, ts *TileScreen) {
 		es.fileBrowser.Render(editorPane)
 		return
 	}
+
 	if es.showBufferBrowser {
 		es.bufferBrowser.Render(editorPane)
-		return
-	}
-
-	if es.showReloadPrompt {
-		es.renderReloadPrompt(editorPane)
-		return
-	}
-	if es.showSavePrompt {
-		es.renderSavePrompt(editorPane)
-		return
-	}
-	if es.showKillPrompt {
-		es.renderKillPrompt(editorPane)
 		return
 	}
 
 	editorBufferPane, editorStatusPane := editorPane.SplitY(-1)
 	currentToken := app.vm.CurrentToken()
 	es.editor.Render(editorBufferPane, currentToken)
-	dirty := es.editor.Dirty() && es.app.currentBuffer.HasPath()
-	es.editor.RenderStatusLine(editorStatusPane, statusFile, dirty, currentToken, app.rTotalFrames, app.rDoneFrames)
+	dirty := es.editor.Dirty() && currentBuffer.HasPath()
+	es.editor.RenderStatusLine(
+		editorStatusPane,
+		statusFile,
+		dirty,
+		currentToken,
+		app.rTotalFrames,
+		app.rDoneFrames)
+
+	if es.currentPrompt != nil {
+		promptPane := screenPane.SubPane(0, screenPane.Height()-1, screenPane.Width(), 1)
+		es.renderPrompt(promptPane)
+		return
+	}
 }
 
 func (es *EditScreen) switchToAdjacentBuffer(delta int) {
-	n := len(es.app.buffers)
-	if n < 2 {
-		return
+	adjacentBuffer := es.bm.getAdjacentBuffer(delta)
+	if adjacentBuffer != nil {
+		es.switchToBuffer(adjacentBuffer)
 	}
-	currentIndex := -1
-	for i, buf := range es.app.buffers {
-		if buf == es.app.currentBuffer {
-			currentIndex = i
-			break
-		}
+}
+
+func (es *EditScreen) switchToOtherBuffer() {
+	if es.lastBuffer != nil {
+		es.switchToBuffer(es.lastBuffer)
+	} else {
+		es.switchToAdjacentBuffer(1)
 	}
-	if currentIndex == -1 {
-		return
-	}
-	nextIndex := (currentIndex + delta + n) % n
-	es.switchToBuffer(es.app.buffers[nextIndex])
 }
 
 func (es *EditScreen) enterBufferSwitchMode() {
@@ -328,35 +316,8 @@ func (es *EditScreen) exitBufferSwitchMode() {
 }
 
 func (es *EditScreen) handleBufferBrowserEnter(buf *Buffer) {
-	if buf == nil {
-		return
-	}
 	es.switchToBuffer(buf)
 	es.exitBufferSwitchMode()
-}
-
-func (es *EditScreen) openReloadPrompt(buf *Buffer, path string) {
-	es.reloadTargetBuffer = buf
-	es.reloadTargetPath = path
-	es.reloadPrompt.Reset()
-	es.showReloadPrompt = true
-}
-
-func (es *EditScreen) confirmReloadPrompt(value string) {
-	if !es.showReloadPrompt {
-		return
-	}
-	buf := es.reloadTargetBuffer
-	path := es.reloadTargetPath
-	es.cancelReloadPrompt()
-	if value != "y" && value != "Y" {
-		return
-	}
-	if buf == nil || path == "" {
-		return
-	}
-	es.exitFileOpenMode()
-	es.switchToBuffer(buf)
 }
 
 func (es *EditScreen) switchToBuffer(buf *Buffer) {
@@ -364,18 +325,26 @@ func (es *EditScreen) switchToBuffer(buf *Buffer) {
 		return
 	}
 	es.syncEditorToBuffer()
-	if es.app.currentBuffer != nil && es.app.currentBuffer != buf {
-		es.app.lastBuffer = es.app.currentBuffer
-	}
-	es.app.currentBuffer = buf
-	es.loadCurrentBufferIntoEditor()
+	es.SetCurrentBuffer(buf)
+	es.syncBufferToEditor()
+}
+
+func (es *EditScreen) syncBufferToEditor() {
+	currentBuffer := es.GetCurrentBuffer()
+	es.editor.SetText(string(currentBuffer.Data))
+	es.editor.point = currentBuffer.editorPoint
+	es.editor.top = currentBuffer.editorTop
+	es.editor.left = currentBuffer.editorLeft
+	es.editor.dirty = currentBuffer.Dirty
+	es.editor.Reset()
 }
 
 func (es *EditScreen) syncEditorToBuffer() {
-	if es.app == nil || es.app.currentBuffer == nil {
-		return
-	}
-	es.app.currentBuffer.SetData(es.editor.GetBytes())
+	currentBuffer := es.GetCurrentBuffer()
+	currentBuffer.SetData(es.editor.GetBytes())
+	currentBuffer.editorPoint = es.editor.point
+	currentBuffer.editorTop = es.editor.top
+	currentBuffer.editorLeft = es.editor.left
 }
 
 func (es *EditScreen) Keymap() KeyMap {
@@ -393,193 +362,166 @@ func (es *EditScreen) exitFileOpenMode() {
 	es.showFileBrowser = false
 }
 
-func (es *EditScreen) handleFileBrowserSelection(entry FileEntry) {
-	if entry.isDir {
-		if _, err := es.fileBrowser.Enter(); err != nil {
-			es.app.SetLastError(err)
-		}
-		return
+func canonicalPath(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		abs = p
 	}
-	full := es.fileBrowser.CanonicalPath(entry.path)
-	if buf := es.app.findBufferByPath(full); buf != nil {
-		if buf.Dirty {
-			es.openReloadPrompt(buf, full)
-			return
-		}
-		es.switchToBuffer(buf)
-		es.exitFileOpenMode()
-		return
+	canonical, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return abs
 	}
-	data, err := os.ReadFile(full)
+	return canonical
+}
+
+func (es *EditScreen) loadFileToBuffer(path string, buf *Buffer) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		es.app.SetLastError(err)
 		return
 	}
-	buf := CreateBuffer(es.app.buffers, full, data)
-	es.app.buffers = append(es.app.buffers, buf)
-	es.app.currentBuffer = buf
-	es.loadCurrentBufferIntoEditor()
+	if buf == nil {
+		buf = es.bm.CreateBuffer("", path, data)
+	} else {
+		buf.SetData(data)
+	}
+	es.syncBufferToEditor()
 	es.exitFileOpenMode()
+}
+
+func (es *EditScreen) handleFileBrowserSelection(entry FileEntry) {
+	full := canonicalPath(entry.path)
+	buf := es.bm.findBufferByPath(full)
+	if buf == nil {
+		es.loadFileToBuffer(full, nil)
+		return
+	}
+	if !buf.Dirty {
+		es.loadFileToBuffer(full, buf)
+		return
+	}
+	prompt := CreateCharPrompt("Replace dirty buffer? (y/n)", "ynYN", PromptCallbacks{
+		onConfirm: func(value string) {
+			es.closePrompt()
+			if value == "y" || value == "Y" {
+				es.loadFileToBuffer(full, buf)
+			}
+		},
+		onCancel: es.closePrompt,
+	})
+	es.openPrompt(prompt)
 }
 
 func (es *EditScreen) Reset() {
 	es.editor.Reset()
 	es.showBufferBrowser = false
 	es.showFileBrowser = false
-	es.showSavePrompt = false
-	es.showReloadPrompt = false
-	es.showKillPrompt = false
-	es.reloadPrompt.Reset()
-	es.savePrompt.Reset()
-	es.killPrompt.Reset()
+	es.currentPrompt = nil
 }
 
-func (es *EditScreen) loadCurrentBufferIntoEditor() {
-	if es.app != nil && es.app.currentBuffer != nil {
-		es.editor.SetText(string(es.app.currentBuffer.Data))
-		es.editor.dirty = es.app.currentBuffer.Dirty
+func (es *EditScreen) openPrompt(prompt *Prompt) {
+	es.currentPrompt = prompt
+}
+
+func (es *EditScreen) renderPrompt(tp TilePane) {
+	if es.currentPrompt == nil {
+		return
 	}
+	es.currentPrompt.Render(tp)
+}
+
+func (es *EditScreen) closePrompt() {
+	es.currentPrompt = nil
 }
 
 func (es *EditScreen) openSavePrompt() {
-	if es.app == nil || es.app.currentBuffer == nil {
-		return
-	}
-	es.savePrompt.Reset()
 	cwd, err := os.Getwd()
 	if err != nil {
 		es.app.SetLastError(err)
 		return
 	}
 	defaultPath := cwd
-	if es.app.currentBuffer.HasPath() {
-		defaultPath = es.app.currentBuffer.Path
+	currentBuffer := es.GetCurrentBuffer()
+	if currentBuffer.HasPath() {
+		defaultPath = currentBuffer.Path
 	} else if !strings.HasSuffix(defaultPath, string(filepath.Separator)) {
 		defaultPath += string(filepath.Separator)
 	}
-	es.savePrompt.SetText(defaultPath)
-	es.showSavePrompt = true
+	prompt := CreateTextPrompt("Save file: ", PromptCallbacks{
+		onConfirm: es.confirmSavePrompt,
+		onCancel:  es.closePrompt,
+	})
+	prompt.SetText(defaultPath)
+	es.openPrompt(prompt)
 }
 
-func (es *EditScreen) cancelSavePrompt() {
-	es.showSavePrompt = false
-}
-
-func (es *EditScreen) cancelReloadPrompt() {
-	es.showReloadPrompt = false
-	es.reloadTargetBuffer = nil
-	es.reloadTargetPath = ""
+func (es *EditScreen) SaveEditorContentToCurrentBuffer() {
+	es.syncEditorToBuffer()
+	currentBuffer := es.GetCurrentBuffer()
+	if err := currentBuffer.WriteFile(); err != nil {
+		es.app.SetLastError(err)
+	}
+	es.syncBufferToEditor()
 }
 
 func (es *EditScreen) confirmSavePrompt(value string) {
-	if !es.showSavePrompt {
-		return
-	}
+	es.closePrompt()
 	path := value
 	if path == "" {
-		es.cancelSavePrompt()
 		return
 	}
-	es.app.currentBuffer.SetPath(path)
-	es.cancelSavePrompt()
-	es.syncEditorToBuffer()
-	if err := os.WriteFile(path, es.editor.GetBytes(), 0o644); err != nil {
-		es.app.SetLastError(err)
-	} else {
-		es.app.currentBuffer.MarkClean()
-		es.editor.dirty = false
-	}
+	currentBuffer := es.GetCurrentBuffer()
+	currentBuffer.SetPath(path)
+	es.SaveEditorContentToCurrentBuffer()
 }
 
 func (es *EditScreen) openKillPrompt() {
-	target := es.app.currentBuffer
-	if target == nil {
-		return
-	}
-	es.killPrompt.Reset()
-	es.showKillPrompt = true
-}
-
-func (es *EditScreen) cancelKillPrompt() {
-	es.showKillPrompt = false
+	prompt := CreateCharPrompt("Kill buffer? (y/n)", "ynYN", PromptCallbacks{
+		onConfirm: es.confirmKillPrompt,
+		onCancel:  es.closePrompt,
+	})
+	es.openPrompt(prompt)
 }
 
 func (es *EditScreen) killCurrentBuffer() {
-	target := es.app.currentBuffer
-	if target == nil {
-		return
-	}
-	for i, b := range es.app.buffers {
-		if b == target {
-			es.app.buffers = append(es.app.buffers[:i], es.app.buffers[i+1:]...)
-			break
-		}
-	}
-	if len(es.app.buffers) == 0 {
+	if len(es.bm.buffers) == 1 {
 		es.app.Quit()
 		return
 	}
-	if es.app.lastBuffer == target {
-		es.app.lastBuffer = nil
+	nextBuffer := es.lastBuffer
+	if nextBuffer == nil {
+		nextBuffer = es.bm.getAdjacentBuffer(1)
 	}
-	es.app.currentBuffer = es.app.buffers[0]
-	es.loadCurrentBufferIntoEditor()
+	target := es.GetCurrentBuffer()
+	es.bm.RemoveBuffer(target)
+	if es.lastBuffer == target {
+		es.lastBuffer = nil
+	}
+	if nextBuffer == target || nextBuffer == nil {
+		nextBuffer = es.bm.FirstBuffer()
+	}
+	es.SetCurrentBuffer(nextBuffer)
+	es.syncBufferToEditor()
 }
 
 func (es *EditScreen) confirmKillPrompt(value string) {
-	if !es.showKillPrompt {
-		return
+	es.closePrompt()
+	if value == "y" || value == "Y" {
+		es.killCurrentBuffer()
 	}
-	es.cancelKillPrompt()
-	if value != "y" && value != "Y" {
-		return
-	}
-	es.killCurrentBuffer()
-}
-
-func (es *EditScreen) renderSavePrompt(tp TilePane) {
-	if tp.Height() <= 0 {
-		return
-	}
-	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
-	es.savePrompt.Render(linePane)
-}
-
-func (es *EditScreen) renderKillPrompt(tp TilePane) {
-	if tp.Height() <= 0 {
-		return
-	}
-	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
-	es.killPrompt.Render(linePane)
-}
-
-func (es *EditScreen) renderReloadPrompt(tp TilePane) {
-	if tp.Height() <= 0 {
-		return
-	}
-	linePane := tp.SubPane(0, tp.Height()-1, tp.Width(), 1)
-	es.reloadPrompt.Render(linePane)
 }
 
 func (es *EditScreen) OnChar(app *App, char rune) {
+	if es.currentPrompt != nil {
+		es.currentPrompt.OnChar(char)
+		return
+	}
 	if es.showFileBrowser {
 		es.fileBrowser.OnChar(char)
 		return
 	}
 	if es.showBufferBrowser {
 		es.bufferBrowser.OnChar(char)
-		return
-	}
-	if es.showSavePrompt {
-		es.savePrompt.OnChar(char)
-		return
-	}
-	if es.showReloadPrompt {
-		es.reloadPrompt.OnChar(char)
-		return
-	}
-	if es.showKillPrompt {
-		es.killPrompt.OnChar(char)
 		return
 	}
 	es.DispatchAction(func() UndoFunc {

@@ -425,6 +425,18 @@ func (tp TilePane) DrawRune(x, y int, r rune) {
 	}
 }
 
+func (tp TilePane) FillWith(r rune) {
+	for x := range tp.Width() {
+		for y := range tp.Height() {
+			tp.DrawRune(x, y, ' ')
+		}
+	}
+}
+
+func (tp TilePane) Clear() {
+	tp.FillWith(' ')
+}
+
 func (tp TilePane) DrawString(x, y int, s string) {
 	for offset, r := range s {
 		tp.DrawRune(x+offset, y, r)

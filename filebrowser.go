@@ -41,7 +41,6 @@ type FileBrowserCallbacks struct {
 }
 
 type FileBrowser struct {
-	app         *App
 	dir         string
 	entries     []FileEntry
 	listDisplay *ListDisplay
@@ -72,7 +71,7 @@ func (fb *FileBrowser) HandleKey(key Key) (KeyHandler, bool) {
 	return fb.keymap.HandleKey(key)
 }
 
-func CreateFileBrowser(app *App, startDir string, filter FileFilter, callbacks FileBrowserCallbacks) (*FileBrowser, error) {
+func CreateFileBrowser(startDir string, filter FileFilter, callbacks FileBrowserCallbacks) (*FileBrowser, error) {
 	if startDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -81,7 +80,6 @@ func CreateFileBrowser(app *App, startDir string, filter FileFilter, callbacks F
 		startDir = cwd
 	}
 	fb := &FileBrowser{
-		app:         app,
 		dir:         startDir,
 		listDisplay: CreateListDisplay(),
 		filter:      filter,
@@ -137,18 +135,6 @@ func (fb *FileBrowser) CurrentFilteredEntry() *FileEntry {
 	return &fe
 }
 
-func (fb *FileBrowser) CanonicalPath(p string) string {
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		abs = p
-	}
-	canonical, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return abs
-	}
-	return canonical
-}
-
 func (fb *FileBrowser) Reload() error {
 	prevSelection := fb.listDisplay.SelectedEntry()
 
@@ -156,7 +142,6 @@ func (fb *FileBrowser) Reload() error {
 	if err != nil {
 		fb.entries = nil
 		fb.listDisplay.SetEntries(nil)
-		fb.app.SetLastError(err)
 		return err
 	}
 	slices.SortFunc(entries, func(a, b os.DirEntry) int {

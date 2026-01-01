@@ -53,19 +53,9 @@ func (f *EvalTargetFlag) Set(val string) error {
 	return nil
 }
 
-func runGui(vm *VM, buffers []*Buffer, currentBuffer *Buffer) error {
-	app := &App{
-		vm:            vm,
-		buffers:       buffers,
-		currentBuffer: currentBuffer,
-	}
-	var windowTitle string
-	if currentBuffer != nil {
-		windowTitle = fmt.Sprintf("mixtape : %s", currentBuffer.Name)
-	} else {
-		windowTitle = "mixtape"
-	}
-	return WithGL(windowTitle, app)
+func runGui(vm *VM, bm *BufferManager) error {
+	app := CreateApp(vm, bm)
+	return WithGL("mixtape", app)
 }
 
 func withProfileIfNeeded(fn func() error) error {
@@ -126,26 +116,20 @@ func runWithArgs(vm *VM, args []string) error {
 		})
 	}
 
-	buffers := []*Buffer{}
-	var currentBuffer *Buffer
-
+	bm := CreateBufferManager()
 	for _, arg := range args {
 		data, err := os.ReadFile(arg)
 		if err != nil {
 			return err
 		}
 		path := arg
-		buf := CreateBuffer(buffers, path, data)
-		buffers = append(buffers, buf)
-		currentBuffer = buf
+		bm.CreateBuffer("", path, data)
+	}
+	if bm.Empty() {
+		bm.CreateBuffer("", "", nil)
 	}
 
-	if len(buffers) == 0 {
-		currentBuffer = NewScratchBuffer()
-		buffers = append(buffers, currentBuffer)
-	}
-
-	return runGui(vm, buffers, currentBuffer)
+	return runGui(vm, bm)
 }
 
 func setDefaults(vm *VM) {

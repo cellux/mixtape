@@ -26,15 +26,15 @@ type BufferBrowserCallbacks struct {
 
 // BufferBrowser provides a searchable list of buffers.
 type BufferBrowser struct {
-	app         *App
+	bm          *BufferManager
 	listDisplay *ListDisplay
 	keymap      KeyMap
 	callbacks   BufferBrowserCallbacks
 }
 
-func CreateBufferBrowser(app *App, callbacks BufferBrowserCallbacks) *BufferBrowser {
+func CreateBufferBrowser(bm *BufferManager, callbacks BufferBrowserCallbacks) *BufferBrowser {
 	bb := &BufferBrowser{
-		app:         app,
+		bm:          bm,
 		listDisplay: CreateListDisplay(),
 		callbacks:   callbacks,
 	}
@@ -62,13 +62,14 @@ func (bb *BufferBrowser) SearchText() string {
 }
 
 func (bb *BufferBrowser) Reload() {
-	entries := make([]ListEntry, len(bb.app.buffers))
-	for i, buf := range bb.app.buffers {
+	bm := bb.bm
+	entries := make([]ListEntry, len(bm.buffers))
+	for i, buf := range bm.buffers {
 		entries[i] = BufferEntry{buffer: buf}
 	}
 	bb.listDisplay.SetEntries(entries)
-	if bb.app.currentBuffer != nil {
-		_ = bb.listDisplay.SelectById(bb.app.currentBuffer)
+	if bm.currentBuffer != nil {
+		_ = bb.listDisplay.SelectById(bm.currentBuffer)
 	}
 }
 

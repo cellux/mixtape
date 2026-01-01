@@ -63,15 +63,6 @@ func (p *Prompt) Text() string {
 	return p.input.Text()
 }
 
-func (p *Prompt) Reset() {
-	switch p.mode {
-	case PromptInputModeText:
-		p.input.Reset()
-	case PromptInputModeChar:
-		// nothing to reset
-	}
-}
-
 func (p *Prompt) HandleKey(key Key) (KeyHandler, bool) {
 	switch p.mode {
 	case PromptInputModeText:
@@ -100,15 +91,14 @@ func (p *Prompt) Render(tp TilePane) {
 	if width <= 0 || height <= 0 {
 		return
 	}
-
-	linePane := tp.SubPane(0, height-1, width, 1)
+	tp.Clear()
 	switch p.mode {
 	case PromptInputModeText:
-		linePane.DrawString(0, 0, p.prompt)
-		inputPane := linePane.SubPane(len(p.prompt), 0, width-len(p.prompt), 1)
+		tp.DrawString(0, 0, p.prompt)
+		inputPane := tp.SubPane(len(p.prompt), 0, width-len(p.prompt), 1)
 		p.input.Render(inputPane)
 	case PromptInputModeChar:
-		linePane.DrawString(0, 0, p.prompt)
+		tp.DrawString(0, 0, p.prompt)
 	}
 }
 

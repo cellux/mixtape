@@ -6,7 +6,7 @@ import (
 	"github.com/atotto/clipboard"
 )
 
-// FileScreen is a simple file browser.
+// FileScreen is a simple file browser with sample playing functionality.
 type FileScreen struct {
 	fileBrowser *FileBrowser
 	keymap      KeyMap
@@ -23,7 +23,7 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileBrowser, err := CreateFileBrowser(app, "", nil, FileBrowserCallbacks{})
+	fileBrowser, err := CreateFileBrowser("", nil, FileBrowserCallbacks{})
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (fs *FileScreen) copyPath() {
 	if entry == nil {
 		return
 	}
-	full := fs.fileBrowser.CanonicalPath(entry.path)
+	full := canonicalPath(entry.path)
 	_ = clipboard.WriteAll(fmt.Sprintf("\"%s\" load", full))
 }
 
@@ -97,7 +97,7 @@ func (fs *FileScreen) playSelected(app *App) {
 	if entry == nil || entry.isDir {
 		return
 	}
-	path := fs.fileBrowser.CanonicalPath(entry.path)
+	path := canonicalPath(entry.path)
 	if path == fs.lastPlayedPath && fs.lastTape != nil {
 		app.oto.PlayTape(fs.lastTape, fs)
 		return
