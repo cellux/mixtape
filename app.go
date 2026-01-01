@@ -216,6 +216,20 @@ func (app *App) IsRunning() bool {
 }
 
 func (app *App) Quit() {
+	app.screens["edit"].(*EditScreen).syncEditorToBuffer()
+	if app.bm.HasDirtyBuffers() {
+		prompt := CreateCharPrompt("There are unsaved changes. Really quit? (y/n)", "ynYN", PromptCallbacks{
+			onConfirm: func(value string) {
+				app.ClosePrompt()
+				if value == "y" || value == "Y" {
+					app.shouldExit = true
+				}
+			},
+			onCancel: app.ClosePrompt,
+		})
+		app.OpenPrompt(prompt)
+		return
+	}
 	app.shouldExit = true
 }
 

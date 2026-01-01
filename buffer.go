@@ -133,6 +133,14 @@ func (bm *BufferManager) findBufferByPath(path string) *Buffer {
 	return nil
 }
 
+func (bm *BufferManager) HasDirtyBuffers() bool {
+	for _, b := range bm.buffers {
+		if b.Dirty {
+			return true
+		}
+	}
+	return false
+}
 func (bm *BufferManager) getAdjacentBuffer(delta int) *Buffer {
 	n := len(bm.buffers)
 	if n < 2 {
