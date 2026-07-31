@@ -16,6 +16,10 @@ func (tp *TapePlayer) GetCurrentFrame() int {
 	return tp.reader.GetCurrentFrame(numBytesStillInOtoBuffer)
 }
 
+func (tp *TapePlayer) IsPlaying() bool {
+	return tp.player.IsPlaying()
+}
+
 type OtoState struct {
 	mu          sync.Mutex
 	ctx         *oto.Context
@@ -52,7 +56,7 @@ func (os *OtoState) GetTapePlayers(owner Screen) []*TapePlayer {
 	return result
 }
 
-func (os *OtoState) PlayTape(x any, owner Screen) {
+func (os *OtoState) PlayTape(x any, owner Screen) *TapePlayer {
 	if streamable, ok := x.(Streamable); ok {
 		stream := streamable.Stream()
 		if stream.nframes > 0 {
@@ -68,8 +72,10 @@ func (os *OtoState) PlayTape(x any, owner Screen) {
 			os.tapePlayers = append(os.tapePlayers, tapePlayer)
 			os.mu.Unlock()
 			player.Play()
+			return tapePlayer
 		}
 	}
+	return nil
 }
 
 func (os *OtoState) StopAllPlayers() {

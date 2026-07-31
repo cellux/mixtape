@@ -14,6 +14,7 @@ type FileScreen struct {
 
 	lastPlayedPath string
 	lastTape       *Tape
+	lastPlayers    []*TapePlayer
 	tapeDisplay    *TapeDisplay
 }
 
@@ -66,6 +67,7 @@ func (fs *FileScreen) HandleKey(key Key) (nextHandler KeyHandler, handled bool) 
 func (fs *FileScreen) Reset() {
 	fs.lastPlayedPath = ""
 	fs.lastTape = nil
+	fs.lastPlayers = nil
 	_ = fs.fileBrowser.Reset()
 }
 
@@ -78,9 +80,11 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	if fs.lastTape != nil {
 		var tapePane TilePane
 		browserPane, tapePane = pane.SplitY(-8)
-		playheadFrames := []int{}
-		for _, tp := range app.oto.GetTapePlayers(fs) {
-			playheadFrames = append(playheadFrames, tp.GetCurrentFrame())
+		playheadFrames := make([]int, 0, len(fs.lastPlayers))
+		for _, player := range fs.lastPlayers {
+			if player.IsPlaying() {
+				playheadFrames = append(playheadFrames, player.GetCurrentFrame())
+			}
 		}
 		fs.tapeDisplay.Render(fs.lastTape, tapePane.GetPixelRect(), fs.lastTape.nframes, 0, playheadFrames)
 	}
@@ -99,7 +103,7 @@ func (fs *FileScreen) playSelected(app *App) {
 	}
 	path := canonicalPath(entry.path)
 	if path == fs.lastPlayedPath && fs.lastTape != nil {
-		app.oto.PlayTape(fs.lastTape, fs)
+		fs.playTape(app, fs.lastTape)
 		return
 	}
 	tape, err := loadSample(path)
@@ -109,5 +113,12 @@ func (fs *FileScreen) playSelected(app *App) {
 	}
 	fs.lastPlayedPath = path
 	fs.lastTape = tape
-	app.oto.PlayTape(tape, fs)
+	fs.lastPlayers = nil
+	fs.playTape(app, tape)
+}
+
+func (fs *FileScreen) playTape(app *App, tape *Tape) {
+	if player := app.oto.PlayTape(tape, fs); player != nil {
+		fs.lastPlayers = append(fs.lastPlayers, player)
+	}
 }
