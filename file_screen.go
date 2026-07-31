@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/atotto/clipboard"
 )
@@ -16,6 +19,12 @@ type FileScreen struct {
 	lastTape       *Tape
 	lastPlayers    []*TapePlayer
 	tapeDisplay    *TapeDisplay
+
+	loadID          uint64
+	loadCancel      context.CancelFunc
+	loadingPath     string
+	loadingStage    string
+	loadingProgress float64
 }
 
 func CreateFileScreen(app *App) (*FileScreen, error) {
@@ -24,16 +33,18 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-	fileBrowser, err := CreateFileBrowser("", nil, FileBrowserCallbacks{})
-	if err != nil {
-		return nil, err
-	}
 	fs := &FileScreen{
-		fileBrowser: fileBrowser,
 		keymap:      keymap,
 		tapeDisplay: tapeDisplay,
 		app:         app,
 	}
+	fileBrowser, err := CreateFileBrowser("", nil, FileBrowserCallbacks{
+		onExit: func() { fs.cancelPlayback(app) },
+	})
+	if err != nil {
+		return nil, err
+	}
+	fs.fileBrowser = fileBrowser
 	keymap.Bind("M-w", func() { fs.copyPath() })
 	keymap.Bind("C-p", func() { fs.playSelected(app) })
 	return fs, nil
@@ -68,6 +79,7 @@ func (fs *FileScreen) Reset() {
 	fs.lastPlayedPath = ""
 	fs.lastTape = nil
 	fs.lastPlayers = nil
+	fs.cancelLoad()
 	_ = fs.fileBrowser.Reset()
 }
 
@@ -77,19 +89,41 @@ func (fs *FileScreen) Render(app *App, ts *TileScreen) {
 	pane := ts.GetPane()
 
 	browserPane := pane
-	if fs.lastTape != nil {
+	if fs.lastTape != nil && fs.loadingPath != "" {
+		var bottomPane, tapePane, statusPane TilePane
+		browserPane, bottomPane = pane.SplitY(-9)
+		tapePane, statusPane = bottomPane.SplitY(8)
+		fs.renderTape(tapePane)
+		fs.renderLoadingStatus(statusPane)
+	} else if fs.lastTape != nil {
 		var tapePane TilePane
 		browserPane, tapePane = pane.SplitY(-8)
-		playheadFrames := make([]int, 0, len(fs.lastPlayers))
-		for _, player := range fs.lastPlayers {
-			if player.IsPlaying() {
-				playheadFrames = append(playheadFrames, player.GetCurrentFrame())
-			}
-		}
-		fs.tapeDisplay.Render(fs.lastTape, tapePane.GetPixelRect(), fs.lastTape.nframes, 0, playheadFrames)
+		fs.renderTape(tapePane)
+	} else if fs.loadingPath != "" {
+		var statusPane TilePane
+		browserPane, statusPane = pane.SplitY(-1)
+		fs.renderLoadingStatus(statusPane)
 	}
 
 	fs.fileBrowser.Render(browserPane)
+}
+
+func (fs *FileScreen) renderTape(pane TilePane) {
+	playheadFrames := make([]int, 0, len(fs.lastPlayers))
+	for _, player := range fs.lastPlayers {
+		if player.IsPlaying() {
+			playheadFrames = append(playheadFrames, player.GetCurrentFrame())
+		}
+	}
+	fs.tapeDisplay.Render(fs.lastTape, pane.GetPixelRect(), fs.lastTape.nframes, 0, playheadFrames)
+}
+
+func (fs *FileScreen) renderLoadingStatus(pane TilePane) {
+	progress := int(fs.loadingProgress * 100)
+	pane.WithFgBg(ColorWhite, ColorBlue, func() {
+		pane.Clear()
+		pane.DrawString(0, 0, fmt.Sprintf("%s %d%%: %s", fs.loadingStage, progress, filepath.Base(fs.loadingPath)))
+	})
 }
 
 func (fs *FileScreen) OnChar(app *App, char rune) {
@@ -106,19 +140,69 @@ func (fs *FileScreen) playSelected(app *App) {
 		fs.playTape(app, fs.lastTape)
 		return
 	}
-	tape, err := loadSample(path)
-	if err != nil {
-		fs.app.SetLastError(err)
+	if path == fs.loadingPath {
 		return
 	}
-	fs.lastPlayedPath = path
-	fs.lastTape = tape
-	fs.lastPlayers = nil
-	fs.playTape(app, tape)
+	fs.cancelLoad()
+	loadID := fs.loadID
+	loadContext, cancel := context.WithCancel(context.Background())
+	fs.loadCancel = cancel
+	fs.loadingPath = path
+	fs.loadingStage = "Loading"
+	fs.loadingProgress = 0
+	go fs.loadAndPlay(app, loadContext, path, loadID)
 }
 
 func (fs *FileScreen) playTape(app *App, tape *Tape) {
 	if player := app.oto.PlayTape(tape, fs); player != nil {
 		fs.lastPlayers = append(fs.lastPlayers, player)
 	}
+}
+
+func (fs *FileScreen) cancelPlayback(app *App) {
+	app.oto.StopTapePlayers(fs)
+	fs.lastPlayers = nil
+	fs.cancelLoad()
+}
+
+func (fs *FileScreen) cancelLoad() {
+	if fs.loadCancel != nil {
+		fs.loadCancel()
+		fs.loadCancel = nil
+	}
+	fs.loadID++
+	fs.loadingPath = ""
+	fs.loadingStage = ""
+	fs.loadingProgress = 0
+}
+
+func (fs *FileScreen) loadAndPlay(app *App, loadContext context.Context, path string, loadID uint64) {
+	tape, err := loadSampleWithProgress(loadContext, path, func(stage string, progress float64) {
+		app.postEvent(func() {
+			if fs.loadID == loadID {
+				fs.loadingStage = stage
+				fs.loadingProgress = progress
+			}
+		}, true)
+	})
+	app.postEvent(func() {
+		if fs.loadID != loadID {
+			return
+		}
+		fs.loadCancel = nil
+		fs.loadingPath = ""
+		fs.loadingStage = ""
+		fs.loadingProgress = 0
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		if err != nil {
+			fs.app.SetLastError(err)
+			return
+		}
+		fs.lastPlayedPath = path
+		fs.lastTape = tape
+		fs.lastPlayers = nil
+		fs.playTape(app, tape)
+	}, false)
 }

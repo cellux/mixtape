@@ -133,7 +133,10 @@ selection, and multi-key commands.
 - `F1` — open the read-only in-app help screen.
 - `F2` — return to the editor.
 - `F3` — open the sample browser. It can browse directories and play selected
-  `.wav` or `.mp3` files with `C-p`; `M-w` copies a ready-to-paste
+  `.wav` or `.mp3` files with `C-p`. Samples load in the background and show a
+  progress line at the bottom of the screen, including `Resampling` progress
+  when a sample-rate conversion is needed. `C-g` stops sample-browser
+  playback and cancels a pending load; `M-w` copies a ready-to-paste
   `"/absolute/path" load` expression to the clipboard.
 
 ### Evaluating / playing

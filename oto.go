@@ -88,3 +88,13 @@ func (os *OtoState) StopAllPlayers() {
 	}
 	os.tapePlayers = nil
 }
+
+func (os *OtoState) StopTapePlayers(owner Screen) {
+	os.mu.Lock()
+	defer os.mu.Unlock()
+	for _, tp := range os.tapePlayers {
+		if tp.owner == owner && tp.player.IsPlaying() {
+			tp.player.Pause()
+		}
+	}
+}

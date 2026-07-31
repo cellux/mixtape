@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/dh1tw/gosamplerate"
@@ -21,6 +22,62 @@ import (
 
 // DefaultWaveSize defines the size of builtin single-cycle waveforms
 const DefaultWaveSize = 8192
+
+const decodeChunkSamples = 32 * 1024
+
+type cancelableReadSeeker struct {
+	context.Context
+	io.ReadSeeker
+}
+
+type sampleLoadProgress func(stage string, progress float64)
+
+func resampleWithProgress(ctx context.Context, data []float32, ratio float64, nchannels int, converter int, progress func(float64)) ([]float32, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	chunkSamples := decodeChunkSamples - decodeChunkSamples%nchannels
+	chunkFrames := chunkSamples / nchannels
+	outputFrames := int(math.Ceil(float64(chunkFrames)*ratio)) + 256
+	bufferSamples := max(chunkSamples, outputFrames*nchannels)
+	src, err := gosamplerate.New(converter, nchannels, bufferSamples)
+	if err != nil {
+		return nil, err
+	}
+	defer gosamplerate.Delete(src)
+
+	result := make([]float32, 0, int(math.Ceil(float64(len(data))*ratio)))
+	for offset := 0; offset < len(data); {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		end := min(offset+chunkSamples, len(data))
+		output, err := src.Process(data[offset:end], ratio, end == len(data))
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output...)
+		offset = end
+		if progress != nil {
+			progress(float64(offset) / float64(len(data)))
+		}
+	}
+	return result, nil
+}
+
+func (r cancelableReadSeeker) Read(buf []byte) (int, error) {
+	if err := r.Err(); err != nil {
+		return 0, err
+	}
+	return r.ReadSeeker.Read(buf)
+}
+
+func (r cancelableReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	if err := r.Err(); err != nil {
+		return 0, err
+	}
+	return r.ReadSeeker.Seek(offset, whence)
+}
 
 type Tape struct {
 	nchannels int
@@ -446,6 +503,10 @@ func loadTape(vm *VM, path string) (*Tape, error) {
 }
 
 func loadWav(path string) (*Tape, error) {
+	return loadWavWithProgress(context.Background(), path, nil)
+}
+
+func loadWavWithProgress(ctx context.Context, path string, progress sampleLoadProgress) (*Tape, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -453,11 +514,17 @@ func loadWav(path string) (*Tape, error) {
 	defer f.Close()
 
 	sr := SampleRate()
-	decoder := wav.NewDecoder(f)
+	decoder := wav.NewDecoder(cancelableReadSeeker{Context: ctx, ReadSeeker: f})
 	if !decoder.IsValidFile() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("invalid WAV file: %s", path)
 	}
 	if err := decoder.FwdToPCM(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	format := decoder.Format()
@@ -483,25 +550,44 @@ func loadWav(path string) (*Tape, error) {
 	startTime := GetTime()
 	buf := &audio.IntBuffer{
 		Format:         format,
-		Data:           make([]int, nsamples),
+		Data:           make([]int, 0, nsamples),
 		SourceBitDepth: 16,
 	}
-	bytesDecoded, err := decoder.PCMBuffer(buf)
-	if err != nil {
-		return nil, err
+	reportProgress(progress, "Loading", 0)
+	for len(buf.Data) < nsamples {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkSize := min(decodeChunkSamples, nsamples-len(buf.Data))
+		chunk := &audio.IntBuffer{Data: make([]int, chunkSize)}
+		decoded, err := decoder.PCMBuffer(chunk)
+		if err != nil {
+			return nil, err
+		}
+		if decoded == 0 {
+			return nil, io.ErrUnexpectedEOF
+		}
+		buf.Data = append(buf.Data, chunk.Data[:decoded]...)
+		reportProgress(progress, "Loading", float64(len(buf.Data))/float64(nsamples))
 	}
-	logger.Debug("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", bytesDecoded)
+	logger.Debug("decoded wav file", "path", path, "seconds", GetTime()-startTime, "bytesDecoded", nbytes)
 	floatBuf := buf.AsFloatBuffer()
 	factor := math.Pow(2, float64(bitDepth-1))
 	wavSR := buf.Format.SampleRate
 	if wavSR != sr {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		float32Buf := make([]float32, nchannels*nframes)
 		for i := 0; i < len(floatBuf.Data); i++ {
 			float32Buf[i] = float32(floatBuf.Data[i] / factor)
 		}
 		logger.Debug("resampling wav data", "path", path)
 		startTime = GetTime()
-		resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(wavSR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
+		reportProgress(progress, "Resampling", 0)
+		resampledBuf, err := resampleWithProgress(ctx, float32Buf, float64(sr)/float64(wavSR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY, func(resamplingProgress float64) {
+			reportProgress(progress, "Resampling", resamplingProgress)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -510,6 +596,11 @@ func loadWav(path string) (*Tape, error) {
 		nframes := nsamples / nchannels
 		tape := makeTape(nchannels, nframes)
 		for i := range nsamples {
+			if i%decodeChunkSamples == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			tape.samples[i] = Smp(resampledBuf[i])
 		}
 		return tape, nil
@@ -517,12 +608,21 @@ func loadWav(path string) (*Tape, error) {
 
 	tape := makeTape(nchannels, nframes)
 	for i := 0; i < len(floatBuf.Data); i++ {
+		if i%decodeChunkSamples == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		tape.samples[i] = Smp(floatBuf.Data[i] / factor)
 	}
 	return tape, nil
 }
 
 func loadMP3(path string) (*Tape, error) {
+	return loadMP3WithProgress(context.Background(), path, nil)
+}
+
+func loadMP3WithProgress(ctx context.Context, path string, progress sampleLoadProgress) (*Tape, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -530,7 +630,7 @@ func loadMP3(path string) (*Tape, error) {
 	defer f.Close()
 
 	sr := SampleRate()
-	decoder, err := mp3.NewDecoder(f)
+	decoder, err := mp3.NewDecoder(cancelableReadSeeker{Context: ctx, ReadSeeker: f})
 	if err != nil {
 		return nil, err
 	}
@@ -542,12 +642,18 @@ func loadMP3(path string) (*Tape, error) {
 	nsamples := int(nbytes / 2) // FormatSignedInt16LE
 	nframes := nsamples / nchannels
 	mp3SR := decoder.SampleRate()
+	reportProgress(progress, "Loading", 0)
 	if mp3SR != sr {
 		logger.Debug("decoding mp3 file", "path", path)
 		startTime := GetTime()
 		float32Buf := make([]float32, nsamples)
 		var sample int16
 		for i := range nsamples {
+			if i%decodeChunkSamples == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			if err := binary.Read(decoder, binary.LittleEndian, &sample); err != nil {
 				if err == io.EOF {
 					break
@@ -555,11 +661,18 @@ func loadMP3(path string) (*Tape, error) {
 				return nil, err
 			}
 			float32Buf[i] = float32(sample) / 32768
+			if i%decodeChunkSamples == 0 {
+				reportProgress(progress, "Loading", float64(i)/float64(nsamples))
+			}
 		}
+		reportProgress(progress, "Loading", 1)
 		logger.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 		startTime = GetTime()
 		logger.Debug("resampling mp3 data", "path", path)
-		resampledBuf, err := gosamplerate.Simple(float32Buf, float64(sr)/float64(mp3SR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY)
+		reportProgress(progress, "Resampling", 0)
+		resampledBuf, err := resampleWithProgress(ctx, float32Buf, float64(sr)/float64(mp3SR), nchannels, gosamplerate.SRC_SINC_BEST_QUALITY, func(resamplingProgress float64) {
+			reportProgress(progress, "Resampling", resamplingProgress)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -568,6 +681,11 @@ func loadMP3(path string) (*Tape, error) {
 		nframes := nsamples / nchannels
 		tape := makeTape(nchannels, nframes)
 		for i := range nsamples {
+			if i%decodeChunkSamples == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			tape.samples[i] = Smp(resampledBuf[i])
 		}
 		return tape, nil
@@ -578,6 +696,11 @@ func loadMP3(path string) (*Tape, error) {
 	var sample int16
 	tape := makeTape(nchannels, nframes)
 	for i := range nsamples {
+		if i%decodeChunkSamples == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if err := binary.Read(decoder, binary.LittleEndian, &sample); err != nil {
 			if err == io.EOF {
 				break
@@ -585,20 +708,35 @@ func loadMP3(path string) (*Tape, error) {
 			return nil, err
 		}
 		tape.samples[i] = Smp(sample) / 32768
+		if i%decodeChunkSamples == 0 {
+			reportProgress(progress, "Loading", float64(i)/float64(nsamples))
+		}
 	}
+	reportProgress(progress, "Loading", 1)
 	logger.Debug("decoded mp3 file", "path", path, "seconds", GetTime()-startTime)
 	return tape, nil
 }
 
 func loadSample(path string) (*Tape, error) {
+	return loadSampleWithProgress(context.Background(), path, nil)
+}
+
+func loadSampleWithProgress(ctx context.Context, path string, progress sampleLoadProgress) (*Tape, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".wav":
-		return loadWav(path)
+		return loadWavWithProgress(ctx, path, progress)
 	case ".mp3":
-		return loadMP3(path)
+		return loadMP3WithProgress(ctx, path, progress)
 	default:
 		return nil, fmt.Errorf("cannot load sample: %s", path)
 	}
+}
+
+func reportProgress(callback sampleLoadProgress, stage string, progress float64) {
+	if callback == nil {
+		return
+	}
+	callback(stage, min(1, max(0, progress)))
 }
 
 func loadAndPushTape(vm *VM, path string) error {

@@ -7,7 +7,9 @@ Screens:
 - F1: open this help screen
 - F2: return to the editor
 - F3: open the sample browser
-  - C-p plays a selected .wav/.mp3 file
+  - C-p loads and plays a selected .wav/.mp3 file; loading progress appears at
+    the bottom of the screen, including a separate resampling phase when needed
+  - C-g stops sample-browser playback and cancels a pending sample load
   - M-w copies a `"/absolute/path" load` expression
 
 Evaluate / play:
