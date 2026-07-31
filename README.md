@@ -166,7 +166,7 @@ background, and the editor shows progress while a finite stream is rendering.
 
 The file and buffer switchers are searchable: type to filter, use the arrow
 keys/PageUp/PageDown/Home/End to select, and `Enter` to open. Typing enters
-filter mode; `Backspace` edits the filter even after its text becomes empty.
+filter mode; `Backspace` deletes the last character of the filter text.
 `Escape` drops filter mode and clears the filter; press it again (or press
 `C-g`) to cancel. In the file switcher, `Backspace` navigates to the parent
 directory only after filter mode has been dropped.
@@ -213,7 +213,7 @@ Mixtape has an Emacs-like mark/region.
 - `M-w` — copy (yank) region.
 - `C-y` — paste (yank).
 - `C-Backspace` — kill previous word.
-- `M-Backspace` — kill previous word (without undo wrapper in current implementation).
+- `M-Backspace` — kill previous word.
 - `C-u` — kill from point back to beginning of line.
 
 The editor also syncs its internal kill/yank buffer to the system clipboard.
