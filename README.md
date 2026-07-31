@@ -1,19 +1,38 @@
 # Mixtape
 
-**Work in progress**
+> **Work in progress.** Mixtape is evolving, but its language, editor, and
+> executable examples are all in this repository.
 
-Mixtape is a small stack-based language (the **Mixtape DSL**) plus an interactive editor/player for building and auditioning audio streams (“tapes”). It is implemented in Go and ships with a standard library in `assets/prelude.tape`.
+Mixtape is a compact, stack-based language for making sound, paired with an
+interactive editor and player. You describe an audio signal as a sequence of
+small transformations—an oscillator, an envelope, a filter, a mixer—and
+Mixtape evaluates the sequence from left to right. It is implemented in Go and
+ships with a practical standard library in `assets/prelude.tape`.
 
-This README documents:
+The project is deliberately small enough to explore from the source, while
+still being useful for quick synthesis sketches. This README starts with the
+normal workflow, explains the language’s mental model, and then serves as the
+complete reference for built-ins and standard-library words.
 
-- CLI usage and flags
-- the built-in editor and key bindings
-- the Mixtape DSL: syntax, types, evaluation model
-- **all words** (built-ins + standard library), categorized with descriptions and examples
+> `assets/prelude.tape` is the source of truth for standard-library word
+> definitions and their stack-effect comments. The `examples/` and `tests/`
+> directories provide runnable patches and executable specifications.
 
-> Source of truth for most word docs: `assets/prelude.tape`.
+## A first patch
 
-> Working examples/tests: `tests/*.tape` and `examples/*.tape`.
+Build the program, open a scratch buffer, paste this patch, and press `C-p`:
+
+```tape
+( 220 f          ; set the oscillator frequency to A3
+  ~saw            ; make an infinite sawtooth stream
+  1s take         ; render its first second to a finite tape
+)
+```
+
+You should hear a one-second saw wave. The parentheses create a temporary
+environment, `f` sets `:freq`, and `take` is the point where a lazy stream
+becomes a playable audio buffer. That sequence—set controls, build a stream,
+then render or play it—is the basic Mixtape workflow.
 
 ---
 
@@ -30,6 +49,10 @@ Run tests:
 ```sh
 make test
 ```
+
+The GUI needs a working desktop/OpenGL/audio environment. For language
+experiments and automation, use batch evaluation instead; it does not start
+the GUI.
 
 ---
 
@@ -48,9 +71,14 @@ From `./mixtape -h`:
 - `-sr <int>` (default: `48000`) — sample rate.
 - `-bpm <float>` (default: `120`) — beats per minute.
 - `-tpb <int>` (default: `96`) — ticks per beat.
-- `-f <path>` — evaluate a `.tape` script file and exit.
+- `-f <path>` — evaluate a script file and exit.
 - `-e <string>` — evaluate an inline script and exit.
-- `-prof <prefix>` — write pprof CPU and heap profiles to `<prefix>.cpu` and `<prefix>.mem`.
+- `-prof <prefix>` — in batch mode, write pprof CPU and heap profiles to
+  `<prefix>.cpu` and `<prefix>.mem`.
+
+`-f` and `-e` may each be supplied more than once. Batch targets run in the
+order they occur on the command line, in the same VM, so definitions from an
+earlier target are available to later ones.
 
 ### Examples
 
@@ -75,19 +103,38 @@ Start the GUI with a file:
 
 ### Defaults injected into the VM
 
-At startup Mixtape sets these environment variables:
+Before loading the prelude, Mixtape sets these environment variables:
 
 - `:bpm` from `-bpm`
 - `:tpb` from `-tpb`
 - `:nf` = frames-per-beat = `sr / (bpm/60)`
 
-The prelude then sets additional defaults like `:freq`, `:phase`, `:pw`, filter params, etc.
+The prelude then sets these defaults:
+
+- Oscillators: `:freq = 440`, `:phase = 0`, `:pw = 0.5`.
+- Filters: `:cutoff = 1200`, `:q = 0.7`, `:blend = 0`, `:gain = 1`.
+- FM and noise: `:mod = 0`, `:index = 1`, `:seed = 0`.
+- Envelopes: `:start = 0`, `:end = 1`.
+- Resampling: `:resample/converter = :resample/SRC_LINEAR`.
+
+The `f` helper sets `:freq`: `220 f` is equivalent to `220 >:freq`.
 
 ---
 
 ## The GUI editor
 
-When you run `./mixtape [file.tape]` you get an editor pane and (when the result is audio) a waveform pane.
+When you run `./mixtape [file.tape]`, Mixtape opens a source buffer. Successful
+audio evaluations also show a waveform and can be played immediately. The
+editor is intentionally keyboard-first, with familiar Emacs-style movement,
+selection, and multi-key commands.
+
+### Screens
+
+- `F1` — open the read-only in-app help screen.
+- `F2` — return to the editor.
+- `F3` — open the sample browser. It can browse directories and play selected
+  `.wav` or `.mp3` files with `C-p`; `M-w` copies a ready-to-paste
+  `"/absolute/path" load` expression to the clipboard.
 
 ### Evaluating / playing
 
@@ -95,7 +142,10 @@ When you run `./mixtape [file.tape]` you get an editor pane and (when the result
 - `C-Enter` — evaluate buffer without starting playback.
 - `C-g` or `Escape` — cancel the current evaluation (and reset transient state).
 
-Evaluation happens in the background; progress is shown while rendering finite streams to a tape.
+`C-Enter` is useful while developing a patch: it checks the result without
+interrupting what is playing. `C-p` evaluates only when the buffer changed;
+otherwise it replays the last successful result. Evaluation happens in the
+background, and the editor shows progress while a finite stream is rendering.
 
 ### Buffers
 
@@ -107,11 +157,18 @@ Evaluation happens in the background; progress is shown while rendering finite s
 ### Files
 
 - `C-x f` — open file
-- `C-x s` — save the current file (only works if the GUI was started with a file path).
+- `C-x s` — save the current buffer; prompts for a path if it has none.
+- `C-x C-s` — save as (always prompts for a path).
+- `C-x k` — kill the current buffer (asks for confirmation if it has changes).
+
+The file and buffer switchers are searchable: type to filter, use the arrow
+keys/PageUp/PageDown/Home/End to select, `Enter` to open, and `Escape` or
+`C-g` to cancel. In the file switcher, `Backspace` first removes filter text,
+then navigates to the parent directory.
 
 ### Quit / undo
 
-- `C-q` — quit.
+- `C-q` — quit (asks before discarding any unsaved buffer).
 - Undo:
   - `C-z`
   - `C-x u`
@@ -119,7 +176,7 @@ Evaluation happens in the background; progress is shown while rendering finite s
 
 ### Font size
 
-- `C-+` — increase font size
+- `C-S-=` — increase font size
 - `C--` — decrease font size
 - `C-0` — reset to default font size
 
@@ -156,11 +213,17 @@ Mixtape has an Emacs-like mark/region.
 
 The editor also syncs its internal kill/yank buffer to the system clipboard.
 
+When a command needs an answer—such as choosing a save path or confirming a
+destructive action—Mixtape opens a small modal prompt. `Escape` and `C-g`
+cancel it.
+
 ---
 
 ## Mixtape DSL overview
 
-Mixtape is a **concatenative**, **stack-based** language:
+Mixtape is a **concatenative**, **stack-based** language. Instead of nesting
+function calls, place a value on the stack and then place the word that should
+consume it. The result is left on the stack for the next word:
 
 - Programs are sequences of tokens.
 - Most tokens are *words* that consume values from the stack and push results.
@@ -172,13 +235,16 @@ Example:
 3 4 + 2 *    ; => (3+4)*2
 ```
 
+Read this as “push 3, push 4, add them, push 2, multiply.” A program’s final
+stack value is its result.
+
 ### Comments
 
 - `;` starts a comment to end of line.
 
 ### Values / types
 
-Runtime values implement a common `Val` interface. Core types:
+The language has a small set of runtime values:
 
 - **Num** — floating point number. Can also represent booleans: `0` = false, non-zero = true.
 - **Nil** — the `nil` value.
@@ -189,25 +255,37 @@ Runtime values implement a common `Val` interface. Core types:
 - **Stream** — potentially infinite audio stream (generator).
 - **Wavetable** — table of single-cycle waves, for band-limited oscillators.
 
-There is also a map-like environment (`set`/`get`) for variables.
+There is also a map-like, dynamically scoped environment (`set`/`get`) for
+controls such as oscillator frequency and filter cutoff.
+
+The audio types are worth distinguishing early. A `Tape` is a finite buffer of
+frames, ready to display or play. A `Stream` produces frames lazily and can be
+infinite; oscillators and noise generators normally return streams. Most DSP
+words preserve that laziness, and `take` explicitly renders a bounded part of
+a stream into a tape.
 
 ### Stack effects
 
-Documentation uses a Forth-like stack comment form:
+Documentation uses a Forth-like stack comment form. Inputs are listed on the
+left of `--`, with the deepest stack value first; outputs are on the right:
 
 `word: ( inputs -- outputs )`
-Environment usage is noted as `ENV: :var ...`.
+Environment usage is noted as `ENV: :var ...`. For example,
+`( ENV: :cutoff | S -- s )` says that a word consumes a streamable `S`,
+returns a stream, and reads its cutoff from the environment rather than the
+value stack.
 
 ### Evaluation model
 
-- Tokens are parsed into a `Vec` of `Token`s (each has position info).
+- Tokens are parsed into a `Vec` of `Token`s (each has position information).
 - Evaluating a `Vec` evaluates its items left-to-right.
-- `eval` evaluates a value (often a quoted `Vec`).
+- `eval` evaluates a value, most often a quoted `Vec` used as a function body.
 
 **Quoting**:
 
 - `{` starts quoting; `}` ends quoting.
-- A quoted block evaluates to a `Vec` of tokens (a “closure-like” block).
+- A quoted block evaluates to a `Vec` of tokens: data that can be stored,
+  passed to a higher-order word, or executed later.
 
 Example:
 
@@ -232,6 +310,16 @@ Example:
 - `set` / `get` store/fetch values from the current environment.
 - Environments are **stacked**: `(` pushes a new environment frame, `)` pops it.
 
+Scoped environments keep local patch controls from leaking into the rest of a
+program. They are especially useful for configuring an oscillator or filter:
+
+```tape
+( 880 >:freq
+  ~sin
+  1s take
+)
+```
+
 Example:
 
 ```tape
@@ -240,7 +328,8 @@ Example:
 
 ### Syntax sugar
 
-The parser expands these syntactic shorthands:
+The parser expands these shorthands before evaluation, so they are convenient
+spelling rather than special runtime values:
 
 - `:name` → `":name" get` (fetch env var)
 - `@foo` → `"foo" get`
@@ -271,18 +360,26 @@ Mixtape searches for a method matching the word name and stack arity (up to 3 ar
 
 ## Words reference
 
-Below is a categorized list of all available words from:
+Below is a categorized list of every available word, from:
 
 - Go built-ins (`RegisterWord`, `RegisterMethod`)
 - the standard library (`assets/prelude.tape`)
 
-Examples are small, runnable fragments.
+The reference is organized by the job a word performs rather than by where it
+is implemented. You can use it either as a lookup table or as a tour: begin
+with streams and oscillators, then move on to envelopes and effects when you
+want to shape a sound. Examples are small, runnable fragments; surround an
+audio-producing expression with `take` when you want a finite result.
 
 ### Conventions
 
 - `b` is a boolean `Num` (`0` false, non-zero true).
 - `S` means “streamable”: `Num`, `Vec` of samples, `Tape`, or `Stream`.
 - Many math and DSP ops accept either `Num` or `Streamable`.
+
+When a heading says “method,” you still write only the word itself. For
+example, `[1 2 3] len` dispatches to the `Vec` implementation of `len`; there
+is no `Vec.len` syntax in a patch.
 
 ---
 
@@ -383,6 +480,9 @@ next nil?
 
 ### `vdup`
 `( x n -- [xs] )` — vector of `n` copies of `x`.
+
+### `sr`
+`( -- n )` — push the active sample rate, set by `-sr` (48000 by default).
 
 ---
 
@@ -531,9 +631,25 @@ Notes:
 - A flat numeric `Vec` is a `TapeProvider` (mono tape).
 - A `Wavetable` is also a `TapeProvider` (first wave).
 
+### Collection / stream utilities (stdlib)
+
+- `sum` `([Ss|ns] -- s|n)` — sum a vector of numbers or streamables (empty
+  input returns `nil`).
+- `avg` `([Ss|ns] -- s|n)` — average a non-empty vector of numbers or streamables.
+- `distribute` `([ns] n -- [ns])` — scale numeric values so their sum is `n`;
+  the input sum must not be zero.
+- `clip` `(S -- s)` — constrain samples to `[-1, 1]`.
+- `cat` `([Ss] -- s)` — concatenate a vector of streamables (empty input
+  returns `nil`).
+- `repeat` `(S n -- s)` — concatenate `n` copies of a streamable.
+
 ---
 
 ## 6) Iteration utilities (stdlib)
+
+Iteration is useful for building event lists, parameter sequences, and other
+control data before it becomes audio. Iterators are deliberately simple: they
+yield a value at a time and eventually yield `nil`.
 
 ### `for`
 `( I body -- <xs> )` — evaluate `body` for each value yielded by iterator from `I`.
@@ -549,6 +665,12 @@ See `examples/seq.tape`.
 ---
 
 ## 7) Time, pitch, amplitude (stdlib)
+
+Mixtape measures rendered audio in frames. These helpers let a patch express
+musical durations and pitches without hard-coding the current sample rate or
+tempo. The time suffixes are especially convenient in a patch: `1b` means one
+beat at the current `:bpm`, while `250ms` is not a special literal—use
+`0.25s` instead.
 
 ### Time → frames
 
@@ -579,6 +701,11 @@ Also available as literal suffixes: `1s 1b 1p 1t`.
 
 ## 8) Envelopes
 
+An envelope is a finite stream of control values, usually multiplied with an
+oscillator to shape its amplitude. Segment words use `:start`, `:end`, and
+`:nf`; the `env`, `adsr`, and `perc` builders handle those bookkeeping values
+for normal multi-segment envelopes.
+
 ### Envelope segments (built-ins)
 
 These build a mono `Tape` segment using `:start :end :nf`:
@@ -603,6 +730,11 @@ See `examples/env.tape`, `examples/adsr.tape`, `examples/perc.tape`.
 
 ## 9) Tapes (finite buffers)
 
+Use a tape when you need an already-rendered piece of audio: to play it in the
+GUI, load a sample, inspect individual frames, splice material together, or
+use one cycle as an oscillator source. Unlike streams, tapes have a known
+length and channel count.
+
 ### Allocation / generators
 
 - `tape1` `( nframes -- t )` — mono tape.
@@ -621,8 +753,8 @@ Single-cycle wave generators (mono `Tape`; size 0 means default internal size):
 
 - `shift` `( t amount -- t )` — rotate samples in-place (mutates).
   - `amount < 1` is treated as a fraction of length.
-- `resample` `( t ratio -- t )` — resample. ratio=dst_sr/sr
-  - converters: `SRC_SINC_BEST_QUALITY`, `SRC_SINC_MEDIUM_QUALITY`, `SRC_SINC_FASTEST`, `SRC_ZERO_ORDER_HOLD`, `SRC_LINEAR`.
+- `resample` `( t ratio -- t )` — resample a tape. `ratio` is output rate /
+  input rate and must be between `1/16` and `16`.
 - `at` `( t frameIndex -- frame )` — get a frame (always returned as a `Vec` of channel samples).
 - `at/phase` `( t phaseStream -- s )` — sample a tape using a phase stream (wavetable-style).
 - `slice` `( t start end -- t )` — sub-tape `[start,end)`.
@@ -642,6 +774,11 @@ Example:
 ---
 
 ## 10) Streams (signal processing)
+
+Streams are Mixtape’s signal-flow building block. A stream is pulled only when
+something needs its next frame, so a chain such as `~saw lp2 clip` does not do
+work until it is rendered or played. Numeric arguments to many DSP words may
+themselves be streams, which makes modulation a normal part of the language.
 
 ### Stream basics
 
@@ -671,6 +808,12 @@ Example:
 
 ## 11) Oscillators and noise
 
+Oscillators and noise generators create infinite mono streams. Put their
+controls in a local environment, then use `take` (or multiply by a finite
+envelope) to decide how much audio to render. The standard oscillators are
+implemented from a phase stream and a single-cycle tape, so they also provide
+useful examples of small Mixtape compositions.
+
 ### Basic phase / impulse
 
 - `~phasor` `( ENV: :freq :phase | -- s )` — phase accumulator in `[0,1)`.
@@ -695,11 +838,36 @@ Example:
 
 ## 12) DSP / effects
 
+Effects consume a streamable and return a transformed stream, preserving the
+input’s duration where that makes sense. This makes their order explicit:
+`~saw lp2 softclip` filters before saturating, while reversing those words
+produces a different sound.
+
 ### Filters and smoothing
 
 - `dc*` `( S alpha -- s )` — DC blocker with smoothing `alpha`.
 - `dc` `( S -- s )` — DC removal with `alpha = 1 - 1/SR`.
 - `onepole` `( S alpha -- s )` — 1-pole smoother (higher alpha = more smoothing).
+- `lp1`, `hp1`, `ap1` `( ENV: :cutoff | S -- s )` — first-order lowpass,
+  highpass, and allpass filters.
+- `ap2`, `notch2` `( ENV: :cutoff :q | S -- s )` — second-order allpass and
+  notch filters.
+- `ls2`, `hs2`, `peak2` `( ENV: :cutoff :q :gain | S -- s )` — second-order
+  low-shelf, high-shelf, and peaking filters. `:gain` is a *linear* gain
+  multiplier here, unlike the dB argument accepted by `gain`.
+
+### State-variable filter ports
+
+- `svf` `( ENV: :cutoff :q :blend | S -- s )` — continuously blends
+  lowpass (`:blend = -1`), bandpass (`0`), and highpass (`1`).
+- `lp2`, `bp2`, `hp2` `( ENV: :cutoff :q | S -- s )` — 2-pole low-, band-,
+  and highpass ports of `svf`.
+- `lp4`, `bp4`, `hp4` `( ENV: :cutoff :q | S -- s )` — corresponding 4-pole
+  filters, made by cascading the 2-pole versions.
+- `ap4`, `notch4` `( ENV: :cutoff :q | S -- s )` — 4-pole allpass and notch.
+- `peak4` `( ENV: :cutoff :q :gain | S -- s )` — 4-pole peaking filter.
+
+See `examples/svf_demo.tape`.
 
 ### Utility analysis
 
@@ -730,15 +898,41 @@ Stdlib convenience:
   - `2` cubic soft clip
   - `3` softsign
 
+### Resampling and tuning
+
+- `resample` `( S ratio -- s )` — resample a streamable using an output/input
+  sample-rate ratio from `1/16` through `16`. A `Tape` input yields a `Tape`;
+  other streamables yield a stream.
+- `tune` `( S ratio -- s )` — change pitch by a frequency multiplier without
+  changing the sample rate; it is a convenience wrapper around `resample`.
+
+Select the converter by setting `:resample/converter` to one of these preset
+values (the default is `:resample/SRC_LINEAR`):
+
+- `:resample/SRC_SINC_BEST_QUALITY`
+- `:resample/SRC_SINC_MEDIUM_QUALITY`
+- `:resample/SRC_SINC_FASTEST`
+- `:resample/SRC_ZERO_ORDER_HOLD`
+- `:resample/SRC_LINEAR`
+
 ### Other
 
 - `skip` `( S nframes -- s )` — drop first `nframes`.
-- `pan` `( S pan -- s )` — equal-power pan; pan in `[-1,1]`.
-- `mix` `( [Ss] ratio -- s )` — mix streams by ratio (clamped `[0,1]`).
+- `pan` `( S pan -- s )` — convert the input to mono and return a stereo,
+  equal-power panned stream. `pan` may be a control stream and is clamped to
+  `[-1,1]`.
+- `mix` `( [Ss] ratio -- s )` — interpolate between adjacent same-channel
+  streams. `ratio` may be a control stream and is clamped to `[0,1]`; with
+  two inputs, `0.7` means 30% of the first plus 70% of the second.
 
 ---
 
 ## 13) Wavetables and FM
+
+A wavetable stores one or more same-length, single-cycle waves. Multiple waves
+form a waveset, and `~wt` can continuously morph between them. Mixtape builds
+band-limited mip levels lazily, which keeps bright waves more usable at higher
+frequencies.
 
 ### `wt`
 `( x -- wt )` — coerce value to `Wavetable`.
@@ -753,8 +947,14 @@ Accepted inputs:
 ### `~wt`
 `( ENV: :freq :phase :morph | wt -- s )` — wavetable oscillator with mipmapped band-limiting.
 
+`:morph` may be a number or mono control stream. It is clamped to `[0,1]` and
+crossfades through a waveset; omitted or invalid values default to `0`.
+
 ### `~fm`
 `( ENV: :freq :mod :index :phase | wt -- s )` — wavetable FM oscillator.
+
+`:freq`, `:mod`, and `:index` can be control streams; `:phase` is a numeric
+initial phase. `:index` defaults to `1`.
 
 Stdlib wavetables:
 
@@ -763,6 +963,11 @@ Stdlib wavetables:
 ---
 
 ## 14) Unison
+
+`unison` is a compact voice allocator for a quoted oscillator body. It creates
+detuned copies, gives each a stereo position, and mixes them to a single stereo
+stream—handy for supersaw-style patches without manually repeating the same
+voice setup.
 
 ### `unison`
 `( ENV: :freq :voices :spread :detune :phaseRand | body -- s )`
@@ -776,24 +981,19 @@ Parameters:
 - `:detune` (Num) — detune range in cents.
 - `:phaseRand` (Num) — randomize initial phase (0..1).
 
+All four parameters are optional: their defaults are `1`, `0`, `0`, and `0`.
+
 See `examples/unison*.tape`.
 
 ---
 
-## 15) Vital-inspired ports
+## Recipes
 
-### `svf`
-`( ENV: :cutoff :q :blend | S -- s )` — state-variable filter.
+These are deliberately small, but each is a complete patch. In the GUI, place
+one in a buffer and press `C-p`; in batch mode, append `frames` if you want to
+print individual samples rather than a tape summary.
 
-- `:blend` in `[-1,1]` maps lowpass(-1) → bandpass(0) → highpass(+1).
-
-See `examples/svf_demo.tape`.
-
----
-
-## Quick examples
-
-### A 1-second 440Hz sine
+### Hear a 1-second 440 Hz sine
 
 ```tape
 ( 440 >:freq
@@ -802,7 +1002,10 @@ See `examples/svf_demo.tape`.
 )
 ```
 
-### An ADSR-shaped saw and play
+The environment frame holds the oscillator’s frequency only for this patch.
+`~sin` stays lazy until `take` asks for exactly one second of frames.
+
+### Shape a saw wave with an ADSR envelope
 
 ```tape
 ( 110 >:freq
@@ -812,16 +1015,27 @@ See `examples/svf_demo.tape`.
 )
 ```
 
-### Sequencing (sketch)
+`adsr` produces a finite control signal. Multiplying it with the infinite
+oscillator therefore makes the result finite, which the GUI can render and
+play directly.
 
-See `examples/seq.tape` for the full pattern; `seq` is a helper for iterating multiple symbol streams in lockstep.
+### Build step-based patterns
+
+See `examples/seq.tape` for a complete pattern. `seq` advances several named
+iterators in lockstep, assigns their current values to environment variables,
+and evaluates a body on each step—useful for driving pitch, timing, and other
+parameters together.
 
 ---
 
-## Notes for LLMs / tooling
+## Project notes
 
 - `assets/prelude.tape` is effectively the “stdlib” and includes doc comments with stack effects.
 - `tests/*.tape` files contain comprehensive executable specifications of many words.
 - Parsing expands syntactic sugar (`:name`, `@foo`, `>foo`, and time suffixes) *at parse time*.
 - Many operators (`+`, `*`, `sin`, …) are overloaded to work on both numbers and streams (sample-wise).
 - Streams are lazy; converting to a `Tape` is done with `take` (or automatically in the GUI when the eval result is finite).
+
+If you are generating or transforming patches programmatically, prefer the
+documented stack effects in this README and the comments in `prelude.tape`.
+The tests are especially useful when a word’s edge cases matter.
