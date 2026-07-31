@@ -53,7 +53,13 @@ func (bb *BufferBrowser) initKeymap() {
 	bb.keymap.Bind("PageDown", func() { bb.MoveBy(bb.PageSize()) })
 	bb.keymap.Bind("Backspace", func() { bb.HandleBackspace() })
 	bb.keymap.Bind("Enter", func() { bb.handleEnter() })
-	bb.keymap.Bind("Escape", func() { bb.Exit() })
+	bb.keymap.Bind("Escape", func() {
+		if bb.listDisplay.FilterMode() {
+			bb.listDisplay.Reset()
+			return
+		}
+		bb.Exit()
+	})
 	bb.keymap.Bind("C-g", func() { bb.Exit() })
 }
 
@@ -112,8 +118,8 @@ func (bb *BufferBrowser) OnChar(char rune) {
 }
 
 func (bb *BufferBrowser) HandleBackspace() {
-	if bb.listDisplay.RemoveLastSearchChar() {
-		return
+	if bb.listDisplay.FilterMode() {
+		bb.listDisplay.RemoveLastSearchChar()
 	}
 }
 
@@ -146,9 +152,10 @@ func (bb *BufferBrowser) Render(tp TilePane) {
 
 	header := tp.SubPane(0, 0, tp.Width(), 1)
 	header.DrawString(0, 0, "Buffers")
-	if bb.SearchText() != "" {
+	if bb.listDisplay.FilterMode() {
+		filterText := bb.SearchText()
 		header.WithFgBg(ColorWhite, ColorGreen, func() {
-			header.DrawString(len("Buffers")+1, 0, fmt.Sprintf("[%s]", bb.SearchText()))
+			header.DrawString(len("Buffers")+1, 0, fmt.Sprintf("[%s]", filterText))
 		})
 	}
 

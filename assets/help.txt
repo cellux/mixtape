@@ -33,8 +33,13 @@ Files:
 
 File and buffer switchers:
 - Type to filter; Up/Down, Home/End, and PageUp/PageDown change selection
-- Enter opens the selected item; Esc/C-g cancels
-- In the file switcher, Backspace removes filter text first, then goes to the parent directory
+- Enter opens the selected item; typing enters filter mode
+- Backspace edits the filter even after its text becomes empty
+- Esc drops filter mode and clears the filter; press it again to cancel
+- An empty active filter is displayed as []
+- C-g always cancels
+- In the file switcher, Backspace goes to the parent directory only after
+  filter mode has been dropped
 
 Quit / undo:
 - C-q: quit

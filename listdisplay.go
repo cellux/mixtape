@@ -17,6 +17,7 @@ type ListDisplay struct {
 	top        int
 	lastHeight int
 	searchText string
+	filterMode bool
 }
 
 func CreateListDisplay() *ListDisplay {
@@ -25,14 +26,20 @@ func CreateListDisplay() *ListDisplay {
 
 func (ld *ListDisplay) Reset() {
 	ld.searchText = ""
+	ld.filterMode = false
 }
 
 func (ld *ListDisplay) SearchText() string {
 	return ld.searchText
 }
 
+func (ld *ListDisplay) FilterMode() bool {
+	return ld.filterMode
+}
+
 func (ld *ListDisplay) SetSearchText(text string) {
 	ld.searchText = text
+	ld.filterMode = text != ""
 	ld.SelectFiltered(0)
 }
 
@@ -40,6 +47,7 @@ func (ld *ListDisplay) AppendSearchChar(char rune) {
 	if char == 0 || char < 32 {
 		return
 	}
+	ld.filterMode = true
 	ld.searchText += string(char)
 	ld.SelectFiltered(0)
 }

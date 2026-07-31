@@ -162,9 +162,11 @@ background, and the editor shows progress while a finite stream is rendering.
 - `C-x k` — kill the current buffer (asks for confirmation if it has changes).
 
 The file and buffer switchers are searchable: type to filter, use the arrow
-keys/PageUp/PageDown/Home/End to select, `Enter` to open, and `Escape` or
-`C-g` to cancel. In the file switcher, `Backspace` first removes filter text,
-then navigates to the parent directory.
+keys/PageUp/PageDown/Home/End to select, and `Enter` to open. Typing enters
+filter mode; `Backspace` edits the filter even after its text becomes empty.
+`Escape` drops filter mode and clears the filter; press it again (or press
+`C-g`) to cancel. In the file switcher, `Backspace` navigates to the parent
+directory only after filter mode has been dropped.
 
 ### Quit / undo
 

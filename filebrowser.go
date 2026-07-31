@@ -59,7 +59,13 @@ func (fb *FileBrowser) initKeymap() {
 	fb.keymap.Bind("PageDown", func() { fb.MoveBy(fb.PageSize()) })
 	fb.keymap.Bind("Enter", func() { fb.handleEnter() })
 	fb.keymap.Bind("Backspace", func() { _, _ = fb.HandleBackspace() })
-	fb.keymap.Bind("Escape", func() { fb.Exit() })
+	fb.keymap.Bind("Escape", func() {
+		if fb.listDisplay.FilterMode() {
+			fb.listDisplay.Reset()
+			return
+		}
+		fb.Exit()
+	})
 	fb.keymap.Bind("C-g", func() { fb.Exit() })
 }
 
@@ -215,7 +221,8 @@ func entriesToList(entries []FileEntry) []ListEntry {
 }
 
 func (fb *FileBrowser) HandleBackspace() (bool, error) {
-	if fb.listDisplay.RemoveLastSearchChar() {
+	if fb.listDisplay.FilterMode() {
+		fb.listDisplay.RemoveLastSearchChar()
 		return false, nil
 	}
 	return fb.GoParent()
@@ -282,9 +289,10 @@ func (fb *FileBrowser) Render(tp TilePane) {
 	// Header with current directory and optional search text.
 	header := tp.SubPane(0, 0, tp.Width(), 1)
 	header.DrawString(0, 0, fb.Directory())
-	if fb.SearchText() != "" {
+	if fb.listDisplay.FilterMode() {
+		filterText := fb.SearchText()
 		header.WithFgBg(ColorWhite, ColorGreen, func() {
-			header.DrawString(len(fb.Directory())+1, 0, fmt.Sprintf("[%s]", fb.SearchText()))
+			header.DrawString(len(fb.Directory())+1, 0, fmt.Sprintf("[%s]", filterText))
 		})
 	}
 
