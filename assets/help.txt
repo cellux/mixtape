@@ -3,10 +3,21 @@ Mixtape Help
 
 Editor key bindings
 -------------------
+Screens:
+- F1: open this help screen
+- F2: return to the editor
+- F3: open the sample browser
+  - C-p plays a selected .wav/.mp3 file
+  - M-w copies a `"/absolute/path" load` expression
+
 Evaluate / play:
 - C-p: eval buffer and play result
 - C-Enter: eval buffer (no playback)
 - C-g / Esc: cancel current evaluation
+
+C-p evaluates changed text, but replays the last successful result when the
+buffer is unchanged. A failed evaluation does not discard that replayable
+result.
 
 Buffers:
 - C-x n: switch to next buffer
@@ -16,14 +27,21 @@ Buffers:
 
 Files:
 - C-x f: open file
-- C-x s: save (only when GUI started with a file path)
+- C-x s: save current buffer; prompt for a path when needed
+- C-x C-s: save as (always prompt for a path)
+- C-x k: kill current buffer (asks before discarding changes)
+
+File and buffer switchers:
+- Type to filter; Up/Down, Home/End, and PageUp/PageDown change selection
+- Enter opens the selected item; Esc/C-g cancels
+- In the file switcher, Backspace removes filter text first, then goes to the parent directory
 
 Quit / undo:
 - C-q: quit
 - C-z / C-x u / C-S--: undo
 
 Font size:
-- C-+: increase
+- C-S-=: increase
 - C-: decrease
 - C-0: reset to default
 
@@ -48,6 +66,8 @@ Region / clipboard:
 - C-Backspace / M-Backspace: kill previous word
 - C-u: kill to line start
 
+The internal kill/yank buffer is synchronized with the system clipboard.
+
 DSL overview
 ------------
 Language model: concatenative, stack-based. Tokens run left-to-right. Words consume stack values and push results (postfix calling).
@@ -55,6 +75,10 @@ Language model: concatenative, stack-based. Tokens run left-to-right. Words cons
 Comments: `;` to end of line.
 
 Types: Num (float/boolean), Nil, Str, Sym, Vec, Tape, Stream, Wavetable. Environment is a map (set/get). Streamable = Num | Vec of samples | Tape | Stream.
+
+Tape is a finite audio buffer, ready to play or inspect. Stream is lazy and may
+be infinite; oscillators normally create streams. Use `take` to render a
+finite part of a stream to a tape.
 
 Stack comments: `word: ( inputs -- outputs )`; `ENV:` shows env vars read; `SETS:` env vars written.
 
@@ -67,6 +91,7 @@ Vectors:
 
 Environments:
 - `(` pushes a new env frame; `)` pops it. `set`/`get` read/write current frame.
+- Use a local frame to configure a patch, e.g. `( 440 >:freq ~sin 1s take )`.
 
 Syntax sugar:
 - `:name` → `":name" get` (fetch env var)
@@ -75,6 +100,13 @@ Syntax sugar:
 - Ratios `1/4` and MIDI notes `c-4` etc parse to numbers.
 
 Methods: some words dispatch on receiver type (e.g., `+`, `len`). Dispatch uses word name and arity.
+
+Common defaults
+---------------
+Runtime: :bpm and :tpb come from command-line flags; :nf is frames per beat.
+Oscillators: :freq=440, :phase=0, :pw=0.5. Filters: :cutoff=1200, :q=0.7,
+:blend=0, :gain=1. FM/noise: :mod=0, :index=1, :seed=0. Envelopes:
+:start=0, :end=1. `f` sets :freq, so `220 f` is shorthand for `220 >:freq`.
 
 Doc comments (from prelude)
 ---------------------------
@@ -189,7 +221,10 @@ tapes
 - tape/pulse: ( ENV: :pw | n -- t ) pulse wave using env pulse width (single-cycle)
 - tape/saw: ( n -- t ) saw wave (single-cycle)
 - Tape.shift: ( t amount -- t ) rotate samples by amount, mutates t
+- Tape.resample: ( t ratio -- t ) resample a tape; ratio is output/input rate
+  and must be between 1/16 and 16
 - Tape.at: ( t frame -- n|[ns] ) fetch frame
+- Tape.at/phase: ( t phase -- s ) sample a tape with a phase stream (wavetable-style)
 - Tape.slice: ( t start end -- t ) tape with frames of t between [start,end)
 - Tape.+@: ( t t2 offset -- t ) mix t2 into t at offset, mutates t
 
@@ -197,7 +232,7 @@ stream generators
 - ~: ( S -- s ) coerce to stream
 - ~empty: ( n -- s ) empty stream of n channels
 - ~impulse: ( ENV: :freq :phase | -- s ) band-limited impulse train
-- ~phasor: ( ENV: :freq :phase | -- s ) phase-accumulating oscillator with output in range [0,1(
+- ~phasor: ( ENV: :freq :phase | -- s ) phase-accumulating oscillator with output in range [0,1)
 
 stream transformers
 - dc*: ( S alpha -- s ) DC-blocking IIR with smoothing alpha
@@ -216,14 +251,19 @@ stream transformers
 - comb: ( S delay fb -- s ) feedback comb filter
 - delay: ( S n -- s ) delay by n frames
 - z1*: ( S n|[ns] -- s ) one-sample delay with explicit init frame (Num or Vec of per-channel smps)
-- pan: ( S pan -- s ) equal-power pan mono input with pan between [-1,1]
-- mix: ( [Ss] ratio -- s ) mix streams based on ratio clamped to [0,1]
+- pan: ( S pan -- s ) convert input to mono and return equal-power stereo pan;
+  pan may be a control stream in [-1,1]
+- mix: ( [Ss] ratio -- s ) interpolate between adjacent same-channel streams;
+  ratio may be a control stream in [0,1]
 - softclip: ( S mode -- s ) smooth saturation (0=tanh, 1=atan, 2=poly, 3=softsign)
 - skip: ( S n -- s ) skip first n frames
-- unison: ( ENV: :freq :voices :spread :detune :phaseRand | body -- s ) detuned/positioned voices
+- unison: ( ENV: :freq :voices :spread :detune :phaseRand | body -- s )
+  detuned/positioned voices; defaults: voices=1, spread=0, detune=0,
+  phaseRand=0
 - mono: ( S -- s ) sum/convert to mono
 - stereo: ( S -- s ) ensure stereo
-- resample: ( S ratio -- S ) resample stream/tape/num/vec, ratio=dst_sr/sr
+- resample: ( S ratio -- S ) resample a streamable; ratio is output/input rate
+  and must be between 1/16 and 16
 
 stream renderers
 - frames: ( s -- [ns|[ns]] ) collect all frames into vec, s must be finite
@@ -231,7 +271,7 @@ stream renderers
 
 stream utilities
 - Streamable.join: ( S S -- s ) concatenate streams
-- Streamable.len ( S -- n ) length of stream, or 0 if stream is infinite
+- Streamable.len: ( S -- n ) length of stream, or 0 if stream is infinite
 
 noise generators
 - ~noise: ( ENV: :seed | -- s ) white noise
@@ -240,8 +280,10 @@ noise generators
 
 waves and wavetables
 - wt: ( x -- wt ) coerce to wavetable
-- ~wt: ( ENV: :freq :phase :morph | wt -- s ) wavetable oscillator with env freq/phase/morph
-- ~fm: ( ENV: :freq :mod :index :phase | wt -- s ) wavetable FM oscillator with env controls
+- ~wt: ( ENV: :freq :phase :morph | wt -- s ) mipmapped wavetable oscillator;
+  :morph is a number/control stream in [0,1] (default 0)
+- ~fm: ( ENV: :freq :mod :index :phase | wt -- s ) wavetable FM oscillator;
+  :freq/:mod/:index may be control streams
 
 misc
 - sr: ( -- n ) push global sample rate
@@ -268,7 +310,8 @@ oscillator parameters
 filter parameters
 - :cutoff: ( -- n ) cutoff
 - :q: ( -- n ) resonance
-- :blend: ( -- n ) blend
+- :blend: ( -- n ) SVF output blend: -1=lowpass, 0=bandpass, 1=highpass;
+  intermediate values crossfade
 - :gain: ( -- n ) linear gain multiplier
 
 FM parameters
@@ -279,8 +322,8 @@ noise RNG parameters
 - :seed: ( -- n ) seed used by noise generators
 
 envelope parameters
-- start: ( -- n )
-- end: ( -- n )
+- :start: ( -- n )
+- :end: ( -- n )
 
 utilities
 - sum: ( [Ss|ns] -- s|n )
@@ -339,6 +382,8 @@ dsp
 - z1: ( s -- s ) one-sample delay with zero init
 
 filters
+- svf uses :blend to move continuously from lowpass (-1), through bandpass
+  (0), to highpass (1)
 - lp2: ( ENV: :cutoff :q | S -- s ) 2-pole lowpass (TPT SVF)
 - bp2: ( ENV: :cutoff :q | S -- s ) 2-pole bandpass (TPT SVF)
 - hp2: ( ENV: :cutoff :q | S -- s ) 2-pole highpass (TPT SVF)
@@ -348,3 +393,13 @@ filters
 - ap4: ( ENV: :cutoff :q | S -- s ) 4-pole allpass (TPT SVF)
 - notch4: ( ENV: :cutoff :q | S -- s ) 4-pole notch (TPT SVF)
 - peak4: ( ENV: :cutoff :q :gain | S -- s ) 4-pole peak (TPT SVF)
+
+resampling / tuning
+- :resample/SRC_SINC_BEST_QUALITY: ( -- n )
+- :resample/SRC_SINC_MEDIUM_QUALITY: ( -- n )
+- :resample/SRC_SINC_FASTEST: ( -- n )
+- :resample/SRC_ZERO_ORDER_HOLD: ( -- n )
+- :resample/SRC_LINEAR: ( -- n ) default converter
+- Set :resample/converter to one of the values above
+  (default: :resample/SRC_LINEAR)
+- tune: ( S ratio -- s ) shift pitch by a frequency multiplier using resampling

@@ -23,7 +23,7 @@ complete reference for built-ins and standard-library words.
 Build the program, open a scratch buffer, paste this patch, and press `C-p`:
 
 ```tape
-( 220 f          ; set the oscillator frequency to A3
+( 220 f           ; set the oscillator frequency to A3
   ~saw            ; make an infinite sawtooth stream
   1s take         ; render its first second to a finite tape
 )
@@ -40,7 +40,7 @@ then render or play it—is the basic Mixtape workflow.
 
 ```sh
 go build
-./mixtape               # start GUI with an empty buffer
+./mixtape                # start GUI with an empty buffer
 ./mixtape mypatch.tape   # start GUI with file loaded
 ```
 
