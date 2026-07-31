@@ -419,7 +419,7 @@ func (app *App) Update() error {
 	return nil
 }
 
-func (app *App) evalBuffer(buffer *Buffer, evalSuccessCallback func()) {
+func (app *App) evalBuffer(buffer *Buffer, evalSuccessCallback func(Val)) {
 	if app.currentScreenName != "edit" {
 		return
 	}
@@ -437,12 +437,13 @@ func (app *App) evalBuffer(buffer *Buffer, evalSuccessCallback func()) {
 			}
 			return
 		}
+		result := app.vm.evalResult
 		app.postEvent(func() {
 			app.rTape = nil
 			app.rTotalFrames = 0
 			app.rDoneFrames = 0
 			if evalSuccessCallback != nil {
-				evalSuccessCallback()
+				evalSuccessCallback(result)
 			}
 		}, false)
 	}()

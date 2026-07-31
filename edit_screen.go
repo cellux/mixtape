@@ -14,6 +14,7 @@ type EditScreen struct {
 	bm          *BufferManager
 	editor      *Editor
 	lastScript  []byte // last script successfully evaluated by VM
+	lastResult  Val    // result paired with lastScript; survives later evaluation errors
 	lastBuffer  *Buffer
 	tapeDisplay *TapeDisplay
 	keymap      KeyMap
@@ -75,9 +76,9 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	keymap.Bind("C-Enter", func() {
 		es.syncEditorToBuffer()
 		buf := es.GetCurrentBuffer()
-		lastScript := buf.Data
-		app.evalBuffer(buf, func() {
-			es.lastScript = lastScript
+		script := bytes.Clone(buf.Data)
+		app.evalBuffer(buf, func(result Val) {
+			es.cacheSuccessfulEvaluation(script, result)
 		})
 	})
 
@@ -85,15 +86,15 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	keymap.Bind("C-p", func() {
 		es.syncEditorToBuffer()
 		buf := es.GetCurrentBuffer()
-		if bytes.Equal(buf.Data, es.lastScript) {
+		if es.canReplay(buf.Data) {
 			app.postEvent(func() {
-				app.oto.PlayTape(app.vm.evalResult, es)
+				app.oto.PlayTape(es.lastResult, es)
 			}, false)
 		} else {
-			lastScript := buf.Data
-			app.evalBuffer(buf, func() {
-				es.lastScript = lastScript
-				app.oto.PlayTape(app.vm.evalResult, es)
+			script := bytes.Clone(buf.Data)
+			app.evalBuffer(buf, func(result Val) {
+				es.cacheSuccessfulEvaluation(script, result)
+				app.oto.PlayTape(result, es)
 			})
 		}
 	})
@@ -154,6 +155,15 @@ func CreateEditScreen(app *App) (*EditScreen, error) {
 	keymap.Bind("C-S--", func() { es.editor.UndoLastAction() })
 
 	return es, nil
+}
+
+func (es *EditScreen) cacheSuccessfulEvaluation(script []byte, result Val) {
+	es.lastScript = bytes.Clone(script)
+	es.lastResult = result
+}
+
+func (es *EditScreen) canReplay(script []byte) bool {
+	return es.lastResult != nil && bytes.Equal(script, es.lastScript)
 }
 
 func (es *EditScreen) GetCurrentBuffer() *Buffer {
