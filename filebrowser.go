@@ -41,40 +41,11 @@ type FileBrowserCallbacks struct {
 }
 
 type FileBrowser struct {
-	dir         string
-	entries     []FileEntry
-	listDisplay *ListDisplay
-	filter      FileFilter
-	keymap      KeyMap
-	callbacks   FileBrowserCallbacks
-}
-
-func (fb *FileBrowser) initKeymap() {
-	fb.keymap = CreateKeyMap()
-	fb.keymap.Bind("Up", func() { fb.MoveBy(-1) })
-	fb.keymap.Bind("Down", func() { fb.MoveBy(1) })
-	fb.keymap.Bind("Home", func() { fb.MoveTo(0) })
-	fb.keymap.Bind("End", func() { fb.MoveToEnd() })
-	fb.keymap.Bind("PageUp", func() { fb.MoveBy(-fb.PageSize()) })
-	fb.keymap.Bind("PageDown", func() { fb.MoveBy(fb.PageSize()) })
-	fb.keymap.Bind("Enter", func() { fb.handleEnter() })
-	fb.keymap.Bind("Backspace", func() { _, _ = fb.HandleBackspace() })
-	fb.keymap.Bind("Escape", func() {
-		if fb.listDisplay.FilterMode() {
-			fb.listDisplay.Reset()
-			return
-		}
-		fb.Exit()
-	})
-	fb.keymap.Bind("C-g", func() { fb.Exit() })
-}
-
-func (fb *FileBrowser) Keymap() KeyMap {
-	return fb.keymap
-}
-
-func (fb *FileBrowser) HandleKey(key Key) (KeyHandler, bool) {
-	return fb.keymap.HandleKey(key)
+	dir     string
+	entries []FileEntry
+	*ListBrowser
+	filter    FileFilter
+	callbacks FileBrowserCallbacks
 }
 
 func CreateFileBrowser(startDir string, filter FileFilter, callbacks FileBrowserCallbacks) (*FileBrowser, error) {
@@ -86,12 +57,15 @@ func CreateFileBrowser(startDir string, filter FileFilter, callbacks FileBrowser
 		startDir = cwd
 	}
 	fb := &FileBrowser{
-		dir:         startDir,
-		listDisplay: CreateListDisplay(),
-		filter:      filter,
-		callbacks:   callbacks,
+		dir:       startDir,
+		filter:    filter,
+		callbacks: callbacks,
 	}
-	fb.initKeymap()
+	fb.ListBrowser = CreateListBrowser(fb.Directory, ListBrowserCallbacks{
+		onEnter:                  fb.handleEnter,
+		onExit:                   fb.Exit,
+		onBackspaceWithoutFilter: func() { _, _ = fb.GoParent() },
+	})
 	if err := fb.Reload(); err != nil {
 		return nil, err
 	}
@@ -102,28 +76,8 @@ func (fb *FileBrowser) Directory() string {
 	return fb.dir
 }
 
-func (fb *FileBrowser) SearchText() string {
-	return fb.listDisplay.SearchText()
-}
-
-func (fb *FileBrowser) MoveBy(delta int) {
-	fb.listDisplay.MoveBy(delta)
-}
-
-func (fb *FileBrowser) MoveTo(idx int) {
-	fb.listDisplay.MoveTo(idx)
-}
-
-func (fb *FileBrowser) MoveToEnd() {
-	fb.MoveTo(len(fb.listDisplay.GetFilteredEntries()) - 1)
-}
-
-func (fb *FileBrowser) PageSize() int {
-	return fb.listDisplay.PageSize()
-}
-
 func (fb *FileBrowser) SelectedEntry() *FileEntry {
-	entry := fb.listDisplay.SelectedEntry()
+	entry := fb.ListBrowser.SelectedEntry()
 	if entry == nil {
 		return nil
 	}
@@ -132,22 +86,22 @@ func (fb *FileBrowser) SelectedEntry() *FileEntry {
 }
 
 func (fb *FileBrowser) CurrentFilteredEntry() *FileEntry {
-	filtered := fb.listDisplay.GetFilteredEntries()
+	filtered := fb.ListBrowser.GetFilteredEntries()
 	if len(filtered) == 0 {
 		return nil
 	}
-	idx := fb.listDisplay.GetFilteredSelectionIndex()
+	idx := fb.ListBrowser.GetFilteredSelectionIndex()
 	fe := filtered[idx].(FileEntry)
 	return &fe
 }
 
 func (fb *FileBrowser) Reload() error {
-	prevSelection := fb.listDisplay.SelectedEntry()
+	prevSelection := fb.ListBrowser.SelectedEntry()
 
 	entries, err := os.ReadDir(fb.dir)
 	if err != nil {
 		fb.entries = nil
-		fb.listDisplay.SetEntries(nil)
+		fb.ListBrowser.SetEntries(nil)
 		return err
 	}
 	slices.SortFunc(entries, func(a, b os.DirEntry) int {
@@ -205,9 +159,9 @@ func (fb *FileBrowser) Reload() error {
 	}
 
 	fb.entries = result
-	fb.listDisplay.SetEntries(entriesToList(result))
+	fb.ListBrowser.SetEntries(entriesToList(result))
 	if prevSelection != nil {
-		fb.listDisplay.SelectEntry(prevSelection)
+		fb.ListBrowser.SelectEntry(prevSelection)
 	}
 	return nil
 }
@@ -220,21 +174,13 @@ func entriesToList(entries []FileEntry) []ListEntry {
 	return res
 }
 
-func (fb *FileBrowser) HandleBackspace() (bool, error) {
-	if fb.listDisplay.FilterMode() {
-		fb.listDisplay.RemoveLastSearchChar()
-		return false, nil
-	}
-	return fb.GoParent()
-}
-
 func (fb *FileBrowser) GoParent() (bool, error) {
 	parent := filepath.Dir(fb.dir)
 	if parent == fb.dir {
 		return false, nil
 	}
 	fb.dir = parent
-	fb.listDisplay.Reset()
+	fb.ListBrowser.Reset()
 	err := fb.Reload()
 	return true, err
 }
@@ -244,12 +190,8 @@ func (fb *FileBrowser) Enter() (bool, error) {
 	return fb.enterSelection(selected)
 }
 
-func (fb *FileBrowser) OnChar(char rune) {
-	fb.listDisplay.AppendSearchChar(char)
-}
-
 func (fb *FileBrowser) Reset() error {
-	fb.listDisplay.Reset()
+	fb.ListBrowser.Reset()
 	return fb.Reload()
 }
 
@@ -270,7 +212,7 @@ func (fb *FileBrowser) enterSelection(selected *FileEntry) (bool, error) {
 	}
 	if selected.isDir {
 		fb.dir = selected.path
-		fb.listDisplay.Reset()
+		fb.ListBrowser.Reset()
 		err := fb.Reload()
 		return true, err
 	}
@@ -278,25 +220,4 @@ func (fb *FileBrowser) enterSelection(selected *FileEntry) (bool, error) {
 		fb.callbacks.onSelect(*selected)
 	}
 	return false, nil
-}
-
-func (fb *FileBrowser) Render(tp TilePane) {
-	height := tp.Height()
-	if height <= 0 {
-		return
-	}
-
-	// Header with current directory and optional search text.
-	header := tp.SubPane(0, 0, tp.Width(), 1)
-	header.DrawString(0, 0, fb.Directory())
-	if fb.listDisplay.FilterMode() {
-		filterText := fb.SearchText()
-		header.WithFgBg(ColorWhite, ColorGreen, func() {
-			header.DrawString(len(fb.Directory())+1, 0, fmt.Sprintf("[%s]", filterText))
-		})
-	}
-
-	// List area beneath the header.
-	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
-	fb.listDisplay.Render(listPane)
 }

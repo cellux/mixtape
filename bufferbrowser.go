@@ -26,45 +26,22 @@ type BufferBrowserCallbacks struct {
 
 // BufferBrowser provides a searchable list of buffers.
 type BufferBrowser struct {
-	bm          *BufferManager
-	listDisplay *ListDisplay
-	keymap      KeyMap
-	callbacks   BufferBrowserCallbacks
+	bm *BufferManager
+	*ListBrowser
+	callbacks BufferBrowserCallbacks
 }
 
 func CreateBufferBrowser(bm *BufferManager, callbacks BufferBrowserCallbacks) *BufferBrowser {
 	bb := &BufferBrowser{
-		bm:          bm,
-		listDisplay: CreateListDisplay(),
-		callbacks:   callbacks,
+		bm:        bm,
+		callbacks: callbacks,
 	}
-	bb.initKeymap()
+	bb.ListBrowser = CreateListBrowser(func() string { return "Buffers" }, ListBrowserCallbacks{
+		onEnter: bb.handleEnter,
+		onExit:  bb.Exit,
+	})
 	bb.Reload()
 	return bb
-}
-
-func (bb *BufferBrowser) initKeymap() {
-	bb.keymap = CreateKeyMap()
-	bb.keymap.Bind("Up", func() { bb.MoveBy(-1) })
-	bb.keymap.Bind("Down", func() { bb.MoveBy(1) })
-	bb.keymap.Bind("Home", func() { bb.MoveTo(0) })
-	bb.keymap.Bind("End", func() { bb.MoveToEnd() })
-	bb.keymap.Bind("PageUp", func() { bb.MoveBy(-bb.PageSize()) })
-	bb.keymap.Bind("PageDown", func() { bb.MoveBy(bb.PageSize()) })
-	bb.keymap.Bind("Backspace", func() { bb.HandleBackspace() })
-	bb.keymap.Bind("Enter", func() { bb.handleEnter() })
-	bb.keymap.Bind("Escape", func() {
-		if bb.listDisplay.FilterMode() {
-			bb.listDisplay.Reset()
-			return
-		}
-		bb.Exit()
-	})
-	bb.keymap.Bind("C-g", func() { bb.Exit() })
-}
-
-func (bb *BufferBrowser) SearchText() string {
-	return bb.listDisplay.SearchText()
 }
 
 func (bb *BufferBrowser) Reload() {
@@ -73,58 +50,24 @@ func (bb *BufferBrowser) Reload() {
 	for i, buf := range bm.buffers {
 		entries[i] = BufferEntry{buffer: buf}
 	}
-	bb.listDisplay.SetEntries(entries)
+	bb.ListBrowser.SetEntries(entries)
 	if bm.currentBuffer != nil {
-		_ = bb.listDisplay.SelectById(bm.currentBuffer)
+		_ = bb.ListBrowser.SelectById(bm.currentBuffer)
 	}
-}
-
-func (bb *BufferBrowser) MoveBy(delta int) {
-	bb.listDisplay.MoveBy(delta)
-}
-
-func (bb *BufferBrowser) MoveTo(idx int) {
-	bb.listDisplay.MoveTo(idx)
-}
-
-func (bb *BufferBrowser) MoveToEnd() {
-	bb.MoveTo(len(bb.listDisplay.GetFilteredEntries()) - 1)
-}
-
-func (bb *BufferBrowser) PageSize() int {
-	return bb.listDisplay.PageSize()
 }
 
 func (bb *BufferBrowser) CurrentFilteredEntry() *Buffer {
-	filtered := bb.listDisplay.GetFilteredEntries()
+	filtered := bb.ListBrowser.GetFilteredEntries()
 	if len(filtered) == 0 {
 		return nil
 	}
-	idx := bb.listDisplay.GetFilteredSelectionIndex()
+	idx := bb.ListBrowser.GetFilteredSelectionIndex()
 	be := filtered[idx].(BufferEntry)
 	return be.buffer
 }
 
-func (bb *BufferBrowser) Keymap() KeyMap {
-	return bb.keymap
-}
-
-func (bb *BufferBrowser) HandleKey(key Key) (KeyHandler, bool) {
-	return bb.keymap.HandleKey(key)
-}
-
-func (bb *BufferBrowser) OnChar(char rune) {
-	bb.listDisplay.AppendSearchChar(char)
-}
-
-func (bb *BufferBrowser) HandleBackspace() {
-	if bb.listDisplay.FilterMode() {
-		bb.listDisplay.RemoveLastSearchChar()
-	}
-}
-
 func (bb *BufferBrowser) Reset() {
-	bb.listDisplay.Reset()
+	bb.ListBrowser.Reset()
 	bb.Reload()
 }
 
@@ -142,23 +85,4 @@ func (bb *BufferBrowser) handleEnter() {
 	if bb.callbacks.onSelect != nil {
 		bb.callbacks.onSelect(buf)
 	}
-}
-
-func (bb *BufferBrowser) Render(tp TilePane) {
-	height := tp.Height()
-	if height <= 0 {
-		return
-	}
-
-	header := tp.SubPane(0, 0, tp.Width(), 1)
-	header.DrawString(0, 0, "Buffers")
-	if bb.listDisplay.FilterMode() {
-		filterText := bb.SearchText()
-		header.WithFgBg(ColorWhite, ColorGreen, func() {
-			header.DrawString(len("Buffers")+1, 0, fmt.Sprintf("[%s]", filterText))
-		})
-	}
-
-	listPane := tp.SubPane(0, 1, tp.Width(), height-1)
-	bb.listDisplay.Render(listPane)
 }

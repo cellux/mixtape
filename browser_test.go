@@ -20,7 +20,7 @@ func TestFileBrowserEscapeClearsFilterBeforeExiting(t *testing.T) {
 	if browser.SearchText() != "" {
 		t.Fatalf("Escape left filter active: %q", browser.SearchText())
 	}
-	if browser.listDisplay.FilterMode() {
+	if browser.ListBrowser.FilterMode() {
 		t.Fatal("Escape did not leave filter mode")
 	}
 	if exitCount != 0 {
@@ -46,7 +46,7 @@ func TestBufferBrowserEscapeClearsFilterBeforeExiting(t *testing.T) {
 	if browser.SearchText() != "" {
 		t.Fatalf("Escape left filter active: %q", browser.SearchText())
 	}
-	if browser.listDisplay.FilterMode() {
+	if browser.ListBrowser.FilterMode() {
 		t.Fatal("Escape did not leave filter mode")
 	}
 	if exitCount != 0 {
@@ -75,7 +75,7 @@ func TestFileBrowserBackspaceKeepsEmptyFilterMode(t *testing.T) {
 	if browser.SearchText() != "" {
 		t.Fatalf("Backspace left filter text: %q", browser.SearchText())
 	}
-	if !browser.listDisplay.FilterMode() {
+	if !browser.ListBrowser.FilterMode() {
 		t.Fatal("removing the last character left filter mode")
 	}
 	if browser.Directory() != dir {
@@ -88,7 +88,7 @@ func TestFileBrowserBackspaceKeepsEmptyFilterMode(t *testing.T) {
 	}
 
 	browser.HandleKey("Escape")
-	if browser.listDisplay.FilterMode() {
+	if browser.ListBrowser.FilterMode() {
 		t.Fatal("Escape did not leave filter mode")
 	}
 	browser.HandleKey("Backspace")
@@ -107,12 +107,12 @@ func TestBufferBrowserBackspaceKeepsEmptyFilterMode(t *testing.T) {
 	if browser.SearchText() != "" {
 		t.Fatalf("Backspace left filter text: %q", browser.SearchText())
 	}
-	if !browser.listDisplay.FilterMode() {
+	if !browser.ListBrowser.FilterMode() {
 		t.Fatal("removing the last character left filter mode")
 	}
 
 	browser.HandleKey("Escape")
-	if browser.listDisplay.FilterMode() {
+	if browser.ListBrowser.FilterMode() {
 		t.Fatal("Escape did not leave filter mode")
 	}
 }
