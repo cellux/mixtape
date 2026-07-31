@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/atotto/clipboard"
 )
@@ -39,7 +40,8 @@ func CreateFileScreen(app *App) (*FileScreen, error) {
 		app:         app,
 	}
 	fileBrowser, err := CreateFileBrowser("", nil, FileBrowserCallbacks{
-		onExit: func() { fs.cancelPlayback(app) },
+		onExit:   func() { fs.cancelPlayback(app) },
+		onSelect: fs.handleFileBrowserSelection,
 	})
 	if err != nil {
 		return nil, err
@@ -57,6 +59,19 @@ func (fs *FileScreen) copyPath() {
 	}
 	full := canonicalPath(entry.path)
 	_ = clipboard.WriteAll(fmt.Sprintf("\"%s\" load", full))
+}
+
+func (fs *FileScreen) handleFileBrowserSelection(entry FileEntry) {
+	if !strings.EqualFold(filepath.Ext(entry.name), ".tape") {
+		return
+	}
+	editScreen, ok := fs.app.screens["edit"].(*EditScreen)
+	if !ok {
+		fs.app.SetLastError(fmt.Errorf("editor screen is unavailable"))
+		return
+	}
+	editScreen.handleFileBrowserSelection(entry)
+	fs.app.SelectScreen("edit")
 }
 
 func (fs *FileScreen) Keymap() KeyMap {

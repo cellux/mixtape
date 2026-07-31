@@ -136,7 +136,8 @@ selection, and multi-key commands.
   `.wav` or `.mp3` files with `C-p`. Samples load in the background and show a
   progress line at the bottom of the screen, including `Resampling` progress
   when a sample-rate conversion is needed. `C-g` stops sample-browser
-  playback and cancels a pending load; `M-w` copies a ready-to-paste
+  playback and cancels a pending load. `Enter` opens a selected `.tape` file
+  in the editor and switches to F2; `M-w` copies a ready-to-paste
   `"/absolute/path" load` expression to the clipboard.
 
 ### Evaluating / playing
